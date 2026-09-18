@@ -9,6 +9,7 @@ export default function AdminDepositsPage() {
   const [deposits, setDeposits] = useState([]);
   const [filter, setFilter] = useState("pending");
   const [message, setMessage] = useState("");
+  const [approvingId, setApprovingId] = useState(null);
 
   useEffect(() => {
     loadDeposits();
@@ -42,13 +43,92 @@ export default function AdminDepositsPage() {
 
       setDeposits(data || []);
     } catch (error) {
-      console.error(error);
+      console.error(
+        "LOAD DEPOSITS ERROR:",
+        error
+      );
 
       setMessage(
         "Có lỗi xảy ra khi tải đơn nạp."
       );
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function approveDeposit(depositId) {
+    if (!depositId) return;
+
+    if (approvingId) return;
+
+    const confirmed = window.confirm(
+      "Bạn chắc chắn muốn DUYỆT đơn nạp tiền này?\n\nTiền sẽ được cộng vào ví của tài khoản."
+    );
+
+    if (!confirmed) return;
+
+    setApprovingId(depositId);
+    setMessage("");
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        setMessage(
+          "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
+        );
+        return;
+      }
+
+      const response = await fetch(
+        "/api/admin/approve-deposit",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization:
+              `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            depositId,
+          }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        console.error(
+          "APPROVE DEPOSIT RESPONSE:",
+          result
+        );
+
+        setMessage(
+          result.message ||
+            "Không thể duyệt đơn nạp tiền."
+        );
+
+        return;
+      }
+
+      alert(
+        "Đã duyệt nạp tiền và cộng tiền vào ví."
+      );
+
+      await loadDeposits();
+    } catch (error) {
+      console.error(
+        "APPROVE DEPOSIT ERROR:",
+        error
+      );
+
+      setMessage(
+        "Có lỗi xảy ra khi duyệt đơn nạp tiền."
+      );
+    } finally {
+      setApprovingId(null);
     }
   }
 
@@ -113,7 +193,6 @@ export default function AdminDepositsPage() {
         {/* HEADER */}
 
         <div style={styles.header}>
-
           <div>
             <Link
               href="/admin"
@@ -131,23 +210,25 @@ export default function AdminDepositsPage() {
             </h1>
 
             <p style={styles.subtitle}>
-              Kiểm tra các yêu cầu nạp tiền
+              Kiểm tra và xử lý các yêu cầu nạp tiền
             </p>
           </div>
 
           <button
             onClick={loadDeposits}
-            style={styles.refreshButton}
+            disabled={loading}
+            style={{
+              ...styles.refreshButton,
+              opacity: loading ? 0.6 : 1,
+            }}
           >
             ↻ Làm mới
           </button>
-
         </div>
 
         {/* MENU */}
 
         <div style={styles.menu}>
-
           <Link
             href="/admin"
             style={styles.menuItem}
@@ -189,13 +270,11 @@ export default function AdminDepositsPage() {
           >
             Thành viên
           </Link>
-
         </div>
 
         {/* THỐNG KÊ */}
 
         <div style={styles.stats}>
-
           <div style={styles.stat}>
             <div style={styles.statIcon}>
               ⏳
@@ -261,13 +340,11 @@ export default function AdminDepositsPage() {
               </div>
             </div>
           </div>
-
         </div>
 
         {/* BỘ LỌC */}
 
         <div style={styles.filterBox}>
-
           <button
             onClick={() =>
               setFilter("pending")
@@ -319,7 +396,6 @@ export default function AdminDepositsPage() {
           >
             Tất cả
           </button>
-
         </div>
 
         {/* MESSAGE */}
@@ -333,9 +409,7 @@ export default function AdminDepositsPage() {
         {/* DANH SÁCH */}
 
         <section style={styles.section}>
-
           <div style={styles.sectionHeader}>
-
             <div>
               <h2 style={styles.sectionTitle}>
                 DANH SÁCH ĐƠN NẠP
@@ -345,7 +419,6 @@ export default function AdminDepositsPage() {
                 {filteredDeposits.length} đơn
               </div>
             </div>
-
           </div>
 
           {loading ? (
@@ -358,27 +431,31 @@ export default function AdminDepositsPage() {
             </div>
           ) : (
             <div style={styles.list}>
-
               {filteredDeposits.map(
                 (item) => (
                   <DepositCard
                     key={item.id}
                     item={item}
+                    approvingId={approvingId}
+                    approveDeposit={
+                      approveDeposit
+                    }
                   />
                 )
               )}
-
             </div>
           )}
-
         </section>
-
       </div>
     </main>
   );
 }
 
-function DepositCard({ item }) {
+function DepositCard({
+  item,
+  approvingId,
+  approveDeposit,
+}) {
   function formatMoney(value) {
     return (
       Number(value || 0).toLocaleString(
@@ -411,13 +488,14 @@ function DepositCard({ item }) {
       ? "#00e676"
       : "#ff5252";
 
+  const isApproving =
+    approvingId === item.id;
+
   return (
     <div style={styles.depositCard}>
 
       <div style={styles.depositTop}>
-
         <div>
-
           <div style={styles.depositId}>
             ĐƠN #{item.id}
           </div>
@@ -427,7 +505,6 @@ function DepositCard({ item }) {
               item.created_at
             )}
           </div>
-
         </div>
 
         <div
@@ -438,7 +515,6 @@ function DepositCard({ item }) {
         >
           {statusText}
         </div>
-
       </div>
 
       <div style={styles.amount}>
@@ -481,9 +557,49 @@ function DepositCard({ item }) {
         </div>
       )}
 
+      {/* =========================
+          DUYỆT NẠP TIỀN
+      ========================= */}
+
       {item.status === "pending" && (
-        <div style={styles.pendingNote}>
-          ⏳ Đơn đang chờ xử lý.
+        <div style={styles.pendingArea}>
+
+          <div style={styles.pendingNote}>
+            ⏳ Đơn đang chờ xử lý.
+          </div>
+
+          <button
+            onClick={() =>
+              approveDeposit(item.id)
+            }
+            disabled={!!approvingId}
+            style={{
+              ...styles.approveButton,
+              opacity: approvingId
+                ? 0.6
+                : 1,
+              cursor: approvingId
+                ? "not-allowed"
+                : "pointer",
+            }}
+          >
+            {isApproving
+              ? "⏳ ĐANG DUYỆT..."
+              : "✓ DUYỆT + CỘNG TIỀN"}
+          </button>
+
+        </div>
+      )}
+
+      {item.status === "completed" && (
+        <div style={styles.completedNote}>
+          ✅ Đã duyệt và tiền đã được cộng vào ví.
+        </div>
+      )}
+
+      {item.status === "failed" && (
+        <div style={styles.failedNote}>
+          ❌ Đơn nạp đã bị từ chối.
         </div>
       )}
 
@@ -718,6 +834,7 @@ const styles = {
   depositId: {
     fontSize: "13px",
     fontWeight: "900",
+    wordBreak: "break-all",
   },
 
   date: {
@@ -782,13 +899,49 @@ const styles = {
     marginTop: "10px",
   },
 
-  pendingNote: {
+  pendingArea: {
     marginTop: "12px",
+  },
+
+  pendingNote: {
     padding: "9px",
     borderRadius: "7px",
     background: "#211b0b",
     border: "1px solid #4d3b10",
     color: "#e8d28a",
+    fontSize: "11px",
+  },
+
+  approveButton: {
+    width: "100%",
+    marginTop: "9px",
+    border: "none",
+    borderRadius: "9px",
+    padding: "13px",
+    background:
+      "linear-gradient(135deg, #00a844, #00c853)",
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: "13px",
+  },
+
+  completedNote: {
+    marginTop: "12px",
+    padding: "10px",
+    borderRadius: "8px",
+    background: "#092016",
+    border: "1px solid #124d2b",
+    color: "#55e58a",
+    fontSize: "11px",
+  },
+
+  failedNote: {
+    marginTop: "12px",
+    padding: "10px",
+    borderRadius: "8px",
+    background: "#241010",
+    border: "1px solid #4d1d1d",
+    color: "#ff7777",
     fontSize: "11px",
   },
 
