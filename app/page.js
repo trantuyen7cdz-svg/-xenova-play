@@ -4,567 +4,713 @@ import Link from "next/link";
 
 export default function HomePage() {
   return (
-    <main style={styles.page}>
-      <div style={styles.container}>
+    <main className="home">
+      {/* HERO */}
+      <section className="hero">
+        <div className="heroGlow"></div>
 
-        {/* HERO */}
-        <section style={styles.hero}>
-          <div style={styles.logo}>
-            XENOVA
-          </div>
-
-          <div style={styles.play}>
-            PLAY
-          </div>
-
-          <h1 style={styles.title}>
+        <div className="heroContent">
+          <div className="badge">
             XENOVA PLAY
+          </div>
+
+          <h1>
+            DIGITAL
+            <br />
+            <span>KEY STORE</span>
           </h1>
 
-          <p style={styles.description}>
-            Hệ thống mua KEY nhanh chóng, quản lý tài khoản
-            và nạp tiền trực tiếp trên website.
+          <p>
+            Kho KEY và sản phẩm số.
+            <br />
+            Mua nhanh · Thanh toán tiện lợi · Hỗ trợ trực tiếp
           </p>
 
-          <div style={styles.actions}>
-            <Link
-              href="/shop"
-              style={styles.primaryButton}
-            >
-              🛒 MUA KEY NGAY
+          <div className="heroActions">
+            <Link href="/shop" className="primaryButton">
+              Mua ngay
             </Link>
 
-            <Link
-              href="/dashboard"
-              style={styles.secondaryButton}
-            >
-              👤 TÀI KHOẢN
-            </Link>
-          </div>
-        </section>
-
-        {/* FEATURES */}
-        <section style={styles.features}>
-
-          <Feature
-            icon="⚡"
-            title="Xử lý nhanh"
-            text="Mua KEY trực tiếp bằng số dư trong ví."
-          />
-
-          <Feature
-            icon="💰"
-            title="Nạp tiền"
-            text="Nạp tiền qua QR và chờ Admin duyệt."
-          />
-
-          <Feature
-            icon="🔑"
-            title="KEY tự động"
-            text="KEY được cấp ngay sau khi mua thành công."
-          />
-
-          <Feature
-            icon="🔒"
-            title="Tài khoản riêng"
-            text="Quản lý KEY và đơn hàng trong tài khoản."
-          />
-
-        </section>
-
-        {/* HOW IT WORKS */}
-        <section style={styles.section}>
-          <div style={styles.sectionTitle}>
-            🚀 CÁCH SỬ DỤNG
-          </div>
-
-          <div style={styles.steps}>
-
-            <Step
-              number="01"
-              title="Đăng ký tài khoản"
-              text="Tạo tài khoản XENOVA PLAY."
-            />
-
-            <Step
-              number="02"
-              title="Nạp tiền"
-              text="Chuyển khoản theo thông tin trên trang nạp tiền."
-            />
-
-            <Step
-              number="03"
-              title="Chờ Admin duyệt"
-              text="Số tiền sẽ được cộng vào ví sau khi duyệt."
-            />
-
-            <Step
-              number="04"
-              title="Mua KEY"
-              text="Chọn sản phẩm và thanh toán bằng số dư."
-            />
-
-            <Step
-              number="05"
-              title="Nhận KEY"
-              text="KEY được cấp trực tiếp vào tài khoản."
-            />
-
-          </div>
-        </section>
-
-        {/* MAIN LINKS */}
-        <section style={styles.section}>
-          <div style={styles.sectionTitle}>
-            📌 TRUY CẬP NHANH
-          </div>
-
-          <div style={styles.grid}>
-
-            <HomeCard
-              href="/shop"
-              icon="🛒"
-              title="Cửa hàng"
-              text="Xem các sản phẩm KEY"
-            />
-
-            <HomeCard
-              href="/deposit"
-              icon="💰"
-              title="Nạp tiền"
-              text="Nạp tiền vào ví"
-            />
-
-            <HomeCard
-              href="/keys"
-              icon="🔑"
-              title="KEY của tôi"
-              text="Xem KEY đã mua"
-            />
-
-            <HomeCard
-              href="/orders"
-              icon="📦"
-              title="Đơn hàng"
-              text="Xem lịch sử mua hàng"
-            />
-
-          </div>
-        </section>
-
-        {/* ACCOUNT */}
-        <section style={styles.accountBox}>
-          <div>
-            <div style={styles.accountTitle}>
-              👤 Đã có tài khoản?
-            </div>
-
-            <div style={styles.accountText}>
-              Đăng nhập để quản lý số dư, KEY và đơn hàng.
-            </div>
-          </div>
-
-          <div style={styles.accountActions}>
-            <Link
-              href="/login"
-              style={styles.loginButton}
-            >
-              ĐĂNG NHẬP
-            </Link>
-
-            <Link
-              href="/register"
-              style={styles.registerButton}
-            >
-              ĐĂNG KÝ
-            </Link>
-          </div>
-        </section>
-
-        {/* FOOTER */}
-        <footer style={styles.footer}>
-          <div style={styles.footerLogo}>
-            XENOVA PLAY
-          </div>
-
-          <div>
-            Hệ thống quản lý KEY
-          </div>
-
-          <div style={styles.footerLinks}>
-            <Link href="/shop">
-              Cửa hàng
-            </Link>
-
-            <Link href="/dashboard">
+            <Link href="/dashboard" className="secondaryButton">
               Tài khoản
             </Link>
-
-            <Link href="/settings">
-              Cài đặt
-            </Link>
           </div>
-        </footer>
+        </div>
 
-      </div>
+        <div className="heroVisual">
+          <div className="orb orbOne"></div>
+          <div className="orb orbTwo"></div>
+
+          <div className="glassCard">
+            <div className="cardTop">
+              <span>✦</span>
+              XENOVA
+            </div>
+
+            <div className="cardTitle">
+              DIGITAL
+              <br />
+              STORE
+            </div>
+
+            <div className="cardLine"></div>
+
+            <div className="cardBottom">
+              <span>KEY</span>
+              <span>24/7</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* PRODUCTS */}
+      <section className="section">
+        <div className="sectionHead">
+          <div>
+            <span className="sectionLabel">
+              SHOP
+            </span>
+
+            <h2>Sản phẩm nổi bật</h2>
+          </div>
+
+          <Link href="/shop" className="viewAll">
+            Xem tất cả →
+          </Link>
+        </div>
+
+        <div className="products">
+          <ProductCard
+            icon="ANDROID"
+            title="KEY ANDROID"
+            description="KEY dành cho thiết bị Android"
+            href="/shop"
+          />
+
+          <ProductCard
+            icon="IPHONE"
+            title="KEY IPHONE"
+            description="KEY dành cho thiết bị iPhone"
+            href="/shop"
+          />
+
+          <ProductCard
+            icon="PC"
+            title="KEY PC"
+            description="KEY dành cho máy tính"
+            href="/shop"
+          />
+        </div>
+      </section>
+
+      {/* FEATURES */}
+      <section className="features">
+        <Feature
+          icon="⚡"
+          title="Nhanh chóng"
+          text="Mua và nhận KEY thuận tiện."
+        />
+
+        <Feature
+          icon="🔐"
+          title="Tài khoản riêng"
+          text="Quản lý KEY và đơn hàng của bạn."
+        />
+
+        <Feature
+          icon="💳"
+          title="Thanh toán"
+          text="Nạp tiền trực tiếp vào tài khoản."
+        />
+
+        <Feature
+          icon="💬"
+          title="Hỗ trợ"
+          text="Liên hệ Admin khi cần hỗ trợ."
+        />
+      </section>
+
+      {/* HOW IT WORKS */}
+      <section className="how">
+        <div className="sectionHead center">
+          <div>
+            <span className="sectionLabel">
+              HOW IT WORKS
+            </span>
+
+            <h2>Mua KEY chỉ với 3 bước</h2>
+          </div>
+        </div>
+
+        <div className="steps">
+          <Step
+            number="01"
+            title="Tạo tài khoản"
+            text="Đăng ký tài khoản XENOVA PLAY."
+          />
+
+          <Step
+            number="02"
+            title="Nạp tiền"
+            text="Nạp tiền vào ví và chờ Admin duyệt."
+          />
+
+          <Step
+            number="03"
+            title="Nhận KEY"
+            text="Chọn sản phẩm và nhận KEY ngay."
+          />
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section className="cta">
+        <div>
+          <span className="sectionLabel">
+            XENOVA PLAY
+          </span>
+
+          <h2>Sẵn sàng bắt đầu?</h2>
+
+          <p>
+            Khám phá các sản phẩm đang có trên cửa hàng.
+          </p>
+        </div>
+
+        <Link href="/shop" className="primaryButton">
+          Khám phá Shop
+        </Link>
+      </section>
+
+      {/* FOOTER */}
+      <footer>
+        <div className="footerLogo">
+          XENOVA<span> PLAY</span>
+        </div>
+
+        <p>
+          Digital Key Store
+        </p>
+
+        <div className="footerLinks">
+          <Link href="/shop">Shop</Link>
+          <Link href="/orders">Đơn hàng</Link>
+          <Link href="/keys">KEY của tôi</Link>
+          <Link href="/settings">Cài đặt</Link>
+        </div>
+
+        <div className="copyright">
+          © 2026 XENOVA PLAY. All rights reserved.
+        </div>
+      </footer>
+
+      <style jsx>{`
+        .home {
+          min-height: 100vh;
+          background: #f6f9fd;
+          color: #111827;
+          overflow: hidden;
+        }
+
+        .hero {
+          position: relative;
+          min-height: 650px;
+          display: flex;
+          align-items: center;
+          max-width: 1200px;
+          margin: 0 auto;
+          padding: 100px 28px 70px;
+        }
+
+        .heroGlow {
+          position: absolute;
+          width: 600px;
+          height: 600px;
+          right: -180px;
+          top: -120px;
+          border-radius: 50%;
+          background: rgba(37, 99, 235, 0.09);
+          filter: blur(20px);
+          pointer-events: none;
+        }
+
+        .heroContent {
+          position: relative;
+          z-index: 2;
+          width: 55%;
+        }
+
+        .badge,
+        .sectionLabel {
+          color: #2563eb;
+          font-size: 11px;
+          font-weight: 900;
+          letter-spacing: 2px;
+        }
+
+        h1 {
+          margin: 15px 0;
+          font-size: clamp(48px, 7vw, 82px);
+          line-height: 0.95;
+          letter-spacing: -4px;
+          font-weight: 950;
+        }
+
+        h1 span {
+          color: #2563eb;
+        }
+
+        .heroContent p {
+          color: #64748b;
+          font-size: 16px;
+          line-height: 1.7;
+          margin: 0 0 25px;
+        }
+
+        .heroActions {
+          display: flex;
+          gap: 9px;
+        }
+
+        .primaryButton,
+        .secondaryButton {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 38px;
+          padding: 0 17px;
+          border-radius: 9px;
+          text-decoration: none;
+          font-size: 12px;
+          font-weight: 850;
+          transition: 0.2s;
+        }
+
+        .primaryButton {
+          color: white;
+          background: #2563eb;
+          box-shadow: 0 8px 22px rgba(37, 99, 235, 0.2);
+        }
+
+        .secondaryButton {
+          color: #334155;
+          background: white;
+          border: 1px solid #e2e8f0;
+        }
+
+        .primaryButton:hover,
+        .secondaryButton:hover {
+          transform: translateY(-2px);
+        }
+
+        .heroVisual {
+          position: absolute;
+          right: 30px;
+          width: 43%;
+          height: 430px;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+        }
+
+        .orb {
+          position: absolute;
+          border-radius: 50%;
+          filter: blur(1px);
+        }
+
+        .orbOne {
+          width: 300px;
+          height: 300px;
+          background: linear-gradient(
+            135deg,
+            rgba(37, 99, 235, 0.16),
+            rgba(6, 182, 212, 0.08)
+          );
+        }
+
+        .orbTwo {
+          width: 170px;
+          height: 170px;
+          background: rgba(6, 182, 212, 0.1);
+          transform: translate(100px, 100px);
+        }
+
+        .glassCard {
+          position: relative;
+          z-index: 2;
+          width: 260px;
+          height: 330px;
+          padding: 25px;
+          border-radius: 25px;
+          background: rgba(255, 255, 255, 0.72);
+          border: 1px solid rgba(255, 255, 255, 0.9);
+          box-shadow:
+            0 30px 80px rgba(15, 23, 42, 0.12),
+            inset 0 1px 0 white;
+          backdrop-filter: blur(20px);
+          transform: rotate(5deg);
+        }
+
+        .cardTop {
+          display: flex;
+          justify-content: space-between;
+          color: #2563eb;
+          font-size: 12px;
+          font-weight: 900;
+          letter-spacing: 2px;
+        }
+
+        .cardTitle {
+          margin-top: 105px;
+          font-size: 31px;
+          line-height: 0.95;
+          font-weight: 950;
+          letter-spacing: -1px;
+        }
+
+        .cardLine {
+          height: 1px;
+          margin: 25px 0;
+          background: #dbe5f0;
+        }
+
+        .cardBottom {
+          display: flex;
+          justify-content: space-between;
+          color: #64748b;
+          font-size: 10px;
+          font-weight: 900;
+          letter-spacing: 1px;
+        }
+
+        .section {
+          max-width: 1200px;
+          margin: 0 auto;
+          padding: 60px 28px;
+        }
+
+        .sectionHead {
+          display: flex;
+          align-items: flex-end;
+          justify-content: space-between;
+          margin-bottom: 22px;
+        }
+
+        h2 {
+          margin: 7px 0 0;
+          font-size: 28px;
+          letter-spacing: -1px;
+        }
+
+        .viewAll {
+          color: #2563eb;
+          text-decoration: none;
+          font-size: 12px;
+          font-weight: 800;
+        }
+
+        .products {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 14px;
+        }
+
+        .product {
+          position: relative;
+          min-height: 220px;
+          padding: 20px;
+          border-radius: 18px;
+          background: white;
+          border: 1px solid #e7edf5;
+          box-shadow: 0 12px 35px rgba(15, 23, 42, 0.045);
+          overflow: hidden;
+        }
+
+        .productImage {
+          height: 105px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin: -20px -20px 18px;
+          background: linear-gradient(
+            135deg,
+            #eff6ff,
+            #ecfeff
+          );
+          color: #2563eb;
+          font-size: 20px;
+          font-weight: 950;
+          letter-spacing: 1px;
+        }
+
+        .product h3 {
+          margin: 0 0 5px;
+          font-size: 15px;
+        }
+
+        .product p {
+          margin: 0 0 14px;
+          color: #64748b;
+          font-size: 11px;
+        }
+
+        .smallButton {
+          display: inline-flex;
+          padding: 7px 11px;
+          border-radius: 7px;
+          color: #2563eb;
+          background: #eff6ff;
+          text-decoration: none;
+          font-size: 11px;
+          font-weight: 850;
+        }
+
+        .features {
+          max-width: 1145px;
+          margin: 15px auto 70px;
+          padding: 0 28px;
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 10px;
+        }
+
+        .feature {
+          padding: 18px;
+          background: white;
+          border: 1px solid #e7edf5;
+          border-radius: 14px;
+        }
+
+        .featureIcon {
+          font-size: 20px;
+        }
+
+        .feature h3 {
+          margin: 10px 0 4px;
+          font-size: 13px;
+        }
+
+        .feature p {
+          margin: 0;
+          color: #64748b;
+          font-size: 11px;
+          line-height: 1.5;
+        }
+
+        .how {
+          background: white;
+          border-top: 1px solid #edf1f6;
+          border-bottom: 1px solid #edf1f6;
+          padding: 65px 28px;
+        }
+
+        .center {
+          justify-content: center;
+          text-align: center;
+        }
+
+        .steps {
+          max-width: 900px;
+          margin: 35px auto 0;
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 35px;
+        }
+
+        .stepNumber {
+          color: #2563eb;
+          font-size: 12px;
+          font-weight: 900;
+        }
+
+        .step h3 {
+          margin: 8px 0 5px;
+          font-size: 15px;
+        }
+
+        .step p {
+          margin: 0;
+          color: #64748b;
+          font-size: 12px;
+          line-height: 1.6;
+        }
+
+        .cta {
+          max-width: 1145px;
+          margin: 65px auto;
+          padding: 30px;
+          border-radius: 20px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 20px;
+          background: linear-gradient(
+            120deg,
+            #eff6ff,
+            #ecfeff
+          );
+          border: 1px solid #dbeafe;
+        }
+
+        .cta h2 {
+          font-size: 24px;
+        }
+
+        .cta p {
+          margin: 6px 0 0;
+          color: #64748b;
+          font-size: 12px;
+        }
+
+        footer {
+          padding: 35px 25px;
+          text-align: center;
+          background: #fff;
+          border-top: 1px solid #edf1f6;
+        }
+
+        .footerLogo {
+          font-size: 16px;
+          font-weight: 950;
+        }
+
+        .footerLogo span {
+          color: #2563eb;
+        }
+
+        footer p {
+          color: #94a3b8;
+          font-size: 11px;
+        }
+
+        .footerLinks {
+          display: flex;
+          justify-content: center;
+          gap: 20px;
+          margin: 18px 0;
+        }
+
+        .footerLinks a {
+          color: #64748b;
+          text-decoration: none;
+          font-size: 11px;
+          font-weight: 700;
+        }
+
+        .copyright {
+          color: #a1aab8;
+          font-size: 10px;
+        }
+
+        @media (max-width: 750px) {
+          .hero {
+            min-height: auto;
+            padding: 100px 18px 50px;
+          }
+
+          .heroContent {
+            width: 100%;
+          }
+
+          .heroVisual {
+            display: none;
+          }
+
+          h1 {
+            font-size: 55px;
+          }
+
+          .products {
+            grid-template-columns: 1fr;
+          }
+
+          .features {
+            grid-template-columns: repeat(2, 1fr);
+            padding: 0 18px;
+          }
+
+          .steps {
+            grid-template-columns: 1fr;
+            gap: 22px;
+          }
+
+          .cta {
+            margin: 40px 18px;
+            flex-direction: column;
+            align-items: flex-start;
+          }
+
+          .section {
+            padding-left: 18px;
+            padding-right: 18px;
+          }
+        }
+
+        @media (max-width: 420px) {
+          h1 {
+            font-size: 46px;
+          }
+
+          .features {
+            grid-template-columns: 1fr 1fr;
+          }
+
+          .footerLinks {
+            gap: 12px;
+            flex-wrap: wrap;
+          }
+        }
+      `}</style>
     </main>
+  );
+}
+
+function ProductCard({
+  icon,
+  title,
+  description,
+  href,
+}) {
+  return (
+    <div className="product">
+      <div className="productImage">
+        {icon}
+      </div>
+
+      <h3>{title}</h3>
+
+      <p>{description}</p>
+
+      <Link href={href} className="smallButton">
+        Xem sản phẩm →
+      </Link>
+    </div>
   );
 }
 
 function Feature({ icon, title, text }) {
   return (
-    <div style={styles.feature}>
-      <div style={styles.featureIcon}>
-        {icon}
-      </div>
+    <div className="feature">
+      <div className="featureIcon">{icon}</div>
 
-      <div>
-        <strong style={styles.featureTitle}>
-          {title}
-        </strong>
+      <h3>{title}</h3>
 
-        <p style={styles.featureText}>
-          {text}
-        </p>
-      </div>
+      <p>{text}</p>
     </div>
   );
 }
 
 function Step({ number, title, text }) {
   return (
-    <div style={styles.step}>
-      <div style={styles.stepNumber}>
+    <div className="step">
+      <div className="stepNumber">
         {number}
       </div>
 
-      <div>
-        <strong style={styles.stepTitle}>
-          {title}
-        </strong>
+      <h3>{title}</h3>
 
-        <p style={styles.stepText}>
-          {text}
-        </p>
-      </div>
+      <p>{text}</p>
     </div>
   );
 }
-
-function HomeCard({ href, icon, title, text }) {
-  return (
-    <Link
-      href={href}
-      style={styles.homeCard}
-    >
-      <div style={styles.homeIcon}>
-        {icon}
-      </div>
-
-      <div>
-        <strong style={styles.homeTitle}>
-          {title}
-        </strong>
-
-        <p style={styles.homeText}>
-          {text}
-        </p>
-      </div>
-
-      <span style={styles.arrow}>
-        ›
-      </span>
-    </Link>
-  );
-}
-
-const styles = {
-  page: {
-    minHeight: "100vh",
-    background:
-      "radial-gradient(circle at 50% 0%, #142544 0%, #080d16 38%, #05070b 100%)",
-    color: "#fff",
-    padding: "40px 15px 70px",
-  },
-
-  container: {
-    width: "100%",
-    maxWidth: "1050px",
-    margin: "0 auto",
-  },
-
-  hero: {
-    textAlign: "center",
-    padding:
-      "55px 15px 45px",
-  },
-
-  logo: {
-    display: "inline-block",
-    color: "#72a9ff",
-    fontSize: "clamp(35px, 10vw, 65px)",
-    fontWeight: "1000",
-    letterSpacing: "7px",
-    lineHeight: 1,
-    textShadow:
-      "0 0 35px rgba(83,145,255,.3)",
-  },
-
-  play: {
-    marginTop: "6px",
-    color: "#6b7890",
-    fontSize: "11px",
-    fontWeight: "900",
-    letterSpacing: "8px",
-  },
-
-  title: {
-    margin:
-      "25px 0 12px",
-    fontSize: "clamp(27px, 6vw, 45px)",
-    fontWeight: "950",
-  },
-
-  description: {
-    maxWidth: "600px",
-    margin: "0 auto",
-    color: "#7d8ba1",
-    fontSize: "14px",
-    lineHeight: 1.7,
-  },
-
-  actions: {
-    display: "flex",
-    justifyContent: "center",
-    flexWrap: "wrap",
-    gap: "10px",
-    marginTop: "25px",
-  },
-
-  primaryButton: {
-    padding: "13px 20px",
-    borderRadius: "11px",
-    background: "#fff",
-    color: "#000",
-    textDecoration: "none",
-    fontSize: "12px",
-    fontWeight: "950",
-  },
-
-  secondaryButton: {
-    padding: "13px 20px",
-    borderRadius: "11px",
-    background: "#101b2c",
-    border: "1px solid #29405f",
-    color: "#9ec4ff",
-    textDecoration: "none",
-    fontSize: "12px",
-    fontWeight: "900",
-  },
-
-  features: {
-    display: "grid",
-    gridTemplateColumns:
-      "repeat(auto-fit, minmax(220px, 1fr))",
-    gap: "11px",
-    marginTop: "15px",
-  },
-
-  feature: {
-    display: "flex",
-    gap: "12px",
-    alignItems: "flex-start",
-    padding: "17px",
-    borderRadius: "15px",
-    background: "#0c131f",
-    border: "1px solid #1e2b3e",
-  },
-
-  featureIcon: {
-    width: "39px",
-    height: "39px",
-    flexShrink: 0,
-    display: "grid",
-    placeItems: "center",
-    borderRadius: "10px",
-    background: "#142238",
-    fontSize: "18px",
-  },
-
-  featureTitle: {
-    fontSize: "13px",
-  },
-
-  featureText: {
-    margin: "5px 0 0",
-    color: "#69778d",
-    fontSize: "10px",
-    lineHeight: 1.5,
-  },
-
-  section: {
-    marginTop: "35px",
-  },
-
-  sectionTitle: {
-    marginBottom: "13px",
-    fontSize: "15px",
-    fontWeight: "950",
-    letterSpacing: ".5px",
-  },
-
-  steps: {
-    display: "grid",
-    gridTemplateColumns:
-      "repeat(auto-fit, minmax(180px, 1fr))",
-    gap: "10px",
-  },
-
-  step: {
-    display: "flex",
-    gap: "10px",
-    padding: "14px",
-    background: "#0b111b",
-    border: "1px solid #1b283a",
-    borderRadius: "13px",
-  },
-
-  stepNumber: {
-    color: "#72a9ff",
-    fontSize: "11px",
-    fontWeight: "950",
-  },
-
-  stepTitle: {
-    fontSize: "12px",
-  },
-
-  stepText: {
-    margin: "4px 0 0",
-    color: "#65748a",
-    fontSize: "10px",
-    lineHeight: 1.5,
-  },
-
-  grid: {
-    display: "grid",
-    gridTemplateColumns:
-      "repeat(auto-fit, minmax(220px, 1fr))",
-    gap: "10px",
-  },
-
-  homeCard: {
-    display: "flex",
-    alignItems: "center",
-    gap: "12px",
-    padding: "16px",
-    background: "#0d1420",
-    border: "1px solid #202d42",
-    borderRadius: "14px",
-    color: "#fff",
-    textDecoration: "none",
-  },
-
-  homeIcon: {
-    width: "42px",
-    height: "42px",
-    flexShrink: 0,
-    display: "grid",
-    placeItems: "center",
-    borderRadius: "11px",
-    background: "#151f30",
-    fontSize: "19px",
-  },
-
-  homeTitle: {
-    display: "block",
-    fontSize: "13px",
-  },
-
-  homeText: {
-    margin: "4px 0 0",
-    color: "#69778d",
-    fontSize: "10px",
-  },
-
-  arrow: {
-    marginLeft: "auto",
-    color: "#526177",
-    fontSize: "23px",
-  },
-
-  accountBox: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: "20px",
-    marginTop: "35px",
-    padding: "20px",
-    borderRadius: "17px",
-    background:
-      "linear-gradient(135deg, #101b2b, #0b111c)",
-    border: "1px solid #263852",
-  },
-
-  accountTitle: {
-    fontSize: "15px",
-    fontWeight: "900",
-  },
-
-  accountText: {
-    marginTop: "5px",
-    color: "#718097",
-    fontSize: "11px",
-  },
-
-  accountActions: {
-    display: "flex",
-    gap: "8px",
-    flexWrap: "wrap",
-  },
-
-  loginButton: {
-    padding: "10px 13px",
-    borderRadius: "9px",
-    background: "#fff",
-    color: "#000",
-    textDecoration: "none",
-    fontSize: "10px",
-    fontWeight: "900",
-  },
-
-  registerButton: {
-    padding: "10px 13px",
-    borderRadius: "9px",
-    background: "#17263c",
-    border: "1px solid #2b4262",
-    color: "#9fc4ff",
-    textDecoration: "none",
-    fontSize: "10px",
-    fontWeight: "900",
-  },
-
-  footer: {
-    textAlign: "center",
-    marginTop: "45px",
-    paddingTop: "25px",
-    borderTop: "1px solid #172131",
-    color: "#3f4d61",
-    fontSize: "10px",
-  },
-
-  footerLogo: {
-    color: "#5a6d88",
-    fontWeight: "950",
-    letterSpacing: "2px",
-    marginBottom: "6px",
-  },
-
-  footerLinks: {
-    display: "flex",
-    justifyContent: "center",
-    flexWrap: "wrap",
-    gap: "18px",
-    marginTop: "13px",
-  },
-};
