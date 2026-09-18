@@ -7,8 +7,10 @@ export default function RootLayout({ children }) {
     <html lang="vi">
       <body>
         <Menu />
-        <ChatButton />
+
         {children}
+
+        <ChatButton />
       </body>
     </html>
   );
