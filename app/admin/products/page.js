@@ -16,6 +16,8 @@ export default function ProductsPage() {
   const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
 
+  const [uploadingId, setUploadingId] = useState(null);
+
   async function checkAdmin() {
     const {
       data: { user },
@@ -110,6 +112,7 @@ export default function ProductsPage() {
         .insert({
           ...productData,
           is_active: true,
+          active: true,
         });
 
       error = result.error;
@@ -122,7 +125,11 @@ export default function ProductsPage() {
       return;
     }
 
-    alert(editingId ? "Đã cập nhật sản phẩm!" : "Đã thêm sản phẩm!");
+    alert(
+      editingId
+        ? "Đã cập nhật sản phẩm!"
+        : "Đã thêm sản phẩm!"
+    );
 
     resetForm();
     await loadProducts();
@@ -148,6 +155,21 @@ export default function ProductsPage() {
 
     if (!ok) return;
 
+    const product = products.find(
+      (item) => item.id === id
+    );
+
+    // Xóa ảnh cũ nếu có
+    if (product?.demo_image_url) {
+      const path = getStoragePath(product.demo_image_url);
+
+      if (path) {
+        await supabase.storage
+          .from("product-demo")
+          .remove([path]);
+      }
+    }
+
     const { error } = await supabase
       .from("products")
       .delete()
@@ -170,11 +192,167 @@ export default function ProductsPage() {
       .eq("id", product.id);
 
     if (error) {
-      alert("Không thể thay đổi trạng thái: " + error.message);
+      alert(
+        "Không thể thay đổi trạng thái: " +
+          error.message
+      );
       return;
     }
 
     await loadProducts();
+  }
+
+  function getStoragePath(url) {
+    if (!url) return null;
+
+    const marker =
+      "/storage/v1/object/public/product-demo/";
+
+    const index = url.indexOf(marker);
+
+    if (index === -1) return null;
+
+    return decodeURIComponent(
+      url.substring(index + marker.length)
+    );
+  }
+
+  async function uploadDemoImage(product, file) {
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      alert("Vui lòng chọn file ảnh.");
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      alert("Ảnh tối đa 10MB.");
+      return;
+    }
+
+    setUploadingId(product.id);
+
+    try {
+      // Xóa ảnh cũ nếu có
+      if (product.demo_image_url) {
+        const oldPath = getStoragePath(
+          product.demo_image_url
+        );
+
+        if (oldPath) {
+          await supabase.storage
+            .from("product-demo")
+            .remove([oldPath]);
+        }
+      }
+
+      const extension =
+        file.name.split(".").pop()?.toLowerCase() ||
+        "jpg";
+
+      const filePath =
+        `${product.id}/demo-${Date.now()}.${extension}`;
+
+      const { error: uploadError } =
+        await supabase.storage
+          .from("product-demo")
+          .upload(filePath, file, {
+            cacheControl: "3600",
+            upsert: true,
+            contentType: file.type,
+          });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage
+        .from("product-demo")
+        .getPublicUrl(filePath);
+
+      const { error: updateError } =
+        await supabase
+          .from("products")
+          .update({
+            demo_image_url: publicUrl,
+          })
+          .eq("id", product.id);
+
+      if (updateError) {
+        await supabase.storage
+          .from("product-demo")
+          .remove([filePath]);
+
+        throw updateError;
+      }
+
+      alert("Đã upload ảnh demo!");
+
+      await loadProducts();
+    } catch (error) {
+      console.error("UPLOAD DEMO ERROR:", error);
+      alert(
+        "Không thể upload ảnh: " +
+          (error?.message || "Lỗi không xác định.")
+      );
+    }
+
+    setUploadingId(null);
+  }
+
+  async function removeDemoImage(product) {
+    if (!product.demo_image_url) return;
+
+    const ok = confirm(
+      "Bạn có chắc muốn xóa ảnh demo của sản phẩm này?"
+    );
+
+    if (!ok) return;
+
+    setUploadingId(product.id);
+
+    try {
+      const path = getStoragePath(
+        product.demo_image_url
+      );
+
+      if (path) {
+        const { error: storageError } =
+          await supabase.storage
+            .from("product-demo")
+            .remove([path]);
+
+        if (storageError) {
+          console.error(
+            "REMOVE STORAGE ERROR:",
+            storageError
+          );
+        }
+      }
+
+      const { error } = await supabase
+        .from("products")
+        .update({
+          demo_image_url: null,
+        })
+        .eq("id", product.id);
+
+      if (error) {
+        throw error;
+      }
+
+      await loadProducts();
+    } catch (error) {
+      console.error("DELETE DEMO ERROR:", error);
+      alert(
+        "Không thể xóa ảnh: " +
+          (error?.message || "Lỗi không xác định.")
+      );
+    }
+
+    setUploadingId(null);
   }
 
   if (loading) {
@@ -190,9 +368,15 @@ export default function ProductsPage() {
       <main style={styles.loading}>
         <div style={styles.denied}>
           <h1>🚫 Không có quyền</h1>
-          <p>Tài khoản này không phải Admin.</p>
 
-          <a href="/dashboard" style={styles.back}>
+          <p>
+            Tài khoản này không phải Admin.
+          </p>
+
+          <a
+            href="/dashboard"
+            style={styles.back}
+          >
             ← Dashboard
           </a>
         </div>
@@ -237,7 +421,6 @@ export default function ProductsPage() {
           </h2>
 
           <form onSubmit={saveProduct}>
-
             <label style={styles.label}>
               Tên sản phẩm
             </label>
@@ -245,7 +428,9 @@ export default function ProductsPage() {
             <input
               style={styles.input}
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) =>
+                setName(e.target.value)
+              }
               placeholder="VD: KEY ADR 7 NGÀY"
             />
 
@@ -270,7 +455,9 @@ export default function ProductsPage() {
               style={styles.input}
               type="number"
               value={price}
-              onChange={(e) => setPrice(e.target.value)}
+              onChange={(e) =>
+                setPrice(e.target.value)
+              }
               placeholder="80000"
             />
 
@@ -289,7 +476,6 @@ export default function ProductsPage() {
             />
 
             <div style={styles.formButtons}>
-
               <button
                 type="submit"
                 disabled={saving}
@@ -311,14 +497,12 @@ export default function ProductsPage() {
                   Hủy
                 </button>
               )}
-
             </div>
           </form>
         </div>
 
         {/* PRODUCT LIST */}
         <div style={styles.card}>
-
           <div style={styles.listHeader}>
             <h2 style={styles.cardTitle}>
               📦 Danh sách sản phẩm
@@ -335,22 +519,26 @@ export default function ProductsPage() {
             </div>
           ) : (
             <div style={styles.products}>
-
               {products.map((product) => (
-
                 <div
                   key={product.id}
                   style={styles.product}
                 >
-
                   <div style={styles.productTop}>
-
-                    <div>
-                      <h3 style={styles.productName}>
+                    <div style={styles.productMain}>
+                      <h3
+                        style={
+                          styles.productName
+                        }
+                      >
                         {product.name}
                       </h3>
 
-                      <p style={styles.description}>
+                      <p
+                        style={
+                          styles.description
+                        }
+                      >
                         {product.description ||
                           "Không có mô tả"}
                       </p>
@@ -368,17 +556,32 @@ export default function ProductsPage() {
                         ? "ĐANG BẬT"
                         : "ĐANG TẮT"}
                     </span>
-
                   </div>
 
-                  <div style={styles.info}>
+                  {/* DEMO IMAGE */}
+                  {product.demo_image_url && (
+                    <div style={styles.demoPreview}>
+                      <img
+                        src={
+                          product.demo_image_url
+                        }
+                        alt={`Demo ${product.name}`}
+                        style={
+                          styles.demoImage
+                        }
+                      />
+                    </div>
+                  )}
 
+                  <div style={styles.info}>
                     <div>
                       💰{" "}
                       <strong>
                         {Number(
                           product.price || 0
-                        ).toLocaleString("vi-VN")}
+                        ).toLocaleString(
+                          "vi-VN"
+                        )}
                         ₫
                       </strong>
                     </div>
@@ -389,11 +592,78 @@ export default function ProductsPage() {
                         {product.duration_days} ngày
                       </strong>
                     </div>
-
                   </div>
 
-                  <div style={styles.actions}>
+                  {/* IMAGE ACTIONS */}
+                  <div
+                    style={
+                      styles.imageActions
+                    }
+                  >
+                    <label
+                      style={{
+                        ...styles.uploadButton,
+                        ...(uploadingId ===
+                        product.id
+                          ? styles.disabledButton
+                          : {}),
+                      }}
+                    >
+                      📷{" "}
+                      {uploadingId ===
+                      product.id
+                        ? "ĐANG UPLOAD..."
+                        : product.demo_image_url
+                        ? "ĐỔI ẢNH DEMO"
+                        : "UPLOAD ẢNH DEMO"}
 
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={
+                          uploadingId ===
+                          product.id
+                        }
+                        onChange={(e) => {
+                          const file =
+                            e.target.files?.[0];
+
+                          e.target.value = "";
+
+                          uploadDemoImage(
+                            product,
+                            file
+                          );
+                        }}
+                        style={
+                          styles.hiddenFile
+                        }
+                      />
+                    </label>
+
+                    {product.demo_image_url && (
+                      <button
+                        type="button"
+                        disabled={
+                          uploadingId ===
+                          product.id
+                        }
+                        onClick={() =>
+                          removeDemoImage(
+                            product
+                          )
+                        }
+                        style={
+                          styles.removeImage
+                        }
+                      >
+                        🗑️ XÓA ẢNH
+                      </button>
+                    )}
+                  </div>
+
+                  {/* PRODUCT ACTIONS */}
+                  <div style={styles.actions}>
                     <button
                       onClick={() =>
                         editProduct(product)
@@ -416,37 +686,33 @@ export default function ProductsPage() {
 
                     <button
                       onClick={() =>
-                        deleteProduct(product.id)
+                        deleteProduct(
+                          product.id
+                        )
                       }
                       style={styles.delete}
                     >
                       🗑️ Xóa
                     </button>
-
                   </div>
-
                 </div>
-
               ))}
-
             </div>
           )}
-
         </div>
-
       </div>
     </main>
   );
 }
 
 const styles = {
-
   page: {
     minHeight: "100vh",
     background: "#050505",
     color: "#fff",
     padding: "20px 14px 60px",
-    fontFamily: "Arial, Helvetica, sans-serif",
+    fontFamily:
+      "Arial, Helvetica, sans-serif",
   },
 
   container: {
@@ -543,6 +809,7 @@ const styles = {
     color: "#fff",
     fontWeight: "900",
     fontSize: "15px",
+    cursor: "pointer",
   },
 
   cancelButton: {
@@ -552,6 +819,7 @@ const styles = {
     background: "#181818",
     color: "#fff",
     fontWeight: "700",
+    cursor: "pointer",
   },
 
   listHeader: {
@@ -591,6 +859,11 @@ const styles = {
     gap: "15px",
   },
 
+  productMain: {
+    minWidth: 0,
+    flex: 1,
+  },
+
   productName: {
     margin: 0,
     fontSize: "19px",
@@ -613,14 +886,18 @@ const styles = {
 
   active: {
     color: "#00e676",
-    background: "rgba(0,230,118,.1)",
-    border: "1px solid rgba(0,230,118,.3)",
+    background:
+      "rgba(0,230,118,.1)",
+    border:
+      "1px solid rgba(0,230,118,.3)",
   },
 
   inactive: {
     color: "#ff5252",
-    background: "rgba(255,82,82,.1)",
-    border: "1px solid rgba(255,82,82,.3)",
+    background:
+      "rgba(255,82,82,.1)",
+    border:
+      "1px solid rgba(255,82,82,.3)",
   },
 
   info: {
@@ -629,6 +906,62 @@ const styles = {
     marginTop: "18px",
     color: "#aaa",
     fontSize: "14px",
+  },
+
+  demoPreview: {
+    marginTop: "18px",
+    borderRadius: "14px",
+    overflow: "hidden",
+    background: "#080808",
+    border: "1px solid #292929",
+  },
+
+  demoImage: {
+    display: "block",
+    width: "100%",
+    maxHeight: "500px",
+    objectFit: "contain",
+    background: "#080808",
+  },
+
+  imageActions: {
+    display: "flex",
+    gap: "8px",
+    flexWrap: "wrap",
+    marginTop: "14px",
+  },
+
+  uploadButton: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "10px 14px",
+    borderRadius: "10px",
+    background: "#202020",
+    border: "1px solid #333",
+    color: "#fff",
+    fontWeight: "800",
+    fontSize: "13px",
+    cursor: "pointer",
+  },
+
+  hiddenFile: {
+    display: "none",
+  },
+
+  disabledButton: {
+    opacity: 0.6,
+    cursor: "not-allowed",
+  },
+
+  removeImage: {
+    padding: "10px 14px",
+    borderRadius: "10px",
+    border: "1px solid #5a1515",
+    background: "#241010",
+    color: "#ff5252",
+    fontWeight: "700",
+    cursor: "pointer",
   },
 
   actions: {
@@ -645,6 +978,7 @@ const styles = {
     background: "#202020",
     color: "#fff",
     fontWeight: "700",
+    cursor: "pointer",
   },
 
   toggle: {
@@ -654,6 +988,7 @@ const styles = {
     background: "#202020",
     color: "#fff",
     fontWeight: "700",
+    cursor: "pointer",
   },
 
   delete: {
@@ -663,6 +998,7 @@ const styles = {
     background: "#241010",
     color: "#ff5252",
     fontWeight: "700",
+    cursor: "pointer",
   },
 
   loading: {
