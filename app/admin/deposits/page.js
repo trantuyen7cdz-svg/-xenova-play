@@ -9,7 +9,7 @@ export default function AdminDepositsPage() {
   const [deposits, setDeposits] = useState([]);
   const [filter, setFilter] = useState("pending");
   const [message, setMessage] = useState("");
-  const [approvingId, setApprovingId] = useState(null);
+  const [processingId, setProcessingId] = useState(null);
 
   useEffect(() => {
     loadDeposits();
@@ -28,10 +28,7 @@ export default function AdminDepositsPage() {
         });
 
       if (error) {
-        console.error(
-          "LOAD DEPOSITS ERROR:",
-          error
-        );
+        console.error("LOAD DEPOSITS ERROR:", error);
 
         setMessage(
           "Không thể tải danh sách đơn nạp: " +
@@ -43,10 +40,7 @@ export default function AdminDepositsPage() {
 
       setDeposits(data || []);
     } catch (error) {
-      console.error(
-        "LOAD DEPOSITS ERROR:",
-        error
-      );
+      console.error("LOAD DEPOSITS ERROR:", error);
 
       setMessage(
         "Có lỗi xảy ra khi tải đơn nạp."
@@ -56,31 +50,35 @@ export default function AdminDepositsPage() {
     }
   }
 
-  async function approveDeposit(depositId) {
-    if (!depositId) return;
+  async function getAccessToken() {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
 
-    if (approvingId) return;
+    if (!session?.access_token) {
+      throw new Error(
+        "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
+      );
+    }
+
+    return session.access_token;
+  }
+
+  async function approveDeposit(depositId) {
+    if (!depositId || processingId) return;
 
     const confirmed = window.confirm(
-      "Bạn chắc chắn muốn DUYỆT đơn nạp tiền này?\n\nTiền sẽ được cộng vào ví của tài khoản."
+      "Bạn chắc chắn muốn DUYỆT đơn nạp tiền này?\n\n" +
+        "Tiền sẽ được cộng vào ví của tài khoản."
     );
 
     if (!confirmed) return;
 
-    setApprovingId(depositId);
+    setProcessingId(depositId);
     setMessage("");
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!session?.access_token) {
-        setMessage(
-          "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
-        );
-        return;
-      }
+      const token = await getAccessToken();
 
       const response = await fetch(
         "/api/admin/approve-deposit",
@@ -88,11 +86,10 @@ export default function AdminDepositsPage() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization:
-              `Bearer ${session.access_token}`,
+            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            depositId,
+            depositId: Number(depositId),
           }),
         }
       );
@@ -125,18 +122,82 @@ export default function AdminDepositsPage() {
       );
 
       setMessage(
-        "Có lỗi xảy ra khi duyệt đơn nạp tiền."
+        error.message ||
+          "Có lỗi xảy ra khi duyệt đơn nạp tiền."
       );
     } finally {
-      setApprovingId(null);
+      setProcessingId(null);
+    }
+  }
+
+  async function rejectDeposit(depositId) {
+    if (!depositId || processingId) return;
+
+    const confirmed = window.confirm(
+      "Bạn chắc chắn muốn TỪ CHỐI đơn nạp tiền này?\n\n" +
+        "Đơn sẽ chuyển sang THẤT BẠI và KHÔNG được cộng tiền vào ví."
+    );
+
+    if (!confirmed) return;
+
+    setProcessingId(depositId);
+    setMessage("");
+
+    try {
+      const token = await getAccessToken();
+
+      const response = await fetch(
+        "/api/admin/reject-deposit",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            depositId: Number(depositId),
+          }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        console.error(
+          "REJECT DEPOSIT RESPONSE:",
+          result
+        );
+
+        setMessage(
+          result.message ||
+            "Không thể từ chối đơn nạp tiền."
+        );
+
+        return;
+      }
+
+      alert("Đã từ chối đơn nạp tiền.");
+
+      await loadDeposits();
+    } catch (error) {
+      console.error(
+        "REJECT DEPOSIT ERROR:",
+        error
+      );
+
+      setMessage(
+        error.message ||
+          "Có lỗi xảy ra khi từ chối đơn nạp tiền."
+      );
+    } finally {
+      setProcessingId(null);
     }
   }
 
   function formatMoney(value) {
     return (
-      Number(value || 0).toLocaleString(
-        "vi-VN"
-      ) + "đ"
+      Number(value || 0).toLocaleString("vi-VN") +
+      "đ"
     );
   }
 
@@ -152,39 +213,30 @@ export default function AdminDepositsPage() {
     filter === "all"
       ? deposits
       : deposits.filter(
-          (item) =>
-            item.status === filter
+          (item) => item.status === filter
         );
 
-  const pendingCount =
-    deposits.filter(
-      (item) =>
-        item.status === "pending"
-    ).length;
+  const pendingCount = deposits.filter(
+    (item) => item.status === "pending"
+  ).length;
 
-  const completedCount =
-    deposits.filter(
-      (item) =>
-        item.status === "completed"
-    ).length;
+  const completedCount = deposits.filter(
+    (item) => item.status === "completed"
+  ).length;
 
-  const failedCount =
-    deposits.filter(
-      (item) =>
-        item.status === "failed"
-    ).length;
+  const failedCount = deposits.filter(
+    (item) => item.status === "failed"
+  ).length;
 
-  const totalPending =
-    deposits
-      .filter(
-        (item) =>
-          item.status === "pending"
-      )
-      .reduce(
-        (total, item) =>
-          total + Number(item.amount || 0),
-        0
-      );
+  const totalPending = deposits
+    .filter(
+      (item) => item.status === "pending"
+    )
+    .reduce(
+      (total, item) =>
+        total + Number(item.amount || 0),
+      0
+    );
 
   return (
     <main style={styles.page}>
@@ -302,9 +354,7 @@ export default function AdminDepositsPage() {
               </div>
 
               <div style={styles.statValue}>
-                {formatMoney(
-                  totalPending
-                )}
+                {formatMoney(totalPending)}
               </div>
             </div>
           </div>
@@ -346,9 +396,7 @@ export default function AdminDepositsPage() {
 
         <div style={styles.filterBox}>
           <button
-            onClick={() =>
-              setFilter("pending")
-            }
+            onClick={() => setFilter("pending")}
             style={
               filter === "pending"
                 ? styles.filterActive
@@ -359,9 +407,7 @@ export default function AdminDepositsPage() {
           </button>
 
           <button
-            onClick={() =>
-              setFilter("completed")
-            }
+            onClick={() => setFilter("completed")}
             style={
               filter === "completed"
                 ? styles.filterActive
@@ -372,9 +418,7 @@ export default function AdminDepositsPage() {
           </button>
 
           <button
-            onClick={() =>
-              setFilter("failed")
-            }
+            onClick={() => setFilter("failed")}
             style={
               filter === "failed"
                 ? styles.filterActive
@@ -385,9 +429,7 @@ export default function AdminDepositsPage() {
           </button>
 
           <button
-            onClick={() =>
-              setFilter("all")
-            }
+            onClick={() => setFilter("all")}
             style={
               filter === "all"
                 ? styles.filterActive
@@ -431,18 +473,19 @@ export default function AdminDepositsPage() {
             </div>
           ) : (
             <div style={styles.list}>
-              {filteredDeposits.map(
-                (item) => (
-                  <DepositCard
-                    key={item.id}
-                    item={item}
-                    approvingId={approvingId}
-                    approveDeposit={
-                      approveDeposit
-                    }
-                  />
-                )
-              )}
+              {filteredDeposits.map((item) => (
+                <DepositCard
+                  key={item.id}
+                  item={item}
+                  processingId={processingId}
+                  approveDeposit={
+                    approveDeposit
+                  }
+                  rejectDeposit={
+                    rejectDeposit
+                  }
+                />
+              ))}
             </div>
           )}
         </section>
@@ -453,8 +496,9 @@ export default function AdminDepositsPage() {
 
 function DepositCard({
   item,
-  approvingId,
+  processingId,
   approveDeposit,
+  rejectDeposit,
 }) {
   function formatMoney(value) {
     return (
@@ -488,8 +532,8 @@ function DepositCard({
       ? "#00e676"
       : "#ff5252";
 
-  const isApproving =
-    approvingId === item.id;
+  const isProcessing =
+    processingId === item.id;
 
   return (
     <div style={styles.depositCard}>
@@ -501,9 +545,7 @@ function DepositCard({
           </div>
 
           <div style={styles.date}>
-            {formatDate(
-              item.created_at
-            )}
+            {formatDate(item.created_at)}
           </div>
         </div>
 
@@ -551,15 +593,11 @@ function DepositCard({
       {item.updated_at && (
         <div style={styles.updated}>
           Cập nhật:{" "}
-          {formatDate(
-            item.updated_at
-          )}
+          {formatDate(item.updated_at)}
         </div>
       )}
 
-      {/* =========================
-          DUYỆT NẠP TIỀN
-      ========================= */}
+      {/* ĐƠN ĐANG CHỜ */}
 
       {item.status === "pending" && (
         <div style={styles.pendingArea}>
@@ -568,34 +606,62 @@ function DepositCard({
             ⏳ Đơn đang chờ xử lý.
           </div>
 
-          <button
-            onClick={() =>
-              approveDeposit(item.id)
-            }
-            disabled={!!approvingId}
-            style={{
-              ...styles.approveButton,
-              opacity: approvingId
-                ? 0.6
-                : 1,
-              cursor: approvingId
-                ? "not-allowed"
-                : "pointer",
-            }}
-          >
-            {isApproving
-              ? "⏳ ĐANG DUYỆT..."
-              : "✓ DUYỆT + CỘNG TIỀN"}
-          </button>
+          <div style={styles.actionRow}>
+
+            <button
+              onClick={() =>
+                approveDeposit(item.id)
+              }
+              disabled={!!processingId}
+              style={{
+                ...styles.approveButton,
+                opacity: processingId
+                  ? 0.6
+                  : 1,
+                cursor: processingId
+                  ? "not-allowed"
+                  : "pointer",
+              }}
+            >
+              {isProcessing
+                ? "⏳ ĐANG DUYỆT..."
+                : "✓ DUYỆT + CỘNG TIỀN"}
+            </button>
+
+            <button
+              onClick={() =>
+                rejectDeposit(item.id)
+              }
+              disabled={!!processingId}
+              style={{
+                ...styles.rejectButton,
+                opacity: processingId
+                  ? 0.6
+                  : 1,
+                cursor: processingId
+                  ? "not-allowed"
+                  : "pointer",
+              }}
+            >
+              {isProcessing
+                ? "⏳ ĐANG XỬ LÝ..."
+                : "✕ TỪ CHỐI"}
+            </button>
+
+          </div>
 
         </div>
       )}
+
+      {/* ĐÃ DUYỆT */}
 
       {item.status === "completed" && (
         <div style={styles.completedNote}>
           ✅ Đã duyệt và tiền đã được cộng vào ví.
         </div>
       )}
+
+      {/* ĐÃ TỪ CHỐI */}
 
       {item.status === "failed" && (
         <div style={styles.failedNote}>
@@ -626,8 +692,7 @@ const styles = {
 
   header: {
     display: "flex",
-    justifyContent:
-      "space-between",
+    justifyContent: "space-between",
     alignItems: "center",
     gap: "15px",
     marginBottom: "20px",
@@ -792,8 +857,7 @@ const styles = {
 
   sectionHeader: {
     display: "flex",
-    justifyContent:
-      "space-between",
+    justifyContent: "space-between",
     alignItems: "center",
     marginBottom: "15px",
   },
@@ -825,8 +889,7 @@ const styles = {
 
   depositTop: {
     display: "flex",
-    justifyContent:
-      "space-between",
+    justifyContent: "space-between",
     alignItems: "flex-start",
     gap: "10px",
   },
@@ -912,15 +975,33 @@ const styles = {
     fontSize: "11px",
   },
 
+  actionRow: {
+    display: "grid",
+    gridTemplateColumns:
+      "minmax(0, 1fr) 150px",
+    gap: "8px",
+    marginTop: "9px",
+  },
+
   approveButton: {
     width: "100%",
-    marginTop: "9px",
     border: "none",
     borderRadius: "9px",
     padding: "13px",
     background:
       "linear-gradient(135deg, #00a844, #00c853)",
     color: "#fff",
+    fontWeight: "900",
+    fontSize: "13px",
+  },
+
+  rejectButton: {
+    width: "100%",
+    border: "1px solid #7a2020",
+    borderRadius: "9px",
+    padding: "13px",
+    background: "#2a0d0d",
+    color: "#ff6565",
     fontWeight: "900",
     fontSize: "13px",
   },
