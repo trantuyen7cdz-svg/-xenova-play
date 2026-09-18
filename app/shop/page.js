@@ -40,7 +40,7 @@ export default function ShopPage() {
       } = await supabase
         .from("products")
         .select(
-          "id, name, description, price, duration_days, active, is_active"
+          "id, name, description, price, duration_days, active, is_active, demo_image_url"
         )
         .eq("is_active", true)
         .order("id", { ascending: true });
@@ -89,12 +89,16 @@ export default function ShopPage() {
         for (const item of keyData || []) {
           const productId = String(item.product_id);
 
-          counts[productId] = (counts[productId] || 0) + 1;
+          counts[productId] =
+            (counts[productId] || 0) + 1;
         }
 
         setStock(counts);
       } else {
-        console.error("KEY STOCK ERROR:", keyError);
+        console.error(
+          "KEY STOCK ERROR:",
+          keyError
+        );
         setStock({});
       }
     } catch (error) {
@@ -110,7 +114,10 @@ export default function ShopPage() {
   }, []);
 
   function formatMoney(value) {
-    return Number(value || 0).toLocaleString("vi-VN") + "đ";
+    return (
+      Number(value || 0).toLocaleString("vi-VN") +
+      "đ"
+    );
   }
 
   function openBuy(product) {
@@ -128,21 +135,31 @@ export default function ShopPage() {
   async function confirmBuy() {
     if (!selectedProduct) return;
 
-    const available = stock[String(selectedProduct.id)] || 0;
+    const available =
+      stock[String(selectedProduct.id)] || 0;
 
     if (available <= 0) {
       setSelectedProduct(null);
-      setMessage("Sản phẩm hiện đã hết KEY.");
+      setMessage(
+        "Sản phẩm hiện đã hết KEY."
+      );
       return;
     }
 
-    if (balance < Number(selectedProduct.price)) {
+    if (
+      balance <
+      Number(selectedProduct.price)
+    ) {
       setSelectedProduct(null);
+
       setMessage(
         `Số dư không đủ. Bạn cần ${formatMoney(
           selectedProduct.price
-        )} nhưng ví hiện có ${formatMoney(balance)}.`
+        )} nhưng ví hiện có ${formatMoney(
+          balance
+        )}.`
       );
+
       return;
     }
 
@@ -155,28 +172,40 @@ export default function ShopPage() {
       } = await supabase.auth.getSession();
 
       if (!session?.access_token) {
-        setMessage("Phiên đăng nhập đã hết hạn.");
+        setMessage(
+          "Phiên đăng nhập đã hết hạn."
+        );
+
         setBuying(false);
         return;
       }
 
-      const response = await fetch("/api/buy-key", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          productId: selectedProduct.id,
-        }),
-      });
+      const response = await fetch(
+        "/api/buy-key",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            productId:
+              selectedProduct.id,
+          }),
+        }
+      );
 
       const data = await response.json();
 
-      if (!response.ok || !data.success) {
+      if (
+        !response.ok ||
+        !data.success
+      ) {
         setMessage(
-          data?.message || "Không thể mua KEY."
+          data?.message ||
+            "Không thể mua KEY."
         );
+
         setBuying(false);
         return;
       }
@@ -184,23 +213,45 @@ export default function ShopPage() {
       setResult(data);
       setSelectedProduct(null);
 
-      // Cập nhật số dư ngay trên giao diện
+      // =========================
+      // CẬP NHẬT SỐ DƯ
+      // =========================
       setBalance((current) =>
-        Math.max(0, current - Number(data.amount || selectedProduct.price))
+        Math.max(
+          0,
+          current -
+            Number(
+              data.amount ||
+                selectedProduct.price
+            )
+        )
       );
 
-      // Giảm số lượng KEY còn lại
+      // =========================
+      // GIẢM STOCK
+      // =========================
       setStock((current) => {
-        const id = String(selectedProduct.id);
+        const id = String(
+          selectedProduct.id
+        );
 
         return {
           ...current,
-          [id]: Math.max(0, Number(current[id] || 0) - 1),
+          [id]: Math.max(
+            0,
+            Number(current[id] || 0) - 1
+          ),
         };
       });
     } catch (error) {
-      console.error("BUY ERROR:", error);
-      setMessage("Không thể kết nối tới máy chủ.");
+      console.error(
+        "BUY ERROR:",
+        error
+      );
+
+      setMessage(
+        "Không thể kết nối tới máy chủ."
+      );
     }
 
     setBuying(false);
@@ -221,7 +272,10 @@ export default function ShopPage() {
   return (
     <main style={styles.page}>
       <div style={styles.container}>
-        {/* HEADER */}
+
+        {/* =========================
+            HEADER
+        ========================= */}
         <div style={styles.header}>
           <div>
             <div style={styles.badge}>
@@ -233,7 +287,8 @@ export default function ShopPage() {
             </h1>
 
             <p style={styles.subtitle}>
-              Chọn sản phẩm và mua KEY trực tiếp bằng số dư ví.
+              Chọn sản phẩm và mua KEY
+              trực tiếp bằng số dư ví.
             </p>
           </div>
 
@@ -246,23 +301,32 @@ export default function ShopPage() {
               {formatMoney(balance)}
             </div>
 
-            <a href="/deposit" style={styles.depositButton}>
+            <a
+              href="/deposit"
+              style={styles.depositButton}
+            >
               + NẠP TIỀN
             </a>
           </div>
         </div>
 
-        {/* MESSAGE */}
+        {/* =========================
+            MESSAGE
+        ========================= */}
         {message && (
           <div style={styles.message}>
             {message}
           </div>
         )}
 
-        {/* SUCCESS */}
+        {/* =========================
+            SUCCESS
+        ========================= */}
         {result && (
           <div style={styles.successBox}>
-            <div style={styles.successIcon}>✓</div>
+            <div style={styles.successIcon}>
+              ✓
+            </div>
 
             <h2 style={styles.successTitle}>
               MUA KEY THÀNH CÔNG
@@ -273,7 +337,9 @@ export default function ShopPage() {
             </p>
 
             <div style={styles.keyBox}>
-              <code>{result.key_code}</code>
+              <code style={styles.keyCode}>
+                {result.key_code}
+              </code>
 
               <button
                 onClick={async () => {
@@ -281,9 +347,14 @@ export default function ShopPage() {
                     await navigator.clipboard.writeText(
                       result.key_code
                     );
-                    alert("Đã copy KEY!");
+
+                    alert(
+                      "Đã copy KEY!"
+                    );
                   } catch {
-                    alert("Không thể copy KEY.");
+                    alert(
+                      "Không thể copy KEY."
+                    );
                   }
                 }}
                 style={styles.copyButton}
@@ -294,17 +365,26 @@ export default function ShopPage() {
 
             <div style={styles.successInfo}>
               Đã thanh toán:{" "}
-              {formatMoney(result.amount)}
+              {formatMoney(
+                result.amount
+              )}
             </div>
 
             <div style={styles.successActions}>
-              <a href="/keys" style={styles.primaryButton}>
+              <a
+                href="/keys"
+                style={styles.primaryButton}
+              >
                 🔑 XEM KEY CỦA TÔI
               </a>
 
               <button
-                onClick={() => setResult(null)}
-                style={styles.secondaryButton}
+                onClick={() =>
+                  setResult(null)
+                }
+                style={
+                  styles.secondaryButton
+                }
               >
                 TIẾP TỤC MUA
               </button>
@@ -312,141 +392,275 @@ export default function ShopPage() {
           </div>
         )}
 
-        {/* PRODUCTS */}
-        {!result && products.length === 0 && (
-          <div style={styles.empty}>
-            Hiện chưa có sản phẩm nào.
-          </div>
-        )}
+        {/* =========================
+            EMPTY
+        ========================= */}
+        {!result &&
+          products.length === 0 && (
+            <div style={styles.empty}>
+              Hiện chưa có sản phẩm nào.
+            </div>
+          )}
 
-        {!result && products.length > 0 && (
-          <div style={styles.grid}>
-            {products.map((product) => {
-              const count =
-                stock[String(product.id)] || 0;
+        {/* =========================
+            PRODUCTS
+        ========================= */}
+        {!result &&
+          products.length > 0 && (
+            <div style={styles.grid}>
+              {products.map(
+                (product) => {
+                  const count =
+                    stock[
+                      String(product.id)
+                    ] || 0;
 
-              const canBuy =
-                count > 0 &&
-                balance >= Number(product.price);
+                  const canBuy =
+                    count > 0 &&
+                    balance >=
+                      Number(
+                        product.price
+                      );
 
-              return (
-                <div
-                  key={product.id}
-                  style={styles.card}
-                >
-                  <div style={styles.cardTop}>
-                    <div style={styles.productIcon}>
-                      🔑
-                    </div>
-
+                  return (
                     <div
-                      style={{
-                        ...styles.stock,
-                        ...(count > 0
-                          ? styles.stockAvailable
-                          : styles.stockEmpty),
-                      }}
+                      key={product.id}
+                      style={styles.card}
                     >
-                      {count > 0
-                        ? `${count} KEY CÒN`
-                        : "HẾT KEY"}
+                      <div
+                        style={
+                          styles.cardTop
+                        }
+                      >
+                        <div
+                          style={
+                            styles.productIcon
+                          }
+                        >
+                          🔑
+                        </div>
+
+                        <div
+                          style={{
+                            ...styles.stock,
+                            ...(count > 0
+                              ? styles.stockAvailable
+                              : styles.stockEmpty),
+                          }}
+                        >
+                          {count > 0
+                            ? `${count} KEY CÒN`
+                            : "HẾT KEY"}
+                        </div>
+                      </div>
+
+                      {/* =================
+                          ẢNH DEMO
+                      ================= */}
+                      {product.demo_image_url && (
+                        <div
+                          style={
+                            styles.shopDemo
+                          }
+                        >
+                          <img
+                            src={
+                              product.demo_image_url
+                            }
+                            alt={`Demo ${product.name}`}
+                            style={
+                              styles.shopDemoImage
+                            }
+                          />
+                        </div>
+                      )}
+
+                      <h2
+                        style={
+                          styles.productName
+                        }
+                      >
+                        {product.name}
+                      </h2>
+
+                      <p
+                        style={
+                          styles.description
+                        }
+                      >
+                        {product.description ||
+                          "KEY XENOVA PLAY"}
+                      </p>
+
+                      <div
+                        style={
+                          styles.price
+                        }
+                      >
+                        {formatMoney(
+                          product.price
+                        )}
+                      </div>
+
+                      <div
+                        style={
+                          styles.duration
+                        }
+                      >
+                        ⏱ Thời hạn:{" "}
+                        <strong>
+                          {
+                            product.duration_days
+                          }{" "}
+                          ngày
+                        </strong>
+                      </div>
+
+                      <button
+                        disabled={!canBuy}
+                        onClick={() =>
+                          openBuy(product)
+                        }
+                        style={{
+                          ...styles.buyButton,
+                          ...(canBuy
+                            ? {}
+                            : styles.buyDisabled),
+                        }}
+                      >
+                        {count <= 0
+                          ? "HẾT KEY"
+                          : balance <
+                            Number(
+                              product.price
+                            )
+                          ? "KHÔNG ĐỦ SỐ DƯ"
+                          : "MUA NGAY"}
+                      </button>
                     </div>
-                  </div>
+                  );
+                }
+              )}
+            </div>
+          )}
 
-                  <h2 style={styles.productName}>
-                    {product.name}
-                  </h2>
-
-                  <p style={styles.description}>
-                    {product.description ||
-                      "KEY XENOVA PLAY"}
-                  </p>
-
-                  <div style={styles.price}>
-                    {formatMoney(product.price)}
-                  </div>
-
-                  <div style={styles.duration}>
-                    ⏱ Thời hạn:{" "}
-                    <strong>
-                      {product.duration_days} ngày
-                    </strong>
-                  </div>
-
-                  <button
-                    disabled={!canBuy}
-                    onClick={() => openBuy(product)}
-                    style={{
-                      ...styles.buyButton,
-                      ...(canBuy
-                        ? {}
-                        : styles.buyDisabled),
-                    }}
-                  >
-                    {count <= 0
-                      ? "HẾT KEY"
-                      : balance < Number(product.price)
-                      ? "KHÔNG ĐỦ SỐ DƯ"
-                      : "MUA NGAY"}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
+        {/* =========================
+            BOTTOM LINKS
+        ========================= */}
         <div style={styles.bottomLinks}>
-          <a href="/orders">📦 Đơn hàng</a>
-          <a href="/keys">🔑 KEY của tôi</a>
-          <a href="/dashboard">👤 Tài khoản</a>
+          <a href="/orders">
+            📦 Đơn hàng
+          </a>
+
+          <a href="/keys">
+            🔑 KEY của tôi
+          </a>
+
+          <a href="/dashboard">
+            👤 Tài khoản
+          </a>
         </div>
       </div>
 
-      {/* CONFIRM MODAL */}
+      {/* =========================
+          CONFIRM MODAL
+      ========================= */}
       {selectedProduct && (
-        <div style={styles.modalOverlay}>
+        <div
+          style={
+            styles.modalOverlay
+          }
+        >
           <div style={styles.modal}>
-            <div style={styles.modalIcon}>
+            <div
+              style={
+                styles.modalIcon
+              }
+            >
               🔑
             </div>
 
-            <h2 style={styles.modalTitle}>
+            <h2
+              style={
+                styles.modalTitle
+              }
+            >
               XÁC NHẬN MUA KEY
             </h2>
 
-            <p style={styles.modalProduct}>
+            <p
+              style={
+                styles.modalProduct
+              }
+            >
               {selectedProduct.name}
             </p>
 
+            {/* ẢNH DEMO TRONG MODAL */}
+            {selectedProduct.demo_image_url && (
+              <div
+                style={
+                  styles.modalDemo
+                }
+              >
+                <img
+                  src={
+                    selectedProduct.demo_image_url
+                  }
+                  alt={`Demo ${selectedProduct.name}`}
+                  style={
+                    styles.modalDemoImage
+                  }
+                />
+              </div>
+            )}
+
             <div style={styles.modalRow}>
               <span>Giá:</span>
+
               <strong>
-                {formatMoney(selectedProduct.price)}
+                {formatMoney(
+                  selectedProduct.price
+                )}
               </strong>
             </div>
 
             <div style={styles.modalRow}>
-              <span>Số dư hiện tại:</span>
+              <span>
+                Số dư hiện tại:
+              </span>
+
               <strong>
                 {formatMoney(balance)}
               </strong>
             </div>
 
             <div style={styles.modalRow}>
-              <span>Số dư sau khi mua:</span>
+              <span>
+                Số dư sau khi mua:
+              </span>
+
               <strong>
                 {formatMoney(
                   balance -
-                    Number(selectedProduct.price)
+                    Number(
+                      selectedProduct.price
+                    )
                 )}
               </strong>
             </div>
 
-            <div style={styles.modalActions}>
+            <div
+              style={
+                styles.modalActions
+              }
+            >
               <button
                 onClick={closeBuy}
                 disabled={buying}
-                style={styles.cancelButton}
+                style={
+                  styles.cancelButton
+                }
               >
                 HỦY
               </button>
@@ -454,7 +668,9 @@ export default function ShopPage() {
               <button
                 onClick={confirmBuy}
                 disabled={buying}
-                style={styles.confirmButton}
+                style={
+                  styles.confirmButton
+                }
               >
                 {buying
                   ? "ĐANG XỬ LÝ..."
@@ -504,7 +720,8 @@ const styles = {
   },
 
   title: {
-    fontSize: "clamp(30px, 5vw, 48px)",
+    fontSize:
+      "clamp(30px, 5vw, 48px)",
     margin: "12px 0 7px",
     letterSpacing: "-1px",
   },
@@ -597,6 +814,13 @@ const styles = {
     borderRadius: "10px",
   },
 
+  keyCode: {
+    flex: 1,
+    minWidth: 0,
+    overflowWrap: "anywhere",
+    fontSize: "14px",
+  },
+
   copyButton: {
     border: 0,
     padding: "9px 12px",
@@ -682,6 +906,22 @@ const styles = {
     color: "#ff777d",
   },
 
+  shopDemo: {
+    marginTop: "15px",
+    borderRadius: "12px",
+    overflow: "hidden",
+    background: "#070b10",
+    border: "1px solid #26344a",
+  },
+
+  shopDemoImage: {
+    display: "block",
+    width: "100%",
+    maxHeight: "280px",
+    objectFit: "contain",
+    background: "#070b10",
+  },
+
   productName: {
     margin: "18px 0 7px",
     fontSize: "21px",
@@ -754,6 +994,7 @@ const styles = {
     placeItems: "center",
     padding: "18px",
     background: "rgba(0,0,0,.72)",
+    overflowY: "auto",
   },
 
   modal: {
@@ -763,7 +1004,8 @@ const styles = {
     borderRadius: "18px",
     background: "#0d1420",
     border: "1px solid #293850",
-    boxShadow: "0 25px 80px rgba(0,0,0,.5)",
+    boxShadow:
+      "0 25px 80px rgba(0,0,0,.5)",
   },
 
   modalIcon: {
@@ -779,7 +1021,23 @@ const styles = {
   modalProduct: {
     textAlign: "center",
     color: "#7e8ba0",
-    marginBottom: "22px",
+    marginBottom: "18px",
+  },
+
+  modalDemo: {
+    marginBottom: "18px",
+    borderRadius: "12px",
+    overflow: "hidden",
+    background: "#070b10",
+    border: "1px solid #26344a",
+  },
+
+  modalDemoImage: {
+    display: "block",
+    width: "100%",
+    maxHeight: "220px",
+    objectFit: "contain",
+    background: "#070b10",
   },
 
   modalRow: {
@@ -787,13 +1045,15 @@ const styles = {
     justifyContent: "space-between",
     gap: "15px",
     padding: "12px 0",
-    borderBottom: "1px solid #202b3d",
+    borderBottom:
+      "1px solid #202b3d",
     color: "#8591a3",
   },
 
   modalActions: {
     display: "grid",
-    gridTemplateColumns: "1fr 1.5fr",
+    gridTemplateColumns:
+      "1fr 1.5fr",
     gap: "10px",
     marginTop: "22px",
   },
