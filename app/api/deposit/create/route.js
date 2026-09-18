@@ -6,7 +6,10 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// Tạo mã chuyển khoản ngẫu nhiên
+// ========================================
+// TẠO MÃ CHUYỂN KHOẢN NGẪU NHIÊN
+// ========================================
+
 function generateTransferContent() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
@@ -19,13 +22,24 @@ function generateTransferContent() {
   return result;
 }
 
+// ========================================
+// POST
+// ========================================
+
 export async function POST(request) {
   try {
+    // ========================================
+    // ĐỌC BODY
+    // ========================================
+
     const body = await request.json();
 
     const amount = Number(body.amount);
 
-    // Kiểm tra số tiền
+    // ========================================
+    // KIỂM TRA SỐ TIỀN
+    // ========================================
+
     if (!Number.isInteger(amount) || amount < 10000) {
       return NextResponse.json(
         {
@@ -46,9 +60,9 @@ export async function POST(request) {
       );
     }
 
-    // ==============================
+    // ========================================
     // KIỂM TRA ĐĂNG NHẬP
-    // ==============================
+    // ========================================
 
     const authHeader = request.headers.get("authorization");
 
@@ -91,31 +105,34 @@ export async function POST(request) {
       );
     }
 
-    // ==============================
+    // ========================================
     // KIỂM TRA / TẠO VÍ
-    // ==============================
+    //
+    // Quan trọng:
+    // Lỗi tạo ví KHÔNG làm hỏng việc tạo đơn.
+    // ========================================
+
+    let wallet = null;
 
     const {
-      data: wallet,
-      error: walletError,
+      data: existingWallet,
+      error: walletCheckError,
     } = await supabaseAdmin
       .from("wallets")
       .select("user_id, balance")
       .eq("user_id", user.id)
       .maybeSingle();
 
-    if (walletError) {
-      console.error("CHECK WALLET ERROR:", walletError);
-
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Không thể kiểm tra ví tài khoản.",
-        },
-        { status: 500 }
+    if (walletCheckError) {
+      console.error(
+        "CHECK WALLET ERROR:",
+        walletCheckError
       );
+    } else {
+      wallet = existingWallet;
     }
 
+    // Nếu chưa có ví thì thử tạo
     if (!wallet) {
       const {
         data: newWallet,
@@ -129,42 +146,38 @@ export async function POST(request) {
         .select("user_id, balance")
         .single();
 
-      if (createWalletError) {
+      if (!createWalletError && newWallet) {
+        wallet = newWallet;
+      } else {
         console.error(
           "CREATE WALLET ERROR:",
           createWalletError
         );
 
-        // Có thể một request khác vừa tạo ví
+        // Có thể ví vừa được tạo bởi request khác.
+        // Kiểm tra lại một lần.
         const {
-          data: existingWallet,
-          error: existingWalletError,
+          data: retryWallet,
+          error: retryWalletError,
         } = await supabaseAdmin
           .from("wallets")
           .select("user_id, balance")
           .eq("user_id", user.id)
           .maybeSingle();
 
-        if (existingWalletError || !existingWallet) {
-          return NextResponse.json(
-            {
-              success: false,
-              message: "Không thể tạo ví tài khoản.",
-            },
-            { status: 500 }
-          );
+        if (!retryWalletError && retryWallet) {
+          wallet = retryWallet;
         }
       }
     }
 
-    // ==============================
+    // ========================================
     // TẠO ĐƠN NẠP
-    // ==============================
+    // ========================================
 
     let deposit = null;
     let transferContent = null;
 
-    // Thử tối đa 10 lần để tạo mã không trùng
     for (let attempt = 0; attempt < 10; attempt++) {
       const randomContent = generateTransferContent();
 
@@ -184,13 +197,14 @@ export async function POST(request) {
         )
         .single();
 
+      // Tạo thành công
       if (!depositError && data) {
         deposit = data;
-        transferContent = randomContent;
+        transferContent = data.transfer_content;
         break;
       }
 
-      // Nếu lỗi do trùng mã thì thử mã khác
+      // Nếu mã bị trùng thì sinh mã khác
       if (
         depositError?.code === "23505" ||
         String(depositError?.message || "")
@@ -214,7 +228,10 @@ export async function POST(request) {
       );
     }
 
-    // Không tạo được sau nhiều lần
+    // ========================================
+    // KHÔNG TẠO ĐƯỢC ĐƠN
+    // ========================================
+
     if (!deposit || !transferContent) {
       return NextResponse.json(
         {
@@ -226,22 +243,31 @@ export async function POST(request) {
       );
     }
 
-    // ==============================
+    // ========================================
     // TRẢ KẾT QUẢ
-    // ==============================
+    // ========================================
 
     return NextResponse.json({
       success: true,
+
       depositId: deposit.id,
+
       amount: deposit.amount,
-      transferContent: transferContent,
-      wallet: {
-        user_id: user.id,
-        balance: 0,
-      },
+
+      transferContent: deposit.transfer_content,
+
+      wallet: wallet
+        ? {
+            user_id: wallet.user_id,
+            balance: Number(wallet.balance || 0),
+          }
+        : null,
     });
   } catch (error) {
-    console.error("DEPOSIT CREATE ERROR:", error);
+    console.error(
+      "DEPOSIT CREATE ERROR:",
+      error
+    );
 
     return NextResponse.json(
       {
