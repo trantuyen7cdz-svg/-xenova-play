@@ -46,7 +46,6 @@ export async function POST(request) {
       );
     }
 
-    // Xác thực người dùng
     const {
       data: { user },
       error: userError,
@@ -64,7 +63,6 @@ export async function POST(request) {
       );
     }
 
-    // Thực hiện giao dịch mua
     const { data, error } = await supabaseAdmin.rpc("buy_key", {
       p_user_id: user.id,
       p_product_id: productId,
@@ -76,7 +74,7 @@ export async function POST(request) {
       return NextResponse.json(
         {
           success: false,
-          message: "Không thể thực hiện giao dịch.",
+          message: error.message || "Không thể thực hiện giao dịch.",
         },
         { status: 500 }
       );
@@ -94,12 +92,12 @@ export async function POST(request) {
 
     return NextResponse.json(data);
   } catch (error) {
-    console.error("BUY KEY ERROR:", error);
+    console.error("BUY KEY SERVER ERROR:", error);
 
     return NextResponse.json(
       {
         success: false,
-        message: "Lỗi server.",
+        message: error.message || "Lỗi server.",
       },
       { status: 500 }
     );
