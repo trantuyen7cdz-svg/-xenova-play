@@ -9,11 +9,12 @@ export default function ChatButton() {
       aria-label="Chat Admin Zalo"
       style={styles.button}
     >
-      <span style={styles.icon}>💬</span>
+      <span style={styles.bubble}>
+        💬
+      </span>
 
-      <span style={styles.text}>
-        <strong>Chat Admin</strong>
-        <small>Zalo hỗ trợ</small>
+      <span style={styles.label}>
+        Chat Admin
       </span>
     </a>
   );
@@ -24,55 +25,57 @@ const styles = {
     position: "fixed",
     right: "16px",
     bottom: "18px",
-    zIndex: 9980,
+    zIndex: 9990,
+
+    width: "58px",
+    height: "58px",
 
     display: "flex",
     alignItems: "center",
-    gap: "9px",
+    justifyContent: "center",
 
-    padding: "10px 13px",
-    borderRadius: "14px",
+    borderRadius: "50%",
 
     background:
-      "linear-gradient(135deg, #0d6efd, #1554c7)",
+      "linear-gradient(135deg, #1687ff, #075bd4)",
 
-    border: "1px solid #438cff",
+    border: "2px solid rgba(255,255,255,.25)",
 
     color: "#fff",
     textDecoration: "none",
 
     boxShadow:
-      "0 8px 30px rgba(0,0,0,.4)",
+      "0 5px 25px rgba(0,110,255,.45)",
 
-    backdropFilter: "blur(10px)",
+    animation: "xenovaChatPulse 2s infinite",
   },
 
-  icon: {
-    width: "36px",
-    height: "36px",
-
-    display: "grid",
-    placeItems: "center",
-
-    borderRadius: "11px",
-
-    background: "rgba(255,255,255,.15)",
-
-    fontSize: "19px",
+  bubble: {
+    fontSize: "25px",
+    lineHeight: 1,
   },
 
-  text: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "2px",
-  },
+  label: {
+    position: "absolute",
+    right: "68px",
 
-  strong: {
-    fontSize: "12px",
-  },
+    whiteSpace: "nowrap",
 
-  small: {
-    fontSize: "9px",
-    opacity: 0.75,
+    padding: "7px 10px",
+
+    borderRadius: "8px",
+
+    background: "#101722",
+    border: "1px solid #29384d",
+
+    color: "#fff",
+
+    fontSize: "10px",
+    fontWeight: "800",
+
+    opacity: 0,
+    pointerEvents: "none",
+
+    transition: "opacity .2s",
   },
 };
