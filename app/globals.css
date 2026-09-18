@@ -1,1 +1,16 @@
-*{box-sizing:border-box}html,body{margin:0;padding:0;font-family:Arial,sans-serif;background:#070707;color:#fff}button,input{font:inherit}.page{min-height:100vh;padding:28px 16px 60px;background:radial-gradient(circle at top,#250000 0,#090909 38%,#050505 100%)}.hero{text-align:center;padding:42px 10px 25px}.logo{font-size:36px;font-weight:900;letter-spacing:2px}.logo span{color:#ff2b2b}.hero p{color:#aaa;margin-top:10px}.auth-card,.panel,.welcome{max-width:520px;margin:16px auto;background:#111;border:1px solid #292929;border-radius:18px;padding:20px;box-shadow:0 12px 35px #0008}.tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px}.tabs button{padding:12px;border:0;border-radius:10px;background:#1d1d1d;color:#aaa}.tabs button.active{background:#d71920;color:#fff;font-weight:700}label{display:block;margin:12px 0 7px;color:#ccc}input{width:100%;padding:14px;border-radius:10px;border:1px solid #333;background:#080808;color:#fff;outline:none}.primary{width:100%;margin-top:18px;padding:14px;border:0;border-radius:10px;background:#e51d25;color:#fff;font-weight:800}.primary:disabled{opacity:.6}.message{margin-top:14px;padding:12px;border-radius:10px;background:#1b1b1b;color:#ddd;font-size:14px}.features{max-width:520px;margin:22px auto;display:grid;gap:10px}.features div{padding:16px;background:#101010;border:1px solid #242424;border-radius:14px}.features span{display:block;margin-top:5px;color:#999;font-size:14px}.dash-header{max-width:900px;margin:0 auto 25px;display:flex;justify-content:space-between;align-items:center}.dash-header .logo{font-size:25px}.logout{border:1px solid #333;background:#151515;color:#fff;padding:10px 14px;border-radius:9px}.welcome{max-width:900px}.welcome small{color:#e51d25;font-weight:800}.welcome h1{margin:8px 0 4px}.welcome p{color:#aaa;margin:0}.stats{max-width:900px;margin:16px auto;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.stats div{background:#111;border:1px solid #292929;border-radius:14px;padding:18px;text-align:center}.stats b{display:block;font-size:26px}.stats span{color:#888;font-size:12px}.panel{max-width:900px}.panel h2{font-size:16px;margin-top:0}.muted{color:#888}.row,.product{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px 0;border-top:1px solid #242424}.row span{color:#7ee787;font-size:13px}.product p{margin:5px 0 0;color:#888;font-size:13px}.loading{text-align:center;padding-top:30vh;color:#aaa}@media(max-width:520px){.stats{grid-template-columns:1fr}.logo{font-size:30px}}
+@keyframes xenovaChatPulse {
+  0% {
+    box-shadow: 0 5px 25px rgba(0, 110, 255, 0.35);
+    transform: scale(1);
+  }
+
+  50% {
+    box-shadow: 0 5px 35px rgba(0, 110, 255, 0.65);
+    transform: scale(1.06);
+  }
+
+  100% {
+    box-shadow: 0 5px 25px rgba(0, 110, 255, 0.35);
+    transform: scale(1);
+  }
+}
