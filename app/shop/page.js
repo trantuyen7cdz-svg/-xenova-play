@@ -14,11 +14,9 @@ export default function ShopPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
   const [wallet, setWallet] = useState(0);
 
   const [selectedCategory, setSelectedCategory] = useState(null);
-
   const [buyModal, setBuyModal] = useState(null);
   const [successModal, setSuccessModal] = useState(null);
 
@@ -32,14 +30,11 @@ export default function ShopPage() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       const currentUser = session?.user || null;
-
       setUser(currentUser);
       loadWallet(currentUser);
     });
 
-    return () => {
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   }, []);
 
   async function loadShop() {
@@ -50,14 +45,8 @@ export default function ShopPage() {
       const [sessionResult, catalogResult, stockResult] =
         await Promise.all([
           supabase.auth.getSession(),
-
-          fetch("/api/shop/catalog", {
-            cache: "no-store",
-          }),
-
-          fetch("/api/shop/stock", {
-            cache: "no-store",
-          }),
+          fetch("/api/shop/catalog", { cache: "no-store" }),
+          fetch("/api/shop/stock", { cache: "no-store" }),
         ]);
 
       const session = sessionResult?.data?.session || null;
@@ -99,10 +88,7 @@ export default function ShopPage() {
       }
     } catch (err) {
       console.error("SHOP LOAD ERROR:", err);
-
-      setError(
-        err?.message || "Không thể tải cửa hàng."
-      );
+      setError(err?.message || "Không thể tải cửa hàng.");
     } finally {
       setLoading(false);
     }
@@ -122,10 +108,7 @@ export default function ShopPage() {
         .maybeSingle();
 
       if (walletError) {
-        console.error(
-          "WALLET LOAD ERROR:",
-          walletError
-        );
+        console.error("WALLET LOAD ERROR:", walletError);
         return;
       }
 
@@ -135,27 +118,13 @@ export default function ShopPage() {
     }
   }
 
-  const visibleProducts = useMemo(() => {
-    if (!selectedCategory) {
-      return [];
-    }
-
-    return products.filter(
-      (product) =>
-        Number(product.category_id) ===
-        Number(selectedCategory.id)
-    );
-  }, [products, selectedCategory]);
-
   const categoryStock = useMemo(() => {
     const result = {};
 
     for (const product of products) {
       const categoryId = Number(product.category_id);
 
-      if (!categoryId) {
-        continue;
-      }
+      if (!categoryId) continue;
 
       const available = Number(
         stock[Number(product.id)]?.available || 0
@@ -171,6 +140,16 @@ export default function ShopPage() {
     return result;
   }, [products, stock]);
 
+  const visibleProducts = useMemo(() => {
+    if (!selectedCategory) return [];
+
+    return products.filter(
+      (product) =>
+        Number(product.category_id) ===
+        Number(selectedCategory.id)
+    );
+  }, [products, selectedCategory]);
+
   function formatPrice(price) {
     return (
       new Intl.NumberFormat("vi-VN").format(
@@ -182,17 +161,9 @@ export default function ShopPage() {
   function formatDuration(days) {
     const value = Number(days || 0);
 
-    if (value === 1) {
-      return "1 ngày";
-    }
-
-    if (value === 7) {
-      return "7 ngày";
-    }
-
-    if (value === 30) {
-      return "1 tháng";
-    }
+    if (value === 1) return "1 ngày";
+    if (value === 7) return "7 ngày";
+    if (value === 30) return "1 tháng";
 
     return `${value} ngày`;
   }
@@ -229,9 +200,7 @@ export default function ShopPage() {
     const available = getProductStock(product.id);
 
     if (available <= 0) {
-      setMessage(
-        "Sản phẩm này hiện đã hết KEY."
-      );
+      setMessage("Sản phẩm này hiện đã hết KEY.");
       return;
     }
 
@@ -244,9 +213,7 @@ export default function ShopPage() {
   }
 
   async function confirmBuy() {
-    if (!buyModal || buying) {
-      return;
-    }
+    if (!buyModal || buying) return;
 
     if (!user) {
       setBuyModal(null);
@@ -255,27 +222,22 @@ export default function ShopPage() {
     }
 
     const product = buyModal;
-
     const available = getProductStock(product.id);
 
     if (available <= 0) {
       setBuyModal(null);
-
       setMessage(
         "KEY đã hết. Vui lòng chọn sản phẩm khác."
       );
-
       await loadShop();
       return;
     }
 
     if (Number(wallet) < Number(product.price)) {
       setBuyModal(null);
-
       setMessage(
         "Số dư không đủ. Vui lòng nạp thêm tiền."
       );
-
       return;
     }
 
@@ -295,16 +257,13 @@ export default function ShopPage() {
 
       const response = await fetch("/api/buy-key", {
         method: "POST",
-
         headers: {
           "Content-Type": "application/json",
-
           Authorization:
             `Bearer ${session.access_token}`,
         },
-
         body: JSON.stringify({
-          product_id: Number(product.id),
+          productId: Number(product.id),
         }),
       });
 
@@ -329,7 +288,6 @@ export default function ShopPage() {
       });
 
       await loadShop();
-
       await loadWallet(user);
     } catch (err) {
       console.error("BUY KEY ERROR:", err);
@@ -345,13 +303,10 @@ export default function ShopPage() {
   async function copyKey() {
     const key = successModal?.key || "";
 
-    if (!key) {
-      return;
-    }
+    if (!key) return;
 
     try {
       await navigator.clipboard.writeText(key);
-
       setMessage("Đã sao chép KEY.");
     } catch {
       setMessage(
@@ -360,98 +315,189 @@ export default function ShopPage() {
     }
   }
 
-  function closeSuccessModal() {
-    setSuccessModal(null);
-    setMessage("");
-  }
-
   function goDeposit() {
     router.push("/deposit");
   }
 
   return (
-    <main className="shop-page">
-      <div className="falling-leaves" aria-hidden="true">
-        {Array.from({ length: 22 }).map((_, index) => (
+    <main className="xenova-shop">
+      <div className="petals" aria-hidden="true">
+        {Array.from({ length: 18 }).map((_, index) => (
           <span
             key={index}
-            className="leaf"
-            style={{
-              "--leaf-left": `${(index * 43) % 100}%`,
-              "--leaf-delay": `${(index % 11) * -1.7}s`,
-              "--leaf-duration": `${7 + (index % 6)}s`,
-              "--leaf-size": `${9 + (index % 5) * 2}px`,
-              "--leaf-rotate": `${index * 31}deg`,
-            }}
+            className={`petal petal-${index + 1}`}
           >
-            🍂
+            🌸
           </span>
         ))}
       </div>
 
-      <div className="shop-container">
-        <header className="xenova-store-header">
-          <div className="xenova-logo">
-            <div className="xenova-logo-main">
-              XENOVA
-            </div>
+      <div className="shop-shell">
+        <header className="hero-header">
+          <button
+            className="mobile-menu-button"
+            type="button"
+            onClick={() =>
+              window.dispatchEvent(
+                new Event("xenova-open-menu")
+              )
+            }
+          >
+            ☰
+          </button>
 
-            <div className="xenova-logo-sub">
-              PLAY
-            </div>
+          <div
+            className="brand"
+            onClick={() => router.push("/")}
+          >
+            <span>XENOVA</span>
+            <strong>PLAY</strong>
           </div>
 
-          <div className="header-actions">
+          <nav className="desktop-nav">
             <button
-              type="button"
-              className="header-circle"
-              onClick={goDeposit}
-              aria-label="Nạp tiền"
+              className="nav-item active"
+              onClick={() => router.push("/")}
             >
-              💰
+              <span>⌂</span>
+              Trang chủ
             </button>
 
             <button
-              type="button"
-              className="header-circle"
-              onClick={() => {
-                const event =
-                  new Event("xenova-open-menu");
-
-                window.dispatchEvent(event);
-              }}
-              aria-label="Mở menu"
+              className="nav-item"
+              onClick={() => router.push("/shop")}
             >
-              ☰
+              <span>🛒</span>
+              Cửa hàng
+            </button>
+
+            <button
+              className="nav-item"
+              onClick={goDeposit}
+            >
+              <span>▣</span>
+              Nạp tiền
+            </button>
+
+            <button
+              className="nav-item"
+              onClick={() => router.push("/keys")}
+            >
+              <span>🔑</span>
+              KEY của tôi
+            </button>
+
+            <button
+              className="nav-item"
+              onClick={() => router.push("/orders")}
+            >
+              <span>📦</span>
+              Đơn hàng
+            </button>
+
+            <button
+              className="nav-item"
+              onClick={() => router.push("/dashboard")}
+            >
+              <span>♙</span>
+              Tài khoản
+            </button>
+
+            <button
+              className="nav-item"
+              onClick={() => router.push("/settings")}
+            >
+              <span>⚙</span>
+              Cài đặt
+            </button>
+          </nav>
+
+          <div className="header-right">
+            <button
+              className="header-theme"
+              type="button"
+              onClick={() =>
+                window.dispatchEvent(
+                  new Event("xenova-theme-toggle")
+                )
+              }
+            >
+              ☀
+            </button>
+
+            <button
+              className="wallet-pill"
+              type="button"
+              onClick={goDeposit}
+            >
+              💳{" "}
+              {user
+                ? formatPrice(wallet)
+                : "0đ"}
             </button>
           </div>
         </header>
 
-        <section className="xenova-banner">
-          <div className="banner-glow" />
-
-          <div className="banner-content">
-            <div className="banner-small">
+        <section className="hero-banner">
+          <div className="hero-copy">
+            <span className="hero-tag">
               🔥 XENOVA PLAY SHOP
-            </div>
+            </span>
 
             <h1>
-              XENOVA PLAY
+              MUA KEY NGAY
+              <br />
+              NHẬN QUÀ LIỀN TAY
             </h1>
 
             <p>
-              KEY tự động • Giao ngay • An toàn
+              Nhanh chóng · Uy tín · Giá tốt
             </p>
 
             <button
               type="button"
-              className="banner-deposit"
               onClick={goDeposit}
             >
               💰 NẠP TIỀN
+              <span>→</span>
             </button>
           </div>
+
+          <div className="hero-art">
+            <div className="hero-circle">
+              ✨
+            </div>
+            <div className="hero-character">
+              X
+            </div>
+            <div className="hero-sparkle">
+              🌸
+            </div>
+          </div>
+
+          <div className="hero-features">
+            <div>
+              <b>✓</b>
+              KEY CHÍNH HÃNG
+            </div>
+
+            <div>
+              <b>✓</b>
+              GIAO TỰ ĐỘNG
+            </div>
+
+            <div>
+              <b>✓</b>
+              HỖ TRỢ 24/7
+            </div>
+          </div>
         </section>
+
+        <div className="hero-dots">
+          <i />
+          <i />
+          <i />
+        </div>
 
         {message && (
           <div className="message-box">
@@ -464,9 +510,7 @@ export default function ShopPage() {
           <LoadingScreen />
         ) : error ? (
           <div className="error-card">
-            <div className="error-icon">
-              !
-            </div>
+            <div className="error-icon">!</div>
 
             <h2>
               Không thể tải cửa hàng
@@ -477,263 +521,289 @@ export default function ShopPage() {
             <button
               type="button"
               onClick={loadShop}
-              className="pink-button"
+              className="retry-button"
             >
               THỬ LẠI
             </button>
           </div>
         ) : selectedCategory ? (
-          <section className="products-section">
-            <div className="pink-section-title">
+          <section className="products-view">
+            <div className="products-view-head">
               <button
                 type="button"
                 onClick={handleBackToCategories}
-                className="back-pink-button"
+                className="back-link"
               >
-                ←
+                ← Danh mục
               </button>
 
               <div>
-                <strong>
-                  {selectedCategory.name}
-                </strong>
+                <span className="pink-kicker">
+                  XENOVA STORE
+                </span>
 
-                <small>
+                <h1>
+                  {selectedCategory.name}
+                </h1>
+
+                <p>
                   {visibleProducts.length} sản phẩm
-                  {" • "}
+                  {" · "}
                   {categoryStock[
                     Number(selectedCategory.id)
                   ] || 0}{" "}
-                  KEY
-                </small>
+                  KEY có sẵn
+                </p>
               </div>
             </div>
 
             {visibleProducts.length === 0 ? (
-              <div className="empty-card">
-                <div className="empty-icon">
-                  📦
-                </div>
-
-                <h2>
-                  Chưa có sản phẩm
-                </h2>
-
-                <p>
-                  Danh mục này hiện chưa có sản phẩm
-                  đang bán.
-                </p>
-              </div>
+              <EmptyCard />
             ) : (
-              <div className="products-grid">
+              <div className="product-grid">
                 {visibleProducts.map((product) => {
                   const available =
                     getProductStock(product.id);
 
                   return (
-                    <article
+                    <ProductCard
                       key={product.id}
-                      className="product-card"
-                    >
-                      <div className="product-image-wrap">
-                        {product.demo_image_url ? (
-                          <img
-                            src={product.demo_image_url}
-                            alt={product.name}
-                            className="product-image"
-                          />
-                        ) : (
-                          <div className="product-placeholder">
-                            X
-                          </div>
-                        )}
-
-                        {available <= 0 && (
-                          <div className="soldout-label">
-                            Hết hàng
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="product-content">
-                        <h2>
-                          {product.name}
-                        </h2>
-
-                        {product.description && (
-                          <p className="product-description">
-                            {product.description}
-                          </p>
-                        )}
-
-                        <div className="product-price">
-                          {formatPrice(product.price)}
-                        </div>
-
-                        <div className="product-meta">
-                          <span>
-                            🔑 {available} KEY
-                          </span>
-
-                          <span>
-                            ⏱ {formatDuration(
-                              product.duration_days
-                            )}
-                          </span>
-                        </div>
-
-                        <button
-                          type="button"
-                          className="buy-button"
-                          disabled={available <= 0}
-                          onClick={() =>
-                            handleBuyClick(product)
-                          }
-                        >
-                          {available > 0
-                            ? "XEM TẤT CẢ →"
-                            : "HẾT HÀNG"}
-                        </button>
-                      </div>
-                    </article>
+                      product={product}
+                      available={available}
+                      formatPrice={formatPrice}
+                      formatDuration={formatDuration}
+                      onBuy={handleBuyClick}
+                    />
                   );
                 })}
               </div>
             )}
           </section>
         ) : (
-          <section className="categories-section">
-            <div className="pink-section-title">
-              <div className="section-title-icon">
-                🛒
-              </div>
-
-              <div>
-                <strong>
-                  DANH MỤC SẢN PHẨM
-                </strong>
-
-                <small>
-                  Chọn sản phẩm bạn muốn mua
-                </small>
-              </div>
-            </div>
-
-            {categories.length === 0 ? (
-              <div className="empty-card">
-                <div className="empty-icon">
-                  📦
+          <section className="store-layout">
+            <aside className="sidebar">
+              <div className="side-card category-card">
+                <div className="side-title">
+                  <span>▦</span>
+                  <strong>Danh mục</strong>
                 </div>
 
-                <h2>
-                  Chưa có danh mục
-                </h2>
+                <button
+                  type="button"
+                  className="category-all active"
+                  onClick={() =>
+                    setSelectedCategory(null)
+                  }
+                >
+                  <span>🛍</span>
+                  <b>Tất cả sản phẩm</b>
+                  <strong>
+                    {products.length}
+                  </strong>
+                </button>
 
-                <p>
-                  Hiện chưa có sản phẩm nào
-                  được mở bán.
-                </p>
-              </div>
-            ) : (
-              <div className="categories-grid">
                 {categories.map((category) => {
-                  const available =
-                    categoryStock[
-                      Number(category.id)
-                    ] || 0;
-
-                  const productCount =
+                  const count =
                     products.filter(
                       (product) =>
-                        Number(product.category_id) ===
-                        Number(category.id)
+                        Number(
+                          product.category_id
+                        ) === Number(category.id)
                     ).length;
 
                   return (
                     <button
                       type="button"
                       key={category.id}
-                      className="category-card"
+                      className="side-category"
                       onClick={() =>
                         handleCategoryClick(category)
                       }
                     >
-                      <div className="category-image-wrap">
-                        {category.demo_image_url ? (
-                          <img
-                            src={
-                              category.demo_image_url
-                            }
-                            alt={
-                              category.name
-                            }
-                            className="category-image"
-                          />
-                        ) : (
-                          <div className="category-placeholder">
-                            XENOVA
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="category-content">
-                        <h2>
-                          {category.name}
-                        </h2>
-
-                        <div className="category-info">
-                          <span>
-                            {productCount} sản phẩm
-                          </span>
-
-                          <strong>
-                            {available} KEY
-                          </strong>
-                        </div>
-                      </div>
-
-                      <div className="category-footer">
-                        XEM TẤT CẢ →
-                      </div>
+                      <span>◈</span>
+                      <b>{category.name}</b>
+                      <strong>{count}</strong>
                     </button>
                   );
                 })}
               </div>
-            )}
+
+              <div className="vip-card">
+                <div className="vip-icon">
+                  ♛
+                </div>
+
+                <div>
+                  <strong>THÀNH VIÊN VIP</strong>
+                  <span>
+                    Nhận thêm ưu đãi
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    router.push("/dashboard")
+                  }
+                >
+                  Xem ngay →
+                </button>
+              </div>
+
+              <div className="side-card support-card">
+                <h3>Hỗ trợ</h3>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    window.open(
+                      "https://zalo.me/84365717262",
+                      "_blank"
+                    )
+                  }
+                >
+                  <span>💬</span>
+                  <div>
+                    <b>Chat Admin</b>
+                    <small>Hỗ trợ 24/7</small>
+                  </div>
+                </button>
+
+                <button type="button">
+                  <span>✈</span>
+                  <div>
+                    <b>Nhóm cộng đồng</b>
+                    <small>Cập nhật nhanh nhất</small>
+                  </div>
+                </button>
+              </div>
+            </aside>
+
+            <div className="products-area">
+              <div className="section-title-row">
+                <div>
+                  <span className="pink-kicker">
+                    XENOVA STORE
+                  </span>
+
+                  <h2>
+                    🔥 Sản phẩm nổi bật
+                  </h2>
+                </div>
+
+                {categories.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleCategoryClick(
+                        categories[0]
+                      )
+                    }
+                    className="view-all"
+                  >
+                    Xem tất cả →
+                  </button>
+                )}
+              </div>
+
+              {products.length === 0 ? (
+                <EmptyCard />
+              ) : (
+                <div className="product-grid">
+                  {products.slice(0, 8).map((product) => {
+                    const available =
+                      getProductStock(product.id);
+
+                    return (
+                      <ProductCard
+                        key={product.id}
+                        product={product}
+                        available={available}
+                        formatPrice={formatPrice}
+                        formatDuration={formatDuration}
+                        onBuy={handleBuyClick}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="benefit-bar">
+                <div>
+                  <span>⚡</span>
+                  <div>
+                    <b>Giao dịch siêu nhanh</b>
+                    <small>
+                      Chỉ vài giây là có KEY
+                    </small>
+                  </div>
+                </div>
+
+                <div>
+                  <span>♢</span>
+                  <div>
+                    <b>Bảo mật tuyệt đối</b>
+                    <small>
+                      An toàn thông tin
+                    </small>
+                  </div>
+                </div>
+
+                <div>
+                  <span>♧</span>
+                  <div>
+                    <b>Hỗ trợ 24/7</b>
+                    <small>
+                      Luôn bên bạn
+                    </small>
+                  </div>
+                </div>
+
+                <div>
+                  <span>🎁</span>
+                  <div>
+                    <b>Nhiều ưu đãi</b>
+                    <small>
+                      Dành riêng cho thành viên
+                    </small>
+                  </div>
+                </div>
+              </div>
+            </div>
           </section>
         )}
       </div>
 
-      <div className="mobile-bottom-bar">
-        <button
-          type="button"
-          onClick={goDeposit}
-        >
-          <span>💳</span>
-          <small>Số dư</small>
-          <strong>{formatPrice(wallet)}</strong>
+      <div className="mobile-bottom">
+        <button onClick={() => router.push("/")}>
+          <span>⌂</span>
+          Trang chủ
+        </button>
+
+        <button onClick={() => router.push("/shop")}>
+          <span>🛒</span>
+          Cửa hàng
+        </button>
+
+        <button onClick={goDeposit}>
+          <span>💰</span>
+          Nạp tiền
+        </button>
+
+        <button onClick={() => router.push("/keys")}>
+          <span>🔑</span>
+          KEY
         </button>
 
         <button
-          type="button"
-          className="bottom-main-button"
-          onClick={() => router.push("/shop")}
-        >
-          🛒
-        </button>
-
-        <button
-          type="button"
           onClick={() =>
-            user
-              ? router.push("/dashboard")
-              : router.push("/login")
+            window.dispatchEvent(
+              new Event("xenova-open-menu")
+            )
           }
         >
-          <span>♙</span>
-          <small>
-            {user ? "Tài khoản" : "Đăng nhập"}
-          </small>
+          <span>☰</span>
+          Menu
         </button>
       </div>
 
@@ -750,17 +820,11 @@ export default function ShopPage() {
               event.stopPropagation()
             }
           >
-            <div className="modal-icon">
-              🛒
-            </div>
+            <div className="modal-icon">🛒</div>
 
-            <h2>
-              Xác nhận mua KEY
-            </h2>
+            <h2>Xác nhận mua KEY</h2>
 
-            <p>
-              Bạn có chắc muốn mua:
-            </p>
+            <p>Bạn có chắc muốn mua:</p>
 
             <strong className="modal-product-name">
               {buyModal.name}
@@ -769,17 +833,13 @@ export default function ShopPage() {
             <div className="modal-summary">
               <div>
                 <span>Giá</span>
-
                 <strong>
-                  {formatPrice(
-                    buyModal.price
-                  )}
+                  {formatPrice(buyModal.price)}
                 </strong>
               </div>
 
               <div>
                 <span>Thời hạn</span>
-
                 <strong>
                   {formatDuration(
                     buyModal.duration_days
@@ -789,13 +849,10 @@ export default function ShopPage() {
 
               <div>
                 <span>Số dư sau mua</span>
-
                 <strong>
                   {formatPrice(
                     Number(wallet) -
-                      Number(
-                        buyModal.price
-                      )
+                      Number(buyModal.price)
                   )}
                 </strong>
               </div>
@@ -819,14 +876,9 @@ export default function ShopPage() {
                 disabled={buying}
                 onClick={confirmBuy}
               >
-                {buying ? (
-                  <>
-                    <span className="spinner" />
-                    ĐANG MUA...
-                  </>
-                ) : (
-                  "XÁC NHẬN MUA"
-                )}
+                {buying
+                  ? "ĐANG MUA..."
+                  : "XÁC NHẬN MUA"}
               </button>
             </div>
           </div>
@@ -836,23 +888,15 @@ export default function ShopPage() {
       {successModal && (
         <div className="modal-overlay">
           <div className="success-modal">
-            <div className="success-icon">
-              ✓
-            </div>
+            <div className="success-icon">✓</div>
 
-            <h2>
-              Mua KEY thành công
-            </h2>
+            <h2>Mua KEY thành công</h2>
 
-            <p>
-              KEY của bạn:
-            </p>
+            <p>KEY của bạn:</p>
 
             <div className="key-box">
               {successModal.key ? (
-                <code>
-                  {successModal.key}
-                </code>
+                <code>{successModal.key}</code>
               ) : (
                 <span>
                   Không nhận được KEY.
@@ -886,7 +930,10 @@ export default function ShopPage() {
               <button
                 type="button"
                 className="close-button"
-                onClick={closeSuccessModal}
+                onClick={() => {
+                  setSuccessModal(null);
+                  setMessage("");
+                }}
               >
                 ĐÓNG
               </button>
@@ -898,14 +945,100 @@ export default function ShopPage() {
   );
 }
 
+function ProductCard({
+  product,
+  available,
+  formatPrice,
+  formatDuration,
+  onBuy,
+}) {
+  return (
+    <article className="product-card">
+      <div className="product-image">
+        {product.demo_image_url ? (
+          <img
+            src={product.demo_image_url}
+            alt={product.name}
+          />
+        ) : (
+          <div className="image-placeholder">
+            🔑
+          </div>
+        )}
+
+        <span
+          className={
+            available > 0
+              ? "stock-tag"
+              : "stock-tag sold"
+          }
+        >
+          {available > 0
+            ? `${available} KEY`
+            : "HẾT KEY"}
+        </span>
+      </div>
+
+      <div className="product-body">
+        <h3>{product.name}</h3>
+
+        {product.description && (
+          <p>{product.description}</p>
+        )}
+
+        <div className="product-tags">
+          <span>
+            {available > 0 ? "Hot" : "Hết hàng"}
+          </span>
+          <span>Tự động</span>
+        </div>
+
+        <div className="product-bottom">
+          <div>
+            <small>
+              {formatDuration(
+                product.duration_days
+              )}
+            </small>
+
+            <strong>
+              {formatPrice(product.price)}
+            </strong>
+          </div>
+
+          <button
+            type="button"
+            disabled={available <= 0}
+            onClick={() => onBuy(product)}
+          >
+            {available > 0
+              ? "Mua ngay →"
+              : "Hết KEY"}
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function EmptyCard() {
+  return (
+    <div className="empty-card">
+      <div>📦</div>
+      <h2>Chưa có sản phẩm</h2>
+      <p>
+        Danh mục này hiện chưa có sản phẩm
+        đang bán.
+      </p>
+    </div>
+  );
+}
+
 function LoadingScreen() {
   return (
     <div className="loading-screen">
       <div className="loading-spinner" />
-
-      <span>
-        Đang tải cửa hàng...
-      </span>
+      <span>Đang tải cửa hàng...</span>
     </div>
   );
 }
