@@ -8,31 +8,9 @@ const supabaseAdmin = createClient(
 
 export async function POST(request) {
   try {
-    const body = await request.json();
+    const authHeader = request.headers.get("authorization");
 
-    const depositId = body.depositId;
-
-    if (!depositId) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Thiếu depositId.",
-        },
-        { status: 400 }
-      );
-    }
-
-    // =========================
-    // LẤY TOKEN ADMIN
-    // =========================
-
-    const authHeader =
-      request.headers.get("authorization");
-
-    if (
-      !authHeader ||
-      !authHeader.startsWith("Bearer ")
-    ) {
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return NextResponse.json(
         {
           success: false,
@@ -42,11 +20,16 @@ export async function POST(request) {
       );
     }
 
-    const token = authHeader
-      .substring(7)
-      .trim();
+    const token = authHeader.substring(7).trim();
 
-    if (!token) {
+    const {
+      data: { user },
+      error: userError,
+    } = await supabaseAdmin.auth.getUser(token);
+
+    if (userError || !user) {
+      console.error("AUTH ERROR:", userError);
+
       return NextResponse.json(
         {
           success: false,
@@ -56,101 +39,78 @@ export async function POST(request) {
       );
     }
 
-    // =========================
-    // XÁC THỰC USER
-    // =========================
-
-    const {
-      data: {
-        user,
-      },
-      error: userError,
-    } =
-      await supabaseAdmin.auth.getUser(
-        token
-      );
-
-    if (userError || !user) {
-      console.error(
-        "ADMIN USER ERROR:",
-        userError
-      );
-
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Phiên đăng nhập không hợp lệ.",
-        },
-        { status: 401 }
-      );
-    }
-
-    // =========================
-    // KIỂM TRA ROLE ADMIN
-    // =========================
-
-    const {
-      data: profile,
-      error: profileError,
-    } = await supabaseAdmin
-      .from("profiles")
-      .select("id, role")
-      .eq("id", user.id)
-      .maybeSingle();
+    // Kiểm tra tài khoản Admin
+    const { data: profile, error: profileError } =
+      await supabaseAdmin
+        .from("profiles")
+        .select("id, email, role")
+        .eq("id", user.id)
+        .maybeSingle();
 
     if (profileError) {
-      console.error(
-        "PROFILE ERROR:",
-        profileError
-      );
+      console.error("PROFILE ERROR:", profileError);
 
       return NextResponse.json(
         {
           success: false,
-          message: "Không thể kiểm tra quyền Admin.",
+          message: "Không thể kiểm tra quyền admin.",
         },
         { status: 500 }
       );
     }
 
     if (!profile || profile.role !== "admin") {
+      console.error("NOT ADMIN:", {
+        authUserId: user.id,
+        authEmail: user.email,
+        profile,
+      });
+
       return NextResponse.json(
         {
           success: false,
-          message: "Bạn không có quyền Admin.",
+          message: "Bạn không có quyền admin.",
         },
         { status: 403 }
       );
     }
 
-    // =========================
-    // DUYỆT DEPOSIT
-    // =========================
+    const body = await request.json();
+    const depositId = Number(body.depositId);
 
-    const {
-      data,
-      error,
-    } = await supabaseAdmin.rpc(
-      "approve_deposit",
-      {
-        p_deposit_id: depositId,
-        p_admin_id: user.id,
-      }
-    );
+    if (!Number.isInteger(depositId) || depositId <= 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Mã yêu cầu nạp không hợp lệ.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Duyệt tiền bằng RPC
+    const { data, error } = await supabaseAdmin.rpc("approve_deposit", {
+      p_deposit_id: depositId,
+      p_admin_id: user.id,
+    });
 
     if (error) {
-      console.error(
-        "APPROVE DEPOSIT RPC ERROR:",
-        error
-      );
+      console.error("APPROVE DEPOSIT RPC ERROR:", error);
 
       return NextResponse.json(
         {
           success: false,
-          message:
-            error.message ||
-            "Không thể duyệt nạp tiền.",
+          message: error.message || "Không thể duyệt nạp tiền.",
+        },
+        { status: 500 }
+      );
+    }
+
+    if (!data || data.success !== true) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: data?.message || "Duyệt nạp tiền thất bại.",
         },
         { status: 400 }
       );
@@ -158,15 +118,14 @@ export async function POST(request) {
 
     return NextResponse.json({
       success: true,
-      message:
-        "Đã duyệt nạp tiền và cộng tiền vào ví.",
-      data,
+      message: data.message || "Duyệt nạp tiền thành công.",
+      depositId: data.deposit_id,
+      userId: data.user_id,
+      amount: data.amount,
+      newBalance: data.new_balance,
     });
   } catch (error) {
-    console.error(
-      "APPROVE DEPOSIT ERROR:",
-      error
-    );
+    console.error("APPROVE DEPOSIT SERVER ERROR:", error);
 
     return NextResponse.json(
       {
