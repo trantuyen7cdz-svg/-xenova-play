@@ -7,21 +7,29 @@ import { supabase } from "../../../lib/supabase";
 export default function AdminProductsPage() {
   const router = useRouter();
 
+  const [checkingAdmin, setCheckingAdmin] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
 
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [uploadingId, setUploadingId] = useState(null);
-  const [actionId, setActionId] = useState(null);
+  const [editingId, setEditingId] = useState(null);
 
   const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
+  const [categoryId, setCategoryId] = useState("");
   const [price, setPrice] = useState("");
   const [duration, setDuration] = useState("");
-  const [categoryId, setCategoryId] = useState("");
+  const [description, setDescription] = useState("");
 
-  const [editing, setEditing] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  const [uploadingId, setUploadingId] = useState(null);
+  const [deletingImageId, setDeletingImageId] = useState(null);
+
+  const [togglingId, setTogglingId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -30,127 +38,171 @@ export default function AdminProductsPage() {
 
   async function checkAdmin() {
     try {
+      setCheckingAdmin(true);
+      setError("");
+
       const {
         data: { user },
         error: userError,
       } = await supabase.auth.getUser();
 
-      if (userError || !user) {
+      if (userError) {
+        console.error("AUTH ERROR:", userError);
         router.replace("/login");
         return;
       }
 
-      const { data: profile, error: profileError } =
-        await supabase
-          .from("profiles")
-          .select("id, email, role")
-          .eq("id", user.id)
-          .maybeSingle();
+      if (!user) {
+        router.replace("/login");
+        return;
+      }
 
-      if (
-        profileError ||
-        !profile ||
-        profile.role !== "admin"
-      ) {
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("id,email,role")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profileError) {
+        console.error("PROFILE ERROR:", profileError);
+
+        setError(
+          "Không thể kiểm tra quyền Admin: " +
+            profileError.message
+        );
+
+        setCheckingAdmin(false);
+        setLoading(false);
+        return;
+      }
+
+      if (!profile || profile.role !== "admin") {
         router.replace("/dashboard");
         return;
       }
 
-      await Promise.all([
-        loadProducts(),
-        loadCategories(),
-      ]);
-    } catch (error) {
-      console.error(
-        "ADMIN PRODUCT CHECK ERROR:",
-        error
+      setCheckingAdmin(false);
+
+      await loadData();
+    } catch (err) {
+      console.error("CHECK ADMIN ERROR:", err);
+
+      setError(
+        err?.message ||
+          "Có lỗi xảy ra khi kiểm tra quyền Admin."
       );
-      router.replace("/dashboard");
+
+      setCheckingAdmin(false);
+      setLoading(false);
     }
   }
 
-  async function loadProducts() {
-    const { data, error } = await supabase
-      .from("products")
-      .select(
-        `
-        id,
-        name,
-        description,
-        price,
-        duration_days,
-        active,
-        is_active,
-        created_at,
-        demo_image_url,
-        category_id,
-        product_categories (
-          id,
-          name
-        )
-        `
-      )
-      .order("id", { ascending: true });
+  async function loadData() {
+    setLoading(true);
+    setError("");
+    setMessage("");
 
-    if (error) {
-      console.error(
-        "PRODUCT LOAD ERROR:",
-        error
+    try {
+      const [productsResult, categoriesResult] =
+        await Promise.all([
+          supabase
+            .from("products")
+            .select(
+              `
+              id,
+              name,
+              description,
+              price,
+              duration_days,
+              active,
+              is_active,
+              demo_image_url,
+              category_id,
+              created_at
+            `
+            )
+            .order("id", { ascending: true }),
+
+          supabase
+            .from("product_categories")
+            .select(
+              `
+              id,
+              name,
+              active
+            `
+            )
+            .order("id", { ascending: true }),
+        ]);
+
+      if (productsResult.error) {
+        console.error(
+          "PRODUCTS ERROR:",
+          productsResult.error
+        );
+
+        throw new Error(
+          "Lỗi tải sản phẩm: " +
+            productsResult.error.message
+        );
+      }
+
+      if (categoriesResult.error) {
+        console.error(
+          "CATEGORIES ERROR:",
+          categoriesResult.error
+        );
+
+        throw new Error(
+          "Lỗi tải thư mục: " +
+            categoriesResult.error.message
+        );
+      }
+
+      setProducts(productsResult.data || []);
+      setCategories(categoriesResult.data || []);
+    } catch (err) {
+      console.error("LOAD DATA ERROR:", err);
+
+      setError(
+        err?.message ||
+          "Không thể tải dữ liệu sản phẩm."
       );
-      setMessage(
-        "Không thể tải danh sách sản phẩm."
-      );
-      return;
+    } finally {
+      setLoading(false);
     }
-
-    setProducts(data || []);
-  }
-
-  async function loadCategories() {
-    const { data, error } = await supabase
-      .from("product_categories")
-      .select("id, name, active")
-      .order("id", { ascending: true });
-
-    if (error) {
-      console.error(
-        "CATEGORY LOAD ERROR:",
-        error
-      );
-      setMessage(
-        "Không thể tải danh sách thư mục."
-      );
-      return;
-    }
-
-    setCategories(data || []);
   }
 
   function resetForm() {
-    setEditing(null);
+    setEditingId(null);
     setName("");
-    setDescription("");
+    setCategoryId("");
     setPrice("");
     setDuration("");
-    setCategoryId("");
+    setDescription("");
   }
 
-  function startEdit(product) {
-    setEditing(product);
-
+  function editProduct(product) {
+    setEditingId(product.id);
     setName(product.name || "");
-    setDescription(product.description || "");
-    setPrice(String(product.price || ""));
-    setDuration(
-      String(product.duration_days || "")
-    );
     setCategoryId(
       product.category_id
         ? String(product.category_id)
         : ""
     );
-
-    setMessage("");
+    setPrice(
+      product.price !== null &&
+        product.price !== undefined
+        ? String(product.price)
+        : ""
+    );
+    setDuration(
+      product.duration_days !== null &&
+        product.duration_days !== undefined
+        ? String(product.duration_days)
+        : ""
+    );
+    setDescription(product.description || "");
 
     window.scrollTo({
       top: 0,
@@ -159,26 +211,20 @@ export default function AdminProductsPage() {
   }
 
   async function saveProduct() {
+    setMessage("");
+    setError("");
+
     const cleanName = name.trim();
-    const cleanDescription =
-      description.trim();
     const cleanPrice = Number(price);
     const cleanDuration = Number(duration);
 
     if (!cleanName) {
-      setMessage(
-        "Vui lòng nhập tên sản phẩm."
-      );
+      setError("Vui lòng nhập tên sản phẩm.");
       return;
     }
 
-    if (
-      !Number.isInteger(cleanPrice) ||
-      cleanPrice <= 0
-    ) {
-      setMessage(
-        "Giá sản phẩm không hợp lệ."
-      );
+    if (!Number.isInteger(cleanPrice) || cleanPrice <= 0) {
+      setError("Giá sản phẩm không hợp lệ.");
       return;
     }
 
@@ -186,19 +232,16 @@ export default function AdminProductsPage() {
       !Number.isInteger(cleanDuration) ||
       cleanDuration <= 0
     ) {
-      setMessage(
-        "Thời hạn sản phẩm không hợp lệ."
-      );
+      setError("Số ngày sử dụng không hợp lệ.");
       return;
     }
 
     setSaving(true);
-    setMessage("");
 
     try {
       const payload = {
         name: cleanName,
-        description: cleanDescription,
+        description: description.trim(),
         price: cleanPrice,
         duration_days: cleanDuration,
         category_id: categoryId
@@ -206,36 +249,22 @@ export default function AdminProductsPage() {
           : null,
       };
 
-      if (editing) {
-        const { error } = await supabase
+      if (editingId) {
+        const { error: updateError } = await supabase
           .from("products")
-          .update({
-            ...payload,
-            updated_at:
-              new Date().toISOString(),
-          })
-          .eq("id", editing.id);
+          .update(payload)
+          .eq("id", editingId);
 
-        if (error) {
-          console.error(
-            "UPDATE PRODUCT ERROR:",
-            error
+        if (updateError) {
+          throw new Error(
+            "Không thể cập nhật sản phẩm: " +
+              updateError.message
           );
-
-          setMessage(
-            error.message ||
-              "Không thể cập nhật sản phẩm."
-          );
-
-          setSaving(false);
-          return;
         }
 
-        setMessage(
-          "✓ Đã cập nhật sản phẩm."
-        );
+        setMessage("Đã cập nhật sản phẩm.");
       } else {
-        const { error } = await supabase
+        const { error: insertError } = await supabase
           .from("products")
           .insert({
             ...payload,
@@ -243,438 +272,346 @@ export default function AdminProductsPage() {
             is_active: true,
           });
 
-        if (error) {
-          console.error(
-            "CREATE PRODUCT ERROR:",
-            error
+        if (insertError) {
+          throw new Error(
+            "Không thể tạo sản phẩm: " +
+              insertError.message
           );
-
-          setMessage(
-            error.message ||
-              "Không thể tạo sản phẩm."
-          );
-
-          setSaving(false);
-          return;
         }
 
-        setMessage(
-          "✓ Đã tạo sản phẩm mới."
-        );
+        setMessage("Đã thêm sản phẩm.");
       }
 
       resetForm();
-      await loadProducts();
-    } catch (error) {
-      console.error(
-        "SAVE PRODUCT ERROR:",
-        error
+      await loadData();
+    } catch (err) {
+      console.error("SAVE PRODUCT ERROR:", err);
+
+      setError(
+        err?.message ||
+          "Không thể lưu sản phẩm."
       );
-
-      setMessage("Đã xảy ra lỗi.");
+    } finally {
+      setSaving(false);
     }
-
-    setSaving(false);
   }
 
   async function toggleProduct(product) {
-    setActionId(product.id);
+    if (!product) return;
+
+    setError("");
     setMessage("");
-
-    const nextStatus = !product.is_active;
-
-    const { error } = await supabase
-      .from("products")
-      .update({
-        is_active: nextStatus,
-        active: nextStatus,
-        updated_at:
-          new Date().toISOString(),
-      })
-      .eq("id", product.id);
-
-    if (error) {
-      console.error(
-        "TOGGLE PRODUCT ERROR:",
-        error
-      );
-
-      setMessage(
-        "Không thể thay đổi trạng thái sản phẩm."
-      );
-
-      setActionId(null);
-      return;
-    }
-
-    setMessage(
-      nextStatus
-        ? "✓ Đã bật sản phẩm."
-        : "✓ Đã ẩn sản phẩm."
-    );
-
-    await loadProducts();
-    setActionId(null);
-  }
-
-  function getStoragePath(url) {
-    if (!url) return null;
-
-    const marker =
-      "/storage/v1/object/public/product-demo/";
-
-    const index = url.indexOf(marker);
-
-    if (index === -1) return null;
-
-    return decodeURIComponent(
-      url.substring(
-        index + marker.length
-      )
-    );
-  }
-
-  async function uploadDemoImage(
-    product,
-    file
-  ) {
-    if (!file) return;
-
-    if (!file.type.startsWith("image/")) {
-      setMessage(
-        "Chỉ được upload file hình ảnh."
-      );
-      return;
-    }
-
-    if (file.size > 10 * 1024 * 1024) {
-      setMessage(
-        "Ảnh không được vượt quá 10MB."
-      );
-      return;
-    }
-
-    setUploadingId(product.id);
-    setMessage("");
+    setTogglingId(product.id);
 
     try {
-      if (product.demo_image_url) {
-        const oldPath =
-          getStoragePath(
-            product.demo_image_url
-          );
+      const newStatus = !(
+        product.active === true &&
+        product.is_active === true
+      );
 
-        if (oldPath) {
-          await supabase.storage
-            .from("product-demo")
-            .remove([oldPath]);
-        }
-      }
-
-      const extension =
-        file.name
-          .split(".")
-          .pop()
-          ?.toLowerCase() ||
-        "jpg";
-
-      const filePath =
-        `${product.id}/demo-${Date.now()}.${extension}`;
-
-      const { error: uploadError } =
-        await supabase.storage
-          .from("product-demo")
-          .upload(
-            filePath,
-            file,
-            {
-              cacheControl: "3600",
-              upsert: false,
-            }
-          );
-
-      if (uploadError) {
-        console.error(
-          "UPLOAD DEMO ERROR:",
-          uploadError
-        );
-
-        setMessage(
-          uploadError.message ||
-            "Không thể upload ảnh."
-        );
-
-        setUploadingId(null);
-        return;
-      }
-
-      const {
-        data: publicData,
-      } = supabase.storage
-        .from("product-demo")
-        .getPublicUrl(filePath);
-
-      const publicUrl =
-        publicData?.publicUrl;
-
-      if (!publicUrl) {
-        setMessage(
-          "Không lấy được URL ảnh."
-        );
-
-        setUploadingId(null);
-        return;
-      }
-
-      const { error: updateError } =
-        await supabase
-          .from("products")
-          .update({
-            demo_image_url:
-              publicUrl,
-            updated_at:
-              new Date().toISOString(),
-          })
-          .eq("id", product.id);
+      const { error: updateError } = await supabase
+        .from("products")
+        .update({
+          active: newStatus,
+          is_active: newStatus,
+        })
+        .eq("id", product.id);
 
       if (updateError) {
-        console.error(
-          "SAVE DEMO URL ERROR:",
-          updateError
+        throw new Error(
+          "Không thể thay đổi trạng thái: " +
+            updateError.message
         );
-
-        setMessage(
-          updateError.message ||
-            "Không thể lưu ảnh demo."
-        );
-
-        setUploadingId(null);
-        return;
       }
 
       setMessage(
-        "✓ Đã upload ảnh demo."
+        newStatus
+          ? "Đã bật bán sản phẩm."
+          : "Đã tắt bán sản phẩm."
       );
 
-      await loadProducts();
-    } catch (error) {
+      await loadData();
+    } catch (err) {
       console.error(
-        "UPLOAD DEMO ERROR:",
-        error
+        "TOGGLE PRODUCT ERROR:",
+        err
       );
 
-      setMessage(
-        "Không thể upload ảnh."
+      setError(
+        err?.message ||
+          "Không thể thay đổi trạng thái sản phẩm."
       );
+    } finally {
+      setTogglingId(null);
     }
-
-    setUploadingId(null);
   }
 
-  async function removeDemoImage(
-    product
-  ) {
-    if (!product.demo_image_url) {
-      return;
-    }
+  async function deleteProduct(product) {
+    if (!product) return;
 
-    const confirmed =
-      window.confirm(
-        "Bạn có chắc muốn xóa ảnh demo này?"
-      );
+    const ok = window.confirm(
+      `Bạn có chắc muốn xóa sản phẩm "${product.name}" không?`
+    );
 
-    if (!confirmed) return;
+    if (!ok) return;
 
-    setUploadingId(product.id);
+    setError("");
     setMessage("");
+    setDeletingId(product.id);
 
     try {
-      const path =
-        getStoragePath(
-          product.demo_image_url
-        );
-
-      if (path) {
-        await supabase.storage
-          .from("product-demo")
-          .remove([path]);
-      }
-
-      const { error } =
+      /*
+       * Không cho xóa nếu sản phẩm đã có KEY
+       * để tránh phá dữ liệu mua bán.
+       */
+      const { count, error: keysError } =
         await supabase
-          .from("products")
-          .update({
-            demo_image_url: null,
-            updated_at:
-              new Date().toISOString(),
+          .from("keys")
+          .select("id", {
+            count: "exact",
+            head: true,
           })
-          .eq("id", product.id);
+          .eq("product_id", product.id);
 
-      if (error) {
-        console.error(
-          "REMOVE DEMO URL ERROR:",
-          error
+      if (keysError) {
+        throw new Error(
+          "Không thể kiểm tra KEY của sản phẩm: " +
+            keysError.message
         );
-
-        setMessage(
-          error.message ||
-            "Không thể xóa ảnh demo."
-        );
-
-        setUploadingId(null);
-        return;
       }
 
-      setMessage(
-        "✓ Đã xóa ảnh demo."
-      );
-
-      await loadProducts();
-    } catch (error) {
-      console.error(
-        "REMOVE DEMO ERROR:",
-        error
-      );
-
-      setMessage(
-        "Không thể xóa ảnh demo."
-      );
-    }
-
-    setUploadingId(null);
-  }
-
-  async function deleteProduct(
-    product
-  ) {
-    const confirmed =
-      window.confirm(
-        `Bạn có chắc muốn xóa sản phẩm "${product.name}"?\n\nCác KEY đã bán không bị xóa.`
-      );
-
-    if (!confirmed) return;
-
-    setActionId(product.id);
-    setMessage("");
-
-    try {
-      if (product.demo_image_url) {
-        const path =
-          getStoragePath(
-            product.demo_image_url
-          );
-
-        if (path) {
-          await supabase.storage
-            .from("product-demo")
-            .remove([path]);
-        }
+      if ((count || 0) > 0) {
+        throw new Error(
+          "Không thể xóa sản phẩm này vì đã có KEY liên kết. Hãy tắt bán sản phẩm thay vì xóa."
+        );
       }
 
-      const { error } =
+      const { error: deleteError } =
         await supabase
           .from("products")
           .delete()
           .eq("id", product.id);
 
-      if (error) {
-        console.error(
-          "DELETE PRODUCT ERROR:",
-          error
+      if (deleteError) {
+        throw new Error(
+          "Không thể xóa sản phẩm: " +
+            deleteError.message
         );
-
-        setMessage(
-          error.message ||
-            "Không thể xóa sản phẩm."
-        );
-
-        setActionId(null);
-        return;
       }
 
-      if (
-        editing?.id === product.id
-      ) {
+      setMessage("Đã xóa sản phẩm.");
+
+      if (editingId === product.id) {
         resetForm();
       }
 
-      setMessage(
-        "✓ Đã xóa sản phẩm."
-      );
-
-      await loadProducts();
-    } catch (error) {
+      await loadData();
+    } catch (err) {
       console.error(
         "DELETE PRODUCT ERROR:",
-        error
+        err
       );
 
-      setMessage(
-        "Không thể xóa sản phẩm."
+      setError(
+        err?.message ||
+          "Không thể xóa sản phẩm."
       );
+    } finally {
+      setDeletingId(null);
     }
-
-    setActionId(null);
   }
 
-  function getCategoryName(product) {
-    if (
-      product.product_categories &&
-      !Array.isArray(
-        product.product_categories
-      )
-    ) {
-      return (
-        product.product_categories.name
-      );
-    }
+  async function uploadDemoImage(product, file) {
+    if (!file || !product) return;
 
-    if (
-      Array.isArray(
-        product.product_categories
-      ) &&
-      product.product_categories.length >
-        0
-    ) {
-      return (
-        product.product_categories[0]
-          .name
-      );
-    }
+    setError("");
+    setMessage("");
+    setUploadingId(product.id);
 
-    if (product.category_id) {
-      const category =
-        categories.find(
-          (item) =>
-            String(item.id) ===
-            String(
-              product.category_id
-            )
+    try {
+      const extension =
+        file.name.split(".").pop()?.toLowerCase() ||
+        "jpg";
+
+      const fileName =
+        `${product.id}-${Date.now()}.${extension}`;
+
+      const filePath =
+        `products/${fileName}`;
+
+      const { error: uploadError } =
+        await supabase.storage
+          .from("product-demo")
+          .upload(filePath, file, {
+            cacheControl: "3600",
+            upsert: true,
+          });
+
+      if (uploadError) {
+        throw new Error(
+          "Upload ảnh thất bại: " +
+            uploadError.message
         );
+      }
 
-      return (
-        category?.name ||
-        "Chưa có thư mục"
+      const {
+        data: publicUrlData,
+      } = supabase.storage
+        .from("product-demo")
+        .getPublicUrl(filePath);
+
+      const imageUrl =
+        publicUrlData?.publicUrl;
+
+      if (!imageUrl) {
+        throw new Error(
+          "Không lấy được URL ảnh."
+        );
+      }
+
+      /*
+       * Chỉ cập nhật demo_image_url.
+       * Không đụng tới giá, KEY, ví hay trạng thái.
+       */
+      const { error: updateError } =
+        await supabase
+          .from("products")
+          .update({
+            demo_image_url: imageUrl,
+          })
+          .eq("id", product.id);
+
+      if (updateError) {
+        throw new Error(
+          "Upload thành công nhưng không lưu được ảnh: " +
+            updateError.message
+        );
+      }
+
+      setMessage(
+        "Đã thêm ảnh demo cho sản phẩm."
       );
+
+      await loadData();
+    } catch (err) {
+      console.error(
+        "UPLOAD DEMO IMAGE ERROR:",
+        err
+      );
+
+      setError(
+        err?.message ||
+          "Không thể upload ảnh demo."
+      );
+    } finally {
+      setUploadingId(null);
+    }
+  }
+
+  async function deleteDemoImage(product) {
+    if (!product?.demo_image_url) return;
+
+    const ok = window.confirm(
+      "Bạn có chắc muốn xóa ảnh demo này?"
+    );
+
+    if (!ok) return;
+
+    setError("");
+    setMessage("");
+    setDeletingImageId(product.id);
+
+    try {
+      /*
+       * Xóa URL khỏi database trước.
+       * Không ảnh hưởng sản phẩm.
+       */
+      const { error: updateError } =
+        await supabase
+          .from("products")
+          .update({
+            demo_image_url: null,
+          })
+          .eq("id", product.id);
+
+      if (updateError) {
+        throw new Error(
+          "Không thể xóa ảnh demo: " +
+            updateError.message
+        );
+      }
+
+      setMessage("Đã xóa ảnh demo.");
+
+      await loadData();
+    } catch (err) {
+      console.error(
+        "DELETE DEMO IMAGE ERROR:",
+        err
+      );
+
+      setError(
+        err?.message ||
+          "Không thể xóa ảnh demo."
+      );
+    } finally {
+      setDeletingImageId(null);
+    }
+  }
+
+  function getCategoryName(categoryId) {
+    if (!categoryId) {
+      return "Chưa phân loại";
     }
 
-    return "Chưa có thư mục";
+    const category = categories.find(
+      (item) =>
+        Number(item.id) === Number(categoryId)
+    );
+
+    return category?.name || "Chưa phân loại";
+  }
+
+  if (checkingAdmin) {
+    return (
+      <main style={styles.loadingPage}>
+        <div style={styles.spinner} />
+        <div style={styles.loadingTitle}>
+          ĐANG KIỂM TRA QUYỀN ADMIN
+        </div>
+        <div style={styles.loadingText}>
+          Vui lòng chờ...
+        </div>
+      </main>
+    );
   }
 
   if (loading) {
     return (
       <main style={styles.loadingPage}>
-        <div style={styles.loadingBox}>
-          <div style={styles.spinner}></div>
+        <div style={styles.spinner} />
 
-          <div style={styles.loadingTitle}>
-            ĐANG TẢI SẢN PHẨM
-          </div>
-
-          <div style={styles.loadingText}>
-            Đang kết nối dữ liệu...
-          </div>
+        <div style={styles.loadingTitle}>
+          ĐANG TẢI SẢN PHẨM
         </div>
+
+        <div style={styles.loadingText}>
+          Đang tải danh mục và sản phẩm...
+        </div>
+
+        {error && (
+          <div style={styles.errorBox}>
+            <b>LỖI:</b>
+            <div>{error}</div>
+
+            <button
+              onClick={loadData}
+              style={styles.retryButton}
+            >
+              THỬ LẠI
+            </button>
+          </div>
+        )}
       </main>
     );
   }
@@ -684,46 +621,59 @@ export default function AdminProductsPage() {
       <div style={styles.container}>
         <div style={styles.header}>
           <div>
-            <div style={styles.badge}>
-              XENOVA PLAY · ADMIN
+            <div style={styles.smallTitle}>
+              XENOVA PLAY
             </div>
 
             <h1 style={styles.title}>
               QUẢN LÝ SẢN PHẨM
             </h1>
 
-            <p style={styles.subtitle}>
-              Tạo sản phẩm, gán thư mục và
-              quản lý ảnh demo.
-            </p>
+            <div style={styles.subtitle}>
+              Thêm, sửa, quản lý KEY và ảnh demo
+            </div>
           </div>
 
           <button
             onClick={() =>
-              router.push(
-                "/admin/categories"
-              )
+              router.push("/admin/categories")
             }
-            style={styles.categoryButton}
+            style={styles.secondaryButton}
           >
             📁 QUẢN LÝ THƯ MỤC
           </button>
         </div>
 
+        {error && (
+          <div style={styles.errorBox}>
+            <b>ĐÃ XẢY RA LỖI</b>
+            <div style={{ marginTop: 6 }}>
+              {error}
+            </div>
+
+            <button
+              onClick={loadData}
+              style={styles.retryButton}
+            >
+              🔄 THỬ LẠI
+            </button>
+          </div>
+        )}
+
         {message && (
-          <div style={styles.message}>
-            {message}
+          <div style={styles.successBox}>
+            ✅ {message}
           </div>
         )}
 
         <section style={styles.formCard}>
-          <h2 style={styles.sectionTitle}>
-            {editing
-              ? "✏️ SỬA SẢN PHẨM"
-              : "➕ TẠO SẢN PHẨM MỚI"}
-          </h2>
+          <div style={styles.cardTitle}>
+            {editingId
+              ? "✏️ CHỈNH SỬA SẢN PHẨM"
+              : "➕ THÊM SẢN PHẨM"}
+          </div>
 
-          <div style={styles.gridForm}>
+          <div style={styles.formGrid}>
             <div style={styles.field}>
               <label style={styles.label}>
                 Tên sản phẩm
@@ -734,9 +684,8 @@ export default function AdminProductsPage() {
                 onChange={(e) =>
                   setName(e.target.value)
                 }
-                placeholder="Ví dụ: KEY VIP 7 NGÀY"
+                placeholder="VD: KEY 1 NGÀY"
                 style={styles.input}
-                disabled={saving}
               />
             </div>
 
@@ -748,36 +697,22 @@ export default function AdminProductsPage() {
               <select
                 value={categoryId}
                 onChange={(e) =>
-                  setCategoryId(
-                    e.target.value
-                  )
+                  setCategoryId(e.target.value)
                 }
                 style={styles.input}
-                disabled={saving}
               >
                 <option value="">
                   — Chưa chọn thư mục —
                 </option>
 
-                {categories
-                  .filter(
-                    (category) =>
-                      category.active ||
-                      String(
-                        category.id
-                      ) ===
-                        String(
-                          categoryId
-                        )
-                  )
-                  .map((category) => (
-                    <option
-                      key={category.id}
-                      value={category.id}
-                    >
-                      {category.name}
-                    </option>
-                  ))}
+                {categories.map((category) => (
+                  <option
+                    key={category.id}
+                    value={category.id}
+                  >
+                    {category.name}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -788,14 +723,12 @@ export default function AdminProductsPage() {
 
               <input
                 type="number"
-                min="0"
                 value={price}
                 onChange={(e) =>
                   setPrice(e.target.value)
                 }
-                placeholder="50000"
+                placeholder="10000"
                 style={styles.input}
-                disabled={saving}
               />
             </div>
 
@@ -806,37 +739,38 @@ export default function AdminProductsPage() {
 
               <input
                 type="number"
-                min="1"
                 value={duration}
                 onChange={(e) =>
-                  setDuration(
-                    e.target.value
-                  )
+                  setDuration(e.target.value)
                 }
-                placeholder="7"
+                placeholder="1"
                 style={styles.input}
-                disabled={saving}
               />
             </div>
-          </div>
 
-          <div style={styles.field}>
-            <label style={styles.label}>
-              Mô tả
-            </label>
+            <div
+              style={{
+                ...styles.field,
+                gridColumn: "1 / -1",
+              }}
+            >
+              <label style={styles.label}>
+                Mô tả
+              </label>
 
-            <textarea
-              value={description}
-              onChange={(e) =>
-                setDescription(
-                  e.target.value
-                )
-              }
-              placeholder="Mô tả sản phẩm..."
-              rows={4}
-              style={styles.textarea}
-              disabled={saving}
-            />
+              <textarea
+                value={description}
+                onChange={(e) =>
+                  setDescription(e.target.value)
+                }
+                placeholder="Mô tả sản phẩm..."
+                rows={4}
+                style={{
+                  ...styles.input,
+                  resize: "vertical",
+                }}
+              />
+            </div>
           </div>
 
           <div style={styles.formActions}>
@@ -844,31 +778,22 @@ export default function AdminProductsPage() {
               onClick={saveProduct}
               disabled={saving}
               style={{
-                ...styles.saveButton,
-                ...(saving
-                  ? styles.buttonDisabled
-                  : {}),
+                ...styles.primaryButton,
+                opacity: saving ? 0.6 : 1,
               }}
             >
-              {saving ? (
-                <>
-                  <span
-                    style={styles.smallSpinner}
-                  ></span>
-                  ĐANG LƯU...
-                </>
-              ) : editing ? (
-                "LƯU THAY ĐỔI"
-              ) : (
-                "+ TẠO SẢN PHẨM"
-              )}
+              {saving
+                ? "⏳ ĐANG LƯU..."
+                : editingId
+                ? "💾 LƯU THAY ĐỔI"
+                : "➕ THÊM SẢN PHẨM"}
             </button>
 
-            {editing && (
+            {editingId && (
               <button
                 onClick={resetForm}
                 disabled={saving}
-                style={styles.cancelButton}
+                style={styles.secondaryButton}
               >
                 HỦY
               </button>
@@ -876,58 +801,86 @@ export default function AdminProductsPage() {
           </div>
         </section>
 
-        <section>
-          <div style={styles.listHeader}>
-            <h2 style={styles.sectionTitle}>
-              📦 DANH SÁCH SẢN PHẨM
-            </h2>
+        <div style={styles.sectionHeader}>
+          <div>
+            <div style={styles.cardTitle}>
+              DANH SÁCH SẢN PHẨM
+            </div>
 
-            <span style={styles.count}>
-              {products.length} sản phẩm
-            </span>
+            <div style={styles.count}>
+              Tổng: {products.length} sản phẩm
+            </div>
           </div>
 
-          {products.length === 0 ? (
-            <div style={styles.empty}>
-              Chưa có sản phẩm nào.
-            </div>
-          ) : (
-            <div style={styles.products}>
-              {products.map((product) => {
-                const isActioning =
-                  actionId === product.id;
+          <button
+            onClick={loadData}
+            disabled={loading}
+            style={styles.refreshButton}
+          >
+            🔄 LÀM MỚI
+          </button>
+        </div>
 
-                const isUploading =
-                  uploadingId === product.id;
+        {products.length === 0 ? (
+          <div style={styles.empty}>
+            Chưa có sản phẩm nào.
+          </div>
+        ) : (
+          <div style={styles.list}>
+            {products.map((product) => {
+              const isActive =
+                product.active === true &&
+                product.is_active === true;
 
-                return (
-                  <div
-                    key={product.id}
-                    style={styles.product}
-                  >
-                    {product.demo_image_url && (
+              const uploading =
+                uploadingId === product.id;
+
+              const deletingImage =
+                deletingImageId === product.id;
+
+              const toggling =
+                togglingId === product.id;
+
+              const deleting =
+                deletingId === product.id;
+
+              return (
+                <div
+                  key={product.id}
+                  style={styles.productCard}
+                >
+                  <div style={styles.imageBox}>
+                    {product.demo_image_url ? (
+                      <img
+                        src={
+                          product.demo_image_url
+                        }
+                        alt={product.name}
+                        style={styles.image}
+                      />
+                    ) : (
                       <div
                         style={
-                          styles.demoPreview
+                          styles.noImage
                         }
                       >
-                        <img
-                          src={
-                            product.demo_image_url
-                          }
-                          alt={`Demo ${product.name}`}
-                          style={
-                            styles.demoImage
-                          }
-                        />
+                        <div
+                          style={{
+                            fontSize: 34,
+                          }}
+                        >
+                          🖼️
+                        </div>
+
+                        <div>
+                          CHƯA CÓ ẢNH DEMO
+                        </div>
                       </div>
                     )}
+                  </div>
 
-                    <div
-                      style={
-                        styles.productTop
-                      }
-                    >
+                  <div style={styles.productBody}>
+                    <div style={styles.productTop}>
                       <div>
                         <div
                           style={
@@ -939,59 +892,53 @@ export default function AdminProductsPage() {
 
                         <div
                           style={
-                            styles.productId
+                            styles.category
                           }
                         >
-                          ID: {product.id}
+                          📁{" "}
+                          {getCategoryName(
+                            product.category_id
+                          )}
                         </div>
                       </div>
 
                       <div
-                        style={
-                          product.is_active
-                            ? styles.active
-                            : styles.inactive
-                        }
+                        style={{
+                          ...styles.status,
+                          background: isActive
+                            ? "#092b18"
+                            : "#301010",
+                          color: isActive
+                            ? "#35e27d"
+                            : "#ff6666",
+                          borderColor: isActive
+                            ? "#164f2e"
+                            : "#5a1c1c",
+                        }}
                       >
-                        {product.is_active
-                          ? "● ĐANG BÁN"
-                          : "● ĐANG ẨN"}
+                        {isActive
+                          ? "ĐANG BÁN"
+                          : "ĐÃ TẮT"}
                       </div>
                     </div>
 
-                    <div
-                      style={
-                        styles.categoryTag
-                      }
-                    >
-                      📁{" "}
-                      {getCategoryName(
-                        product
-                      )}
-                    </div>
-
-                    <div
-                      style={
-                        styles.productInfo
-                      }
-                    >
+                    <div style={styles.infoGrid}>
                       <div>
                         <span
                           style={
                             styles.infoLabel
                           }
                         >
-                          Giá
+                          GIÁ
                         </span>
 
                         <strong
                           style={
-                            styles.infoValue
+                            styles.price
                           }
                         >
                           {Number(
-                            product.price ||
-                              0
+                            product.price || 0
                           ).toLocaleString(
                             "vi-VN"
                           )}
@@ -1005,18 +952,26 @@ export default function AdminProductsPage() {
                             styles.infoLabel
                           }
                         >
-                          Thời hạn
+                          THỜI HẠN
                         </span>
 
-                        <strong
+                        <strong>
+                          {product.duration_days}{" "}
+                          ngày
+                        </strong>
+                      </div>
+
+                      <div>
+                        <span
                           style={
-                            styles.infoValue
+                            styles.infoLabel
                           }
                         >
-                          {
-                            product.duration_days
-                          }{" "}
-                          ngày
+                          ID
+                        </span>
+
+                        <strong>
+                          #{product.id}
                         </strong>
                       </div>
                     </div>
@@ -1031,40 +986,24 @@ export default function AdminProductsPage() {
                       </div>
                     )}
 
-                    <div
-                      style={
-                        styles.imageActions
-                      }
-                    >
+                    <div style={styles.imageActions}>
                       <label
-                        style={
-                          isUploading
-                            ? styles.uploadButtonDisabled
-                            : styles.uploadButton
-                        }
+                        style={{
+                          ...styles.uploadButton,
+                          opacity:
+                            uploading ? 0.6 : 1,
+                        }}
                       >
-                        {isUploading ? (
-                          <>
-                            <span
-                              style={
-                                styles.smallSpinner
-                              }
-                            ></span>
-                            ĐANG UPLOAD...
-                          </>
-                        ) : product.demo_image_url ? (
-                          "📷 ĐỔI ẢNH DEMO"
-                        ) : (
-                          "📷 UPLOAD ẢNH DEMO"
-                        )}
+                        {uploading
+                          ? "⏳ ĐANG UPLOAD..."
+                          : product.demo_image_url
+                          ? "🔄 ĐỔI ẢNH DEMO"
+                          : "📷 THÊM ẢNH DEMO"}
 
                         <input
                           type="file"
-                          accept="image/*"
-                          disabled={
-                            isUploading ||
-                            isActioning
-                          }
+                          accept="image/png,image/jpeg,image/webp,image/gif"
+                          disabled={uploading}
                           onChange={(e) => {
                             const file =
                               e.target.files?.[0];
@@ -1076,8 +1015,7 @@ export default function AdminProductsPage() {
                               );
                             }
 
-                            e.target.value =
-                              "";
+                            e.target.value = "";
                           }}
                           style={{
                             display: "none",
@@ -1088,41 +1026,42 @@ export default function AdminProductsPage() {
                       {product.demo_image_url && (
                         <button
                           onClick={() =>
-                            removeDemoImage(
+                            deleteDemoImage(
                               product
                             )
                           }
                           disabled={
-                            isUploading ||
-                            isActioning
+                            deletingImage
                           }
-                          style={
-                            styles.removeImageButton
-                          }
+                          style={{
+                            ...styles.deleteImageButton,
+                            opacity:
+                              deletingImage
+                                ? 0.6
+                                : 1,
+                          }}
                         >
-                          {isUploading
-                            ? "ĐANG XỬ LÝ..."
-                            : "XÓA ẢNH"}
+                          {deletingImage
+                            ? "⏳ ĐANG XỬ LÝ..."
+                            : "🗑️ XÓA ẢNH"}
                         </button>
                       )}
                     </div>
 
-                    <div
-                      style={styles.actions}
-                    >
+                    <div style={styles.actions}>
                       <button
                         onClick={() =>
-                          startEdit(product)
+                          editProduct(product)
                         }
                         disabled={
-                          isActioning ||
-                          isUploading
+                          saving ||
+                          deleting
                         }
                         style={
                           styles.editButton
                         }
                       >
-                        SỬA
+                        ✏️ SỬA
                       </button>
 
                       <button
@@ -1132,27 +1071,22 @@ export default function AdminProductsPage() {
                           )
                         }
                         disabled={
-                          isActioning ||
-                          isUploading
+                          toggling ||
+                          deleting
                         }
-                        style={
-                          styles.toggleButton
-                        }
+                        style={{
+                          ...styles.toggleButton,
+                          opacity:
+                            toggling
+                              ? 0.6
+                              : 1,
+                        }}
                       >
-                        {isActioning ? (
-                          <>
-                            <span
-                              style={
-                                styles.smallSpinner
-                              }
-                            ></span>
-                            ĐANG XỬ LÝ...
-                          </>
-                        ) : product.is_active ? (
-                          "ẨN"
-                        ) : (
-                          "HIỆN"
-                        )}
+                        {toggling
+                          ? "⏳ ĐANG XỬ LÝ..."
+                          : isActive
+                          ? "⏸️ TẮT BÁN"
+                          : "▶️ BẬT BÁN"}
                       </button>
 
                       <button
@@ -1162,84 +1096,74 @@ export default function AdminProductsPage() {
                           )
                         }
                         disabled={
-                          isActioning ||
-                          isUploading
+                          deleting ||
+                          toggling
                         }
-                        style={
-                          styles.deleteButton
-                        }
+                        style={{
+                          ...styles.deleteButton,
+                          opacity:
+                            deleting
+                              ? 0.6
+                              : 1,
+                        }}
                       >
-                        {isActioning
-                          ? "ĐANG XÓA..."
-                          : "XÓA"}
+                        {deleting
+                          ? "⏳ ĐANG XÓA..."
+                          : "🗑️ XÓA"}
                       </button>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </main>
   );
 }
 
 const styles = {
-  page: {
-    minHeight: "100vh",
-    background:
-      "radial-gradient(circle at top, #111d36 0%, #070b12 45%, #05070b 100%)",
-    color: "#fff",
-    padding: "25px 15px 70px",
-    fontFamily: "Arial, sans-serif",
-  },
-
   loadingPage: {
     minHeight: "100vh",
-    background:
-      "radial-gradient(circle at top, #111d36 0%, #070b12 45%, #05070b 100%)",
+    background: "#070707",
     color: "#fff",
     display: "flex",
+    flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
     padding: "20px",
     fontFamily: "Arial, sans-serif",
   },
 
-  loadingBox: {
-    width: "100%",
-    maxWidth: "330px",
-    padding: "30px 20px",
-    borderRadius: "18px",
-    background: "#0d1420",
-    border: "1px solid #202d42",
-    textAlign: "center",
-    boxShadow:
-      "0 20px 60px rgba(0,0,0,.35)",
-  },
-
   spinner: {
-    width: "42px",
-    height: "42px",
-    margin: "0 auto 18px",
+    width: "48px",
+    height: "48px",
     borderRadius: "50%",
-    border: "4px solid #26344a",
-    borderTopColor: "#fff",
-    animation:
-      "xenovaSpin 0.8s linear infinite",
+    border: "4px solid #222",
+    borderTop: "4px solid #ff3030",
+    animation: "xenovaSpin 0.8s linear infinite",
+    marginBottom: "20px",
   },
 
   loadingTitle: {
-    fontSize: "15px",
+    fontSize: "18px",
     fontWeight: "900",
     letterSpacing: "1px",
   },
 
   loadingText: {
-    marginTop: "7px",
-    color: "#718097",
-    fontSize: "12px",
+    color: "#777",
+    marginTop: "8px",
+    textAlign: "center",
+  },
+
+  page: {
+    minHeight: "100vh",
+    background: "#070707",
+    color: "#fff",
+    padding: "90px 16px 50px",
+    fontFamily: "Arial, sans-serif",
   },
 
   container: {
@@ -1251,405 +1175,341 @@ const styles = {
   header: {
     display: "flex",
     justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: "20px",
+    alignItems: "center",
+    gap: "15px",
     marginBottom: "25px",
+    flexWrap: "wrap",
   },
 
-  badge: {
-    display: "inline-block",
-    padding: "7px 10px",
-    borderRadius: "999px",
-    background: "#101b30",
-    border: "1px solid #263c65",
-    color: "#72a9ff",
-    fontSize: "10px",
-    fontWeight: "800",
-    letterSpacing: "1px",
+  smallTitle: {
+    color: "#ff3333",
+    fontSize: "12px",
+    fontWeight: "900",
+    letterSpacing: "3px",
   },
 
   title: {
-    margin: "12px 0 6px",
-    fontSize:
-      "clamp(28px, 5vw, 44px)",
+    margin: "7px 0 5px",
+    fontSize: "30px",
     fontWeight: "900",
   },
 
   subtitle: {
-    margin: 0,
-    color: "#7f8ba0",
-    lineHeight: 1.5,
-  },
-
-  categoryButton: {
-    padding: "11px 14px",
-    borderRadius: "9px",
-    border: "1px solid #293850",
-    background: "#111927",
-    color: "#fff",
-    fontWeight: "800",
-    cursor: "pointer",
-  },
-
-  message: {
-    marginBottom: "18px",
-    padding: "13px 15px",
-    borderRadius: "10px",
-    background: "#151e2c",
-    border: "1px solid #293850",
-    color: "#aebbd0",
+    color: "#777",
+    fontSize: "14px",
   },
 
   formCard: {
-    marginBottom: "30px",
-    padding: "22px",
+    background: "#101010",
+    border: "1px solid #222",
     borderRadius: "16px",
-    background: "#0d1420",
-    border: "1px solid #202d42",
+    padding: "20px",
+    marginBottom: "30px",
   },
 
-  sectionTitle: {
-    margin: 0,
+  cardTitle: {
     fontSize: "18px",
     fontWeight: "900",
   },
 
-  gridForm: {
+  formGrid: {
     display: "grid",
     gridTemplateColumns:
-      "repeat(auto-fit, minmax(220px, 1fr))",
+      "repeat(auto-fit,minmax(220px,1fr))",
     gap: "15px",
-    marginTop: "18px",
+    marginTop: "20px",
   },
 
   field: {
-    marginTop: "18px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
   },
 
   label: {
-    display: "block",
-    marginBottom: "7px",
-    color: "#8995a8",
-    fontSize: "12px",
-    fontWeight: "800",
+    color: "#aaa",
+    fontSize: "13px",
+    fontWeight: "700",
   },
 
   input: {
     width: "100%",
     boxSizing: "border-box",
     padding: "13px",
-    borderRadius: "9px",
-    border: "1px solid #293850",
-    background: "#070b12",
+    borderRadius: "10px",
+    border: "1px solid #303030",
+    background: "#080808",
     color: "#fff",
     outline: "none",
-  },
-
-  textarea: {
-    width: "100%",
-    boxSizing: "border-box",
-    padding: "13px",
-    borderRadius: "9px",
-    border: "1px solid #293850",
-    background: "#070b12",
-    color: "#fff",
-    outline: "none",
-    resize: "vertical",
+    fontSize: "14px",
   },
 
   formActions: {
     display: "flex",
     gap: "10px",
-    marginTop: "18px",
+    marginTop: "20px",
+    flexWrap: "wrap",
   },
 
-  saveButton: {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "8px",
-    minWidth: "150px",
-    padding: "12px 16px",
-    border: 0,
-    borderRadius: "9px",
-    background: "#fff",
-    color: "#000",
+  primaryButton: {
+    border: "none",
+    background: "#ff3030",
+    color: "#fff",
+    padding: "13px 18px",
+    borderRadius: "10px",
     fontWeight: "900",
     cursor: "pointer",
   },
 
-  buttonDisabled: {
-    opacity: 0.65,
-    cursor: "not-allowed",
-  },
-
-  cancelButton: {
-    padding: "12px 16px",
-    borderRadius: "9px",
-    border: "1px solid #293850",
-    background: "#151d29",
+  secondaryButton: {
+    border: "1px solid #333",
+    background: "#171717",
     color: "#fff",
+    padding: "12px 16px",
+    borderRadius: "10px",
     fontWeight: "800",
     cursor: "pointer",
   },
 
-  smallSpinner: {
-    display: "inline-block",
-    width: "13px",
-    height: "13px",
-    borderRadius: "50%",
-    border: "2px solid rgba(0,0,0,.25)",
-    borderTopColor: "currentColor",
-    animation:
-      "xenovaSpin 0.7s linear infinite",
+  refreshButton: {
+    border: "1px solid #333",
+    background: "#121212",
+    color: "#fff",
+    padding: "10px 14px",
+    borderRadius: "9px",
+    cursor: "pointer",
+    fontWeight: "800",
   },
 
-  listHeader: {
+  sectionHeader: {
     display: "flex",
-    justifyContent: "space-between",
     alignItems: "center",
+    justifyContent: "space-between",
     gap: "15px",
-    marginBottom: "14px",
+    marginBottom: "15px",
   },
 
   count: {
-    color: "#718097",
-    fontSize: "12px",
+    color: "#666",
+    fontSize: "13px",
+    marginTop: "5px",
   },
 
-  products: {
-    display: "grid",
-    gridTemplateColumns:
-      "repeat(auto-fit, minmax(280px, 1fr))",
+  list: {
+    display: "flex",
+    flexDirection: "column",
     gap: "15px",
   },
 
-  product: {
-    padding: "18px",
-    borderRadius: "15px",
-    background:
-      "linear-gradient(145deg, #111927, #0b111b)",
-    border: "1px solid #202d42",
-  },
-
-  demoPreview: {
-    marginBottom: "15px",
-    borderRadius: "11px",
+  productCard: {
+    background: "#101010",
+    border: "1px solid #222",
+    borderRadius: "16px",
     overflow: "hidden",
-    background: "#070b10",
-    border: "1px solid #26344a",
   },
 
-  demoImage: {
-    display: "block",
+  imageBox: {
     width: "100%",
-    maxHeight: "240px",
-    objectFit: "contain",
-    background: "#070b10",
+    height: "240px",
+    background: "#080808",
+    overflow: "hidden",
+  },
+
+  image: {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    display: "block",
+  },
+
+  noImage: {
+    width: "100%",
+    height: "100%",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "8px",
+    color: "#555",
+    fontSize: "12px",
+    fontWeight: "800",
+  },
+
+  productBody: {
+    padding: "18px",
   },
 
   productTop: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    gap: "10px",
+    gap: "15px",
   },
 
   productName: {
-    fontSize: "18px",
+    fontSize: "20px",
     fontWeight: "900",
   },
 
-  productId: {
-    marginTop: "4px",
-    color: "#5e6c80",
-    fontSize: "10px",
+  category: {
+    color: "#888",
+    fontSize: "13px",
+    marginTop: "6px",
   },
 
-  active: {
-    color: "#61e28b",
-    fontSize: "10px",
-    fontWeight: "900",
-    whiteSpace: "nowrap",
-  },
-
-  inactive: {
-    color: "#ff777d",
-    fontSize: "10px",
+  status: {
+    border: "1px solid",
+    borderRadius: "999px",
+    padding: "6px 10px",
+    fontSize: "11px",
     fontWeight: "900",
     whiteSpace: "nowrap",
   },
 
-  categoryTag: {
-    display: "inline-block",
-    marginTop: "13px",
-    padding: "7px 9px",
-    borderRadius: "7px",
-    background: "#15223a",
-    border: "1px solid #263c65",
-    color: "#8db9ff",
-    fontSize: "10px",
-    fontWeight: "800",
-  },
-
-  productInfo: {
+  infoGrid: {
     display: "grid",
     gridTemplateColumns:
-      "1fr 1fr",
+      "repeat(3,1fr)",
     gap: "10px",
-    marginTop: "15px",
+    marginTop: "18px",
+    padding: "14px",
+    background: "#090909",
+    borderRadius: "10px",
   },
 
   infoLabel: {
     display: "block",
-    color: "#647187",
+    color: "#666",
     fontSize: "10px",
-    marginBottom: "4px",
+    fontWeight: "800",
+    marginBottom: "5px",
   },
 
-  infoValue: {
-    display: "block",
-    fontSize: "14px",
+  price: {
+    color: "#ff4545",
   },
 
   description: {
-    marginTop: "13px",
-    color: "#78869a",
-    fontSize: "12px",
-    lineHeight: 1.5,
+    marginTop: "15px",
+    padding: "12px",
+    background: "#0a0a0a",
+    borderRadius: "9px",
+    color: "#aaa",
+    fontSize: "13px",
+    lineHeight: "1.5",
   },
 
   imageActions: {
     display: "flex",
-    flexWrap: "wrap",
     gap: "8px",
-    marginTop: "16px",
+    flexWrap: "wrap",
+    marginTop: "15px",
   },
 
   uploadButton: {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    gap: "7px",
-    padding: "9px 11px",
-    borderRadius: "8px",
-    background: "#17243a",
-    border: "1px solid #31486a",
-    color: "#8db9ff",
-    fontSize: "10px",
-    fontWeight: "900",
+    padding: "10px 13px",
+    background: "#202020",
+    border: "1px solid #383838",
+    color: "#fff",
+    borderRadius: "9px",
     cursor: "pointer",
+    fontSize: "12px",
+    fontWeight: "900",
   },
 
-  uploadButtonDisabled: {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "7px",
-    padding: "9px 11px",
-    borderRadius: "8px",
-    background: "#151b25",
-    border: "1px solid #293850",
-    color: "#657287",
-    fontSize: "10px",
-    fontWeight: "900",
-    cursor: "not-allowed",
-  },
-
-  removeImageButton: {
-    padding: "9px 11px",
-    borderRadius: "8px",
-    background: "#261417",
-    border: "1px solid #542b30",
-    color: "#ff777d",
-    fontSize: "10px",
-    fontWeight: "900",
+  deleteImageButton: {
+    padding: "10px 13px",
+    background: "#301010",
+    border: "1px solid #5a1c1c",
+    color: "#ff7777",
+    borderRadius: "9px",
     cursor: "pointer",
+    fontSize: "12px",
+    fontWeight: "900",
   },
 
   actions: {
     display: "flex",
-    flexWrap: "wrap",
     gap: "8px",
-    marginTop: "15px",
-    paddingTop: "15px",
-    borderTop:
-      "1px solid #202d42",
+    flexWrap: "wrap",
+    marginTop: "10px",
   },
 
   editButton: {
-    padding: "9px 12px",
-    borderRadius: "8px",
-    border: "1px solid #31486a",
-    background: "#17243a",
-    color: "#8db9ff",
-    fontSize: "10px",
-    fontWeight: "900",
+    flex: 1,
+    minWidth: "100px",
+    padding: "11px",
+    border: "1px solid #333",
+    background: "#181818",
+    color: "#fff",
+    borderRadius: "9px",
     cursor: "pointer",
+    fontWeight: "800",
   },
 
   toggleButton: {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "7px",
-    padding: "9px 12px",
-    borderRadius: "8px",
-    border: "1px solid #4d4a25",
-    background: "#292714",
-    color: "#e7dc73",
-    fontSize: "10px",
-    fontWeight: "900",
+    flex: 1,
+    minWidth: "100px",
+    padding: "11px",
+    border: "1px solid #333",
+    background: "#181818",
+    color: "#fff",
+    borderRadius: "9px",
     cursor: "pointer",
+    fontWeight: "800",
   },
 
   deleteButton: {
-    padding: "9px 12px",
-    borderRadius: "8px",
-    border: "1px solid #542b30",
-    background: "#261417",
-    color: "#ff777d",
-    fontSize: "10px",
-    fontWeight: "900",
+    flex: 1,
+    minWidth: "100px",
+    padding: "11px",
+    border: "1px solid #5a1c1c",
+    background: "#241010",
+    color: "#ff7070",
+    borderRadius: "9px",
     cursor: "pointer",
+    fontWeight: "800",
+  },
+
+  errorBox: {
+    marginBottom: "18px",
+    padding: "15px",
+    background: "#2a0e0e",
+    border: "1px solid #6b2222",
+    borderRadius: "10px",
+    color: "#ff8a8a",
+    lineHeight: "1.5",
+  },
+
+  successBox: {
+    marginBottom: "18px",
+    padding: "14px",
+    background: "#0b2516",
+    border: "1px solid #18572f",
+    borderRadius: "10px",
+    color: "#5ee88d",
+  },
+
+  retryButton: {
+    marginTop: "12px",
+    padding: "9px 13px",
+    border: "1px solid #6b3030",
+    background: "#401515",
+    color: "#fff",
+    borderRadius: "8px",
+    cursor: "pointer",
+    fontWeight: "800",
   },
 
   empty: {
     padding: "50px 20px",
     textAlign: "center",
+    background: "#101010",
+    border: "1px solid #222",
     borderRadius: "15px",
-    background: "#0d1420",
-    border: "1px solid #202d42",
-    color: "#718097",
+    color: "#666",
   },
 };
-
-/*
-  Loading animation.
-  Không cần sửa globals.css.
-*/
-if (
-  typeof document !== "undefined" &&
-  !document.getElementById(
-    "xenova-admin-product-loading"
-  )
-) {
-  const style =
-    document.createElement("style");
-
-  style.id =
-    "xenova-admin-product-loading";
-
-  style.textContent = `
-    @keyframes xenovaSpin {
-      from {
-        transform: rotate(0deg);
-      }
-      to {
-        transform: rotate(360deg);
-      }
-    }
-  `;
-
-  document.head.appendChild(style);
-}
