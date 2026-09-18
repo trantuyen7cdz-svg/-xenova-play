@@ -14,12 +14,16 @@ export async function GET() {
       .not("product_id", "is", null);
 
     if (error) {
-      console.error("STOCK LOAD ERROR:", error);
+      console.error(
+        "STOCK LOAD ERROR:",
+        error
+      );
 
       return NextResponse.json(
         {
           success: false,
-          message: "Không thể tải tồn kho.",
+          message:
+            "Không thể tải tồn kho.",
         },
         { status: 500 }
       );
@@ -28,12 +32,27 @@ export async function GET() {
     const stock = {};
 
     for (const row of data || []) {
-      if (row.status !== "available") continue;
+      const productId = Number(
+        row.product_id
+      );
 
-      const productId = String(row.product_id);
+      if (!stock[productId]) {
+        stock[productId] = {
+          available: 0,
+          sold: 0,
+          total: 0,
+        };
+      }
 
-      stock[productId] =
-        Number(stock[productId] || 0) + 1;
+      stock[productId].total += 1;
+
+      if (
+        row.status === "available"
+      ) {
+        stock[productId].available += 1;
+      } else {
+        stock[productId].sold += 1;
+      }
     }
 
     return NextResponse.json({
@@ -41,7 +60,10 @@ export async function GET() {
       stock,
     });
   } catch (error) {
-    console.error("STOCK API ERROR:", error);
+    console.error(
+      "STOCK API ERROR:",
+      error
+    );
 
     return NextResponse.json(
       {
