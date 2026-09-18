@@ -8,133 +8,96 @@ export default function ShopPage() {
   const router = useRouter();
 
   const [user, setUser] = useState(null);
-  const [wallet, setWallet] = useState(null);
-
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
   const [stock, setStock] = useState({});
 
-  const [selectedCategory, setSelectedCategory] = useState(null);
-
   const [loading, setLoading] = useState(true);
-  const [buying, setBuying] = useState(false);
-
-  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const [selectedProduct, setSelectedProduct] = useState(null);
-  const [successKey, setSuccessKey] = useState(null);
+  const [wallet, setWallet] = useState(0);
 
-  const [dark, setDark] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState(null);
+
+  const [buyModal, setBuyModal] = useState(null);
+  const [successModal, setSuccessModal] = useState(null);
+
+  const [buying, setBuying] = useState(false);
+  const [message, setMessage] = useState("");
 
   useEffect(() => {
     loadShop();
 
-    const syncTheme = () => {
-      setDark(
-        document.documentElement.getAttribute("data-theme") === "dark"
-      );
-    };
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      const currentUser = session?.user || null;
 
-    syncTheme();
-
-    const observer = new MutationObserver(syncTheme);
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["data-theme"],
+      setUser(currentUser);
+      loadWallet(currentUser);
     });
 
-    return () => observer.disconnect();
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   async function loadShop() {
     setLoading(true);
     setError("");
-    setMessage("");
 
     try {
-      const {
-        data: { user: currentUser },
-      } = await supabase.auth.getUser();
+      const [sessionResult, catalogResult, stockResult] =
+        await Promise.all([
+          supabase.auth.getSession(),
 
-      setUser(currentUser || null);
+          fetch("/api/shop/catalog", {
+            cache: "no-store",
+          }),
 
-      const [
-        categoriesResult,
-        productsResult,
-        stockResult,
-      ] = await Promise.all([
-        supabase
-          .from("product_categories")
-          .select("id,name,active,demo_image_url")
-          .eq("active", true)
-          .order("id", { ascending: true }),
+          fetch("/api/shop/stock", {
+            cache: "no-store",
+          }),
+        ]);
 
-        supabase
-          .from("products")
-          .select(`
-            id,
-            name,
-            description,
-            price,
-            duration_days,
-            active,
-            is_active,
-            demo_image_url,
-            category_id
-          `)
-          .eq("active", true)
-          .eq("is_active", true)
-          .order("id", { ascending: true }),
+      const session =
+        sessionResult?.data?.session || null;
 
-        fetch("/api/shop/stock", {
-          cache: "no-store",
-        })
-          .then((res) => res.json())
-          .catch(() => ({
-            success: false,
-            stock: {},
-          })),
-      ]);
+      const currentUser = session?.user || null;
 
-      if (categoriesResult.error) {
-        console.error(
-          "CATEGORY LOAD ERROR:",
-          categoriesResult.error
-        );
+      setUser(currentUser);
 
+      if (!catalogResult.ok) {
+        throw new Error("Không thể kết nối đến cửa hàng.");
+      }
+
+      if (!stockResult.ok) {
+        throw new Error("Không thể tải tồn kho.");
+      }
+
+      const catalogData = await catalogResult.json();
+      const stockData = await stockResult.json();
+
+      if (!catalogData.success) {
         throw new Error(
-          "Không thể tải danh mục: " +
-            categoriesResult.error.message
+          catalogData.message || "Không thể tải sản phẩm."
         );
       }
 
-      if (productsResult.error) {
-        console.error(
-          "PRODUCT LOAD ERROR:",
-          productsResult.error
-        );
-
+      if (!stockData.success) {
         throw new Error(
-          "Không thể tải sản phẩm: " +
-            productsResult.error.message
+          stockData.message || "Không thể tải tồn kho."
         );
       }
 
-      setCategories(categoriesResult.data || []);
-      setProducts(productsResult.data || []);
-
-      if (stockResult?.success) {
-        setStock(stockResult.stock || {});
-      } else {
-        setStock({});
-      }
+      setCategories(catalogData.categories || []);
+      setProducts(catalogData.products || []);
+      setStock(stockData.stock || {});
 
       if (currentUser) {
-        await loadWallet(currentUser.id);
+        await loadWallet(currentUser);
       } else {
-        setWallet(null);
+        setWallet(0);
       }
     } catch (err) {
       console.error("SHOP LOAD ERROR:", err);
@@ -147,56 +110,104 @@ export default function ShopPage() {
     }
   }
 
-  async function loadWallet(userId) {
+  async function loadWallet(currentUser) {
+    if (!currentUser) {
+      setWallet(0);
+      return;
+    }
+
     try {
-      const { data, error } = await supabase
+      const { data, error: walletError } = await supabase
         .from("wallets")
         .select("balance")
-        .eq("user_id", userId)
+        .eq("user_id", currentUser.id)
         .maybeSingle();
 
-      if (error) {
-        console.error("WALLET ERROR:", error);
+      if (walletError) {
+        console.error(
+          "WALLET LOAD ERROR:",
+          walletError
+        );
         return;
       }
 
-      setWallet(data || null);
+      setWallet(Number(data?.balance || 0));
     } catch (err) {
-      console.error("LOAD WALLET ERROR:", err);
+      console.error("WALLET ERROR:", err);
     }
   }
 
-  function getCategoryProducts(categoryId) {
+  const visibleProducts = useMemo(() => {
+    if (!selectedCategory) {
+      return [];
+    }
+
     return products.filter(
       (product) =>
-        Number(product.category_id) === Number(categoryId)
+        Number(product.category_id) ===
+        Number(selectedCategory.id)
     );
+  }, [products, selectedCategory]);
+
+  const categoryStock = useMemo(() => {
+    const result = {};
+
+    for (const product of products) {
+      const categoryId = Number(product.category_id);
+
+      if (!categoryId) {
+        continue;
+      }
+
+      const available = Number(
+        stock[Number(product.id)]?.available || 0
+      );
+
+      if (!result[categoryId]) {
+        result[categoryId] = 0;
+      }
+
+      result[categoryId] += available;
+    }
+
+    return result;
+  }, [products, stock]);
+
+  function formatPrice(price) {
+    return (
+      new Intl.NumberFormat("vi-VN").format(
+        Number(price || 0)
+      ) + "đ"
+    );
+  }
+
+  function formatDuration(days) {
+    const value = Number(days || 0);
+
+    if (value === 1) {
+      return "1 ngày";
+    }
+
+    if (value === 7) {
+      return "7 ngày";
+    }
+
+    if (value === 30) {
+      return "1 tháng";
+    }
+
+    return `${value} ngày`;
   }
 
   function getProductStock(productId) {
-    return Number(stock?.[productId]?.available || 0);
-  }
-
-  function getCategoryStock(categoryId) {
-    const categoryProducts =
-      getCategoryProducts(categoryId);
-
-    return categoryProducts.reduce(
-      (total, product) =>
-        total + getProductStock(product.id),
-      0
+    return Number(
+      stock[Number(productId)]?.available || 0
     );
   }
 
-  function formatMoney(value) {
-    return Number(value || 0).toLocaleString("vi-VN");
-  }
-
-  function openCategory(category) {
-    setSelectedCategory(category);
-    setSelectedProduct(null);
-    setError("");
+  function handleCategoryClick(category) {
     setMessage("");
+    setSelectedCategory(category);
 
     window.scrollTo({
       top: 0,
@@ -204,11 +215,9 @@ export default function ShopPage() {
     });
   }
 
-  function backToCategories() {
-    setSelectedCategory(null);
-    setSelectedProduct(null);
-    setError("");
+  function handleBackToCategories() {
     setMessage("");
+    setSelectedCategory(null);
 
     window.scrollTo({
       top: 0,
@@ -217,13 +226,12 @@ export default function ShopPage() {
   }
 
   function handleBuyClick(product) {
-    setError("");
     setMessage("");
 
     const available = getProductStock(product.id);
 
     if (available <= 0) {
-      setError(
+      setMessage(
         "Sản phẩm này hiện đã hết KEY."
       );
       return;
@@ -234,21 +242,47 @@ export default function ShopPage() {
       return;
     }
 
-    setSelectedProduct(product);
+    setBuyModal(product);
   }
 
   async function confirmBuy() {
-    if (!selectedProduct) return;
+    if (!buyModal || buying) {
+      return;
+    }
 
     if (!user) {
+      setBuyModal(null);
       router.push("/login");
       return;
     }
 
+    const product = buyModal;
+
+    const available = getProductStock(product.id);
+
+    if (available <= 0) {
+      setBuyModal(null);
+
+      setMessage(
+        "KEY đã hết. Vui lòng chọn sản phẩm khác."
+      );
+
+      await loadShop();
+      return;
+    }
+
+    if (Number(wallet) < Number(product.price)) {
+      setBuyModal(null);
+
+      setMessage(
+        "Số dư không đủ. Vui lòng nạp thêm tiền."
+      );
+
+      return;
+    }
+
     setBuying(true);
-    setError("");
     setMessage("");
-    setSuccessKey(null);
 
     try {
       const {
@@ -256,19 +290,23 @@ export default function ShopPage() {
       } = await supabase.auth.getSession();
 
       if (!session?.access_token) {
+        setBuyModal(null);
         router.push("/login");
         return;
       }
 
       const response = await fetch("/api/buy-key", {
         method: "POST",
+
         headers: {
           "Content-Type": "application/json",
+
           Authorization:
             `Bearer ${session.access_token}`,
         },
+
         body: JSON.stringify({
-          productId: selectedProduct.id,
+          product_id: Number(product.id),
         }),
       });
 
@@ -276,2050 +314,1489 @@ export default function ShopPage() {
 
       if (!response.ok || !data.success) {
         throw new Error(
-          data?.message || "Mua KEY thất bại."
+          data.message || "Không thể mua KEY."
         );
       }
 
-      setSuccessKey(data);
-      setSelectedProduct(null);
+      setBuyModal(null);
 
-      await Promise.all([
-        loadWallet(user.id),
-        reloadStock(),
-      ]);
+      setSuccessModal({
+        key:
+          data.key ||
+          data.key_code ||
+          data.data?.key ||
+          data.data?.key_code ||
+          "",
+        product,
+      });
+
+      await loadShop();
+
+      await loadWallet(user);
     } catch (err) {
       console.error("BUY KEY ERROR:", err);
 
-      setError(
-        err?.message || "Không thể mua KEY."
+      setMessage(
+        err?.message || "Mua KEY thất bại."
       );
     } finally {
       setBuying(false);
     }
   }
 
-  async function reloadStock() {
+  async function copyKey() {
+    const key = successModal?.key || "";
+
+    if (!key) {
+      return;
+    }
+
     try {
-      const response = await fetch(
-        "/api/shop/stock",
-        {
-          cache: "no-store",
-        }
+      await navigator.clipboard.writeText(key);
+
+      setMessage("Đã sao chép KEY.");
+    } catch {
+      setMessage(
+        "Không thể tự động sao chép KEY."
       );
-
-      const data = await response.json();
-
-      if (data?.success) {
-        setStock(data.stock || {});
-      }
-    } catch (err) {
-      console.error("RELOAD STOCK ERROR:", err);
     }
   }
 
-  const categoryCount = useMemo(
-    () => categories.length,
-    [categories]
-  );
-
-  if (loading) {
-    return (
-      <main
-        style={{
-          ...styles.loadingPage,
-          ...themeStyles(dark).page,
-        }}
-      >
-        <div style={styles.loadingLogo}>
-          X
-        </div>
-
-        <div style={styles.spinner} />
-
-        <div style={styles.loadingTitle}>
-          XENOVA PLAY
-        </div>
-
-        <div style={styles.loadingText}>
-          Đang tải cửa hàng...
-        </div>
-      </main>
-    );
+  function closeSuccessModal() {
+    setSuccessModal(null);
+    setMessage("");
   }
 
-  if (selectedCategory) {
-    const categoryProducts =
-      getCategoryProducts(
-        selectedCategory.id
-      );
-
-    const categoryStock =
-      getCategoryStock(
-        selectedCategory.id
-      );
-
-    return (
-      <main
-        style={{
-          ...styles.page,
-          ...themeStyles(dark).page,
-        }}
-      >
-        <div style={styles.container}>
-          <div style={styles.shopNav}>
-            <button
-              onClick={backToCategories}
-              style={{
-                ...styles.navBack,
-                ...themeStyles(dark).button,
-              }}
-            >
-              ← DANH MỤC
-            </button>
-
-            <div style={styles.navBrand}>
-              XENOVA <span>PLAY</span>
-            </div>
-
-            <div style={styles.navRight}>
-              {user ? (
-                <button
-                  onClick={() =>
-                    router.push("/deposit")
-                  }
-                  style={styles.balanceButton}
-                >
-                  <span>💰</span>
-                  {formatMoney(
-                    wallet?.balance || 0
-                  )}
-                  đ
-                </button>
-              ) : (
-                <button
-                  onClick={() =>
-                    router.push("/login")
-                  }
-                  style={
-                    styles.navLogin
-                  }
-                >
-                  ĐĂNG NHẬP
-                </button>
-              )}
-            </div>
-          </div>
-
-          <section
-            style={{
-              ...styles.categoryHero,
-              ...themeStyles(dark).card,
-            }}
-          >
-            {selectedCategory.demo_image_url ? (
-              <img
-                src={
-                  selectedCategory.demo_image_url
-                }
-                alt={selectedCategory.name}
-                style={styles.categoryHeroImage}
-              />
-            ) : (
-              <div
-                style={
-                  styles.categoryHeroNoImage
-                }
-              >
-                📁
-              </div>
-            )}
-
-            <div style={styles.heroGradient} />
-
-            <div style={styles.heroContent}>
-              <div style={styles.heroLabel}>
-                XENOVA PLAY SHOP
-              </div>
-
-              <h1 style={styles.heroTitle}>
-                {selectedCategory.name}
-              </h1>
-
-              <div style={styles.heroMeta}>
-                {categoryProducts.length} sản phẩm
-                <span>•</span>
-                Còn {categoryStock} KEY
-              </div>
-            </div>
-          </section>
-
-          {error && (
-            <div
-              style={{
-                ...styles.errorBox,
-                ...themeStyles(dark).error,
-              }}
-            >
-              <span>⚠️</span>
-              <span>{error}</span>
-
-              <button
-                onClick={() => {
-                  setError("");
-                  loadShop();
-                }}
-                style={styles.errorRetry}
-              >
-                Thử lại
-              </button>
-            </div>
-          )}
-
-          {message && (
-            <div
-              style={{
-                ...styles.successBox,
-                ...themeStyles(dark).success,
-              }}
-            >
-              ✓ {message}
-            </div>
-          )}
-
-          <div style={styles.sectionHeader}>
-            <div>
-              <div style={styles.sectionTitle}>
-                SẢN PHẨM
-              </div>
-
-              <div
-                style={{
-                  ...styles.sectionSubtitle,
-                  ...themeStyles(dark).muted,
-                }}
-              >
-                Chọn sản phẩm bạn muốn mua
-              </div>
-            </div>
-
-            <div
-              style={{
-                ...styles.stockBadge,
-                ...themeStyles(dark).soft,
-              }}
-            >
-              🟢 {categoryStock} KEY
-            </div>
-          </div>
-
-          {categoryProducts.length === 0 ? (
-            <EmptyState
-              dark={dark}
-              text="Danh mục này chưa có sản phẩm."
-            />
-          ) : (
-            <div style={styles.productGrid}>
-              {categoryProducts.map(
-                (product, index) => (
-                  <ProductCard
-                    key={product.id}
-                    product={product}
-                    stock={getProductStock(
-                      product.id
-                    )}
-                    onBuy={() =>
-                      handleBuyClick(product)
-                    }
-                    dark={dark}
-                    index={index}
-                  />
-                )
-              )}
-            </div>
-          )}
-
-          <button
-            onClick={() =>
-              router.push("/deposit")
-            }
-            style={styles.depositButton}
-          >
-            <span>💰</span>
-            NẠP TIỀN
-            <span style={styles.buttonArrow}>
-              →
-            </span>
-          </button>
-        </div>
-
-        {selectedProduct && (
-          <BuyModal
-            product={selectedProduct}
-            buying={buying}
-            balance={wallet?.balance || 0}
-            stock={getProductStock(
-              selectedProduct.id
-            )}
-            onClose={() =>
-              setSelectedProduct(null)
-            }
-            onConfirm={confirmBuy}
-            dark={dark}
-          />
-        )}
-
-        {successKey && (
-          <SuccessModal
-            result={successKey}
-            onClose={() =>
-              setSuccessKey(null)
-            }
-            dark={dark}
-          />
-        )}
-      </main>
-    );
+  function goDeposit() {
+    router.push("/deposit");
   }
 
   return (
-    <main
-      style={{
-        ...styles.page,
-        ...themeStyles(dark).page,
-      }}
-    >
-      <div style={styles.container}>
-        {/* TOP NAV */}
-
-        <div style={styles.shopNav}>
-          <button
-            onClick={() =>
-              router.push("/")
-            }
-            style={{
-              ...styles.navHome,
-              ...themeStyles(dark).button,
-            }}
-          >
-            <span>⌂</span>
-          </button>
-
-          <div style={styles.navBrand}>
-            XENOVA <span>PLAY</span>
-          </div>
-
-          <div style={styles.navRight}>
-            {user ? (
-              <>
-                <button
-                  onClick={() =>
-                    router.push("/deposit")
-                  }
-                  style={styles.balanceButton}
-                >
-                  <span>💰</span>
-                  {formatMoney(
-                    wallet?.balance || 0
-                  )}
-                  đ
-                </button>
-              </>
-            ) : (
-              <button
-                onClick={() =>
-                  router.push("/login")
-                }
-                style={
-                  styles.navLogin
-                }
-              >
-                ĐĂNG NHẬP
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* HERO */}
-
-        <section
-          style={{
-            ...styles.mainHero,
-            ...themeStyles(dark).hero,
-          }}
-        >
-          <div style={styles.heroGlow} />
-
-          <div style={styles.heroInner}>
-            <div style={styles.heroPill}>
-              <span style={styles.liveDot} />
-              XENOVA PLAY SHOP
+    <main className="shop-page">
+      <div className="shop-container">
+        <header className="shop-header">
+          <div>
+            <div className="shop-brand">
+              XENOVA PLAY
             </div>
 
-            <h1 style={styles.mainTitle}>
-              SHOP
-              <span> XENOVA</span>
-            </h1>
+            <div className="shop-subtitle">
+              Kho KEY tự động
+            </div>
+          </div>
 
-            <p
-              style={{
-                ...styles.mainSubtitle,
-                ...themeStyles(dark).muted,
-              }}
-            >
-              Chọn sản phẩm yêu thích và
-              nhận KEY ngay sau khi thanh toán.
-            </p>
+          <div className="shop-wallet">
+            <div>
+              <div className="wallet-label">
+                SỐ DƯ
+              </div>
+
+              <div className="wallet-value">
+                {user
+                  ? formatPrice(wallet)
+                  : "Đăng nhập để mua"}
+              </div>
+            </div>
 
             <button
-              onClick={() =>
-                router.push("/deposit")
-              }
-              style={styles.mainDeposit}
+              type="button"
+              className="deposit-button"
+              onClick={goDeposit}
             >
-              <span>💰</span>
-              NẠP TIỀN
-              <span style={styles.mainDepositArrow}>
-                →
-              </span>
+              + NẠP TIỀN
             </button>
           </div>
-        </section>
+        </header>
 
-        {/* ERROR */}
+        {message && (
+          <div className="message-box">
+            <span>!</span>
+            <div>{message}</div>
+          </div>
+        )}
 
-        {error && (
-          <div
-            style={{
-              ...styles.errorBox,
-              ...themeStyles(dark).error,
-            }}
-          >
-            <span>⚠️</span>
-            <span style={{ flex: 1 }}>
-              {error}
-            </span>
+        {loading ? (
+          <LoadingScreen />
+        ) : error ? (
+          <div className="error-card">
+            <div className="error-icon">
+              !
+            </div>
+
+            <h2>
+              Không thể tải cửa hàng
+            </h2>
+
+            <p>{error}</p>
 
             <button
+              type="button"
               onClick={loadShop}
-              style={styles.errorRetry}
+              className="retry-button"
             >
               THỬ LẠI
             </button>
           </div>
-        )}
+        ) : selectedCategory ? (
+          <section className="products-section">
+            <div className="section-top">
+              <button
+                type="button"
+                className="back-button"
+                onClick={handleBackToCategories}
+              >
+                ← DANH MỤC
+              </button>
 
-        {successKey && (
-          <SuccessModal
-            result={successKey}
-            onClose={() =>
-              setSuccessKey(null)
-            }
-            dark={dark}
-          />
-        )}
+              <div>
+                <h1>
+                  {selectedCategory.name}
+                </h1>
 
-        {/* CATEGORY HEADER */}
-
-        <div style={styles.categoryHeading}>
-          <div>
-            <div
-              style={styles.categoryHeadingTitle}
-            >
-              🛒 DANH MỤC SẢN PHẨM
+                <p>
+                  {visibleProducts.length} sản phẩm
+                  {" • "}
+                  {categoryStock[
+                    Number(selectedCategory.id)
+                  ] || 0}{" "}
+                  KEY có sẵn
+                </p>
+              </div>
             </div>
 
-            <div
-              style={{
-                ...styles.categoryHeadingSub,
-                ...themeStyles(dark).muted,
-              }}
-            >
-              {categoryCount} danh mục • Chọn
-              danh mục để xem sản phẩm
-            </div>
-          </div>
+            {visibleProducts.length === 0 ? (
+              <div className="empty-card">
+                <div className="empty-icon">
+                  📦
+                </div>
 
-          <div
-            style={{
-              ...styles.totalBadge,
-              ...themeStyles(dark).soft,
-            }}
-          >
-            XENOVA
-          </div>
-        </div>
+                <h2>
+                  Chưa có sản phẩm
+                </h2>
 
-        {/* CATEGORY GRID — LUÔN 2 CỘT */}
+                <p>
+                  Danh mục này hiện chưa có sản phẩm
+                  đang bán.
+                </p>
+              </div>
+            ) : (
+              <div className="products-grid">
+                {visibleProducts.map((product) => {
+                  const available =
+                    getProductStock(product.id);
 
-        {categories.length === 0 ? (
-          <EmptyState
-            dark={dark}
-            text="Hiện chưa có danh mục sản phẩm."
-          />
-        ) : (
-          <div style={styles.categoryGrid}>
-            {categories.map(
-              (category, index) => {
-                const count =
-                  getCategoryProducts(
-                    category.id
-                  ).length;
-
-                const available =
-                  getCategoryStock(
-                    category.id
-                  );
-
-                return (
-                  <button
-                    key={category.id}
-                    onClick={() =>
-                      openCategory(
-                        category
-                      )
-                    }
-                    style={{
-                      ...styles.categoryCard,
-                      ...themeStyles(dark).card,
-                      animationDelay:
-                        `${index * 60}ms`,
-                    }}
-                  >
-                    <div
-                      style={
-                        styles.categoryImageBox
-                      }
+                  return (
+                    <article
+                      key={product.id}
+                      className="product-card"
                     >
-                      {category.demo_image_url ? (
-                        <img
-                          src={
-                            category.demo_image_url
-                          }
-                          alt={
-                            category.name
-                          }
-                          style={
-                            styles.categoryImage
-                          }
-                        />
-                      ) : (
-                        <div
-                          style={
-                            styles.categoryNoImage
-                          }
-                        >
-                          📁
-                        </div>
-                      )}
+                      <div className="product-image-wrap">
+                        {product.demo_image_url ? (
+                          <img
+                            src={product.demo_image_url}
+                            alt={product.name}
+                            className="product-image"
+                          />
+                        ) : (
+                          <div className="product-placeholder">
+                            X
+                          </div>
+                        )}
 
-                      <div
-                        style={
-                          styles.imageOverlay
-                        }
-                      />
-
-                      <div
-                        style={
-                          styles.categoryTopBadge
-                        }
-                      >
-                        {available > 0
-                          ? `CÒN ${available} KEY`
-                          : "HẾT KEY"}
-                      </div>
-                    </div>
-
-                    <div
-                      style={
-                        styles.categoryContent
-                      }
-                    >
-                      <div
-                        style={
-                          styles.categoryName
-                        }
-                      >
-                        {category.name}
-                      </div>
-
-                      <div
-                        style={{
-                          ...styles.categoryDescription,
-                          ...themeStyles(dark).muted,
-                        }}
-                      >
-                        {count} sản phẩm
-                      </div>
-
-                      <div
-                        style={
-                          styles.categoryBottom
-                        }
-                      >
                         <span
-                          style={{
-                            ...styles.availableText,
-                            color:
-                              available > 0
-                                ? "#18a558"
-                                : "#999",
-                          }}
+                          className={
+                            available > 0
+                              ? "stock-badge available"
+                              : "stock-badge soldout"
+                          }
                         >
-                          ●{" "}
                           {available > 0
-                            ? `${available} KEY có sẵn`
-                            : "Tạm hết hàng"}
-                        </span>
-
-                        <span
-                          style={
-                            styles.viewButton
-                          }
-                        >
-                          XEM TẤT CẢ
-                          <span>→</span>
+                            ? `${available} KEY`
+                            : "HẾT KEY"}
                         </span>
                       </div>
-                    </div>
-                  </button>
-                );
-              }
+
+                      <div className="product-content">
+                        <h2>
+                          {product.name}
+                        </h2>
+
+                        {product.description && (
+                          <p className="product-description">
+                            {product.description}
+                          </p>
+                        )}
+
+                        <div className="product-info">
+                          <div>
+                            <span>
+                              Thời hạn
+                            </span>
+
+                            <strong>
+                              {formatDuration(
+                                product.duration_days
+                              )}
+                            </strong>
+                          </div>
+
+                          <div className="product-price">
+                            <span>
+                              Giá bán
+                            </span>
+
+                            <strong>
+                              {formatPrice(
+                                product.price
+                              )}
+                            </strong>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="buy-button"
+                          disabled={available <= 0}
+                          onClick={() =>
+                            handleBuyClick(product)
+                          }
+                        >
+                          {available > 0
+                            ? "MUA NGAY"
+                            : "HẾT KEY"}
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
             )}
-          </div>
+          </section>
+        ) : (
+          <section className="categories-section">
+            <div className="section-heading">
+              <div>
+                <span className="section-kicker">
+                  XENOVA STORE
+                </span>
+
+                <h1>
+                  DANH MỤC SẢN PHẨM
+                </h1>
+
+                <p>
+                  Chọn danh mục để xem các KEY
+                  đang được bán.
+                </p>
+              </div>
+
+              <div className="catalog-count">
+                <strong>
+                  {categories.length}
+                </strong>
+
+                <span>
+                  danh mục
+                </span>
+              </div>
+            </div>
+
+            {categories.length === 0 ? (
+              <div className="empty-card">
+                <div className="empty-icon">
+                  📦
+                </div>
+
+                <h2>
+                  Chưa có danh mục
+                </h2>
+
+                <p>
+                  Hiện chưa có sản phẩm nào
+                  được mở bán.
+                </p>
+              </div>
+            ) : (
+              <div className="categories-grid">
+                {categories.map((category) => {
+                  const available =
+                    categoryStock[
+                      Number(category.id)
+                    ] || 0;
+
+                  const productCount =
+                    products.filter(
+                      (product) =>
+                        Number(
+                          product.category_id
+                        ) ===
+                        Number(category.id)
+                    ).length;
+
+                  return (
+                    <button
+                      type="button"
+                      key={category.id}
+                      className="category-card"
+                      onClick={() =>
+                        handleCategoryClick(
+                          category
+                        )
+                      }
+                    >
+                      <div className="category-image-wrap">
+                        {category.demo_image_url ? (
+                          <img
+                            src={
+                              category.demo_image_url
+                            }
+                            alt={
+                              category.name
+                            }
+                            className="category-image"
+                          />
+                        ) : (
+                          <div className="category-placeholder">
+                            X
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="category-content">
+                        <div>
+                          <h2>
+                            {category.name}
+                          </h2>
+
+                          <p>
+                            {productCount} sản phẩm
+                          </p>
+                        </div>
+
+                        <div className="category-stock">
+                          <span>
+                            KEY có sẵn
+                          </span>
+
+                          <strong>
+                            {available}
+                          </strong>
+                        </div>
+                      </div>
+
+                      <div className="category-footer">
+                        <span>
+                          XEM TẤT CẢ
+                        </span>
+
+                        <span className="arrow">
+                          →
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </section>
         )}
-
-        {/* FOOTER */}
-
-        <div
-          style={{
-            ...styles.footer,
-            ...themeStyles(dark).muted,
-          }}
-        >
-          <div style={styles.footerLogo}>
-            XENOVA PLAY
-          </div>
-
-          <div>
-            © 2026 XENOVA PLAY • SHOP
-          </div>
-        </div>
       </div>
 
-      {selectedProduct && (
-        <BuyModal
-          product={selectedProduct}
-          buying={buying}
-          balance={wallet?.balance || 0}
-          stock={getProductStock(
-            selectedProduct.id
-          )}
-          onClose={() =>
-            setSelectedProduct(null)
+      {buyModal && (
+        <div
+          className="modal-overlay"
+          onClick={() =>
+            !buying && setBuyModal(null)
           }
-          onConfirm={confirmBuy}
-          dark={dark}
-        />
+        >
+          <div
+            className="buy-modal"
+            onClick={(event) =>
+              event.stopPropagation()
+            }
+          >
+            <div className="modal-icon">
+              🛒
+            </div>
+
+            <h2>
+              Xác nhận mua KEY
+            </h2>
+
+            <p>
+              Bạn có chắc muốn mua:
+            </p>
+
+            <strong className="modal-product-name">
+              {buyModal.name}
+            </strong>
+
+            <div className="modal-summary">
+              <div>
+                <span>
+                  Giá
+                </span>
+
+                <strong>
+                  {formatPrice(
+                    buyModal.price
+                  )}
+                </strong>
+              </div>
+
+              <div>
+                <span>
+                  Thời hạn
+                </span>
+
+                <strong>
+                  {formatDuration(
+                    buyModal.duration_days
+                  )}
+                </strong>
+              </div>
+
+              <div>
+                <span>
+                  Số dư sau mua
+                </span>
+
+                <strong>
+                  {formatPrice(
+                    Number(wallet) -
+                      Number(
+                        buyModal.price
+                      )
+                  )}
+                </strong>
+              </div>
+            </div>
+
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="cancel-button"
+                disabled={buying}
+                onClick={() =>
+                  setBuyModal(null)
+                }
+              >
+                HỦY
+              </button>
+
+              <button
+                type="button"
+                className="confirm-button"
+                disabled={buying}
+                onClick={confirmBuy}
+              >
+                {buying ? (
+                  <>
+                    <span className="spinner" />
+                    ĐANG MUA...
+                  </>
+                ) : (
+                  "XÁC NHẬN MUA"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
+
+      {successModal && (
+        <div className="modal-overlay">
+          <div className="success-modal">
+            <div className="success-icon">
+              ✓
+            </div>
+
+            <h2>
+              Mua KEY thành công
+            </h2>
+
+            <p>
+              KEY của bạn:
+            </p>
+
+            <div className="key-box">
+              {successModal.key ? (
+                <code>
+                  {successModal.key}
+                </code>
+              ) : (
+                <span>
+                  Không nhận được KEY.
+                  Vui lòng kiểm tra mục KEY
+                  của bạn.
+                </span>
+              )}
+            </div>
+
+            {successModal.key && (
+              <button
+                type="button"
+                className="copy-button"
+                onClick={copyKey}
+              >
+                📋 SAO CHÉP KEY
+              </button>
+            )}
+
+            <div className="success-actions">
+              <button
+                type="button"
+                className="keys-button"
+                onClick={() =>
+                  router.push("/keys")
+                }
+              >
+                KEY CỦA TÔI
+              </button>
+
+              <button
+                type="button"
+                className="close-button"
+                onClick={closeSuccessModal}
+              >
+                ĐÓNG
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style jsx global>{`
+        .shop-page {
+          min-height: 100vh;
+          padding: 95px 16px 80px;
+          background: #f7f8fc;
+          color: #111827;
+        }
+
+        .shop-container {
+          width: 100%;
+          max-width: 1180px;
+          margin: 0 auto;
+        }
+
+        .shop-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 20px;
+          margin-bottom: 30px;
+          padding: 22px 24px;
+          border: 1px solid #e5e7eb;
+          border-radius: 22px;
+          background: #ffffff;
+          box-shadow:
+            0 12px 35px rgba(15, 23, 42, 0.07);
+        }
+
+        .shop-brand {
+          font-size: 28px;
+          font-weight: 900;
+          letter-spacing: -1px;
+        }
+
+        .shop-subtitle {
+          margin-top: 5px;
+          color: #6b7280;
+          font-size: 14px;
+        }
+
+        .shop-wallet {
+          display: flex;
+          align-items: center;
+          gap: 15px;
+        }
+
+        .wallet-label {
+          font-size: 11px;
+          color: #6b7280;
+          font-weight: 800;
+        }
+
+        .wallet-value {
+          margin-top: 3px;
+          font-size: 17px;
+          font-weight: 900;
+        }
+
+        .deposit-button,
+        .buy-button,
+        .confirm-button,
+        .retry-button,
+        .copy-button {
+          border: 0;
+          cursor: pointer;
+          font-weight: 900;
+          transition:
+            transform 0.18s ease,
+            box-shadow 0.18s ease,
+            opacity 0.18s ease;
+        }
+
+        .deposit-button {
+          padding: 11px 16px;
+          border-radius: 12px;
+          color: #fff;
+          background: #111827;
+        }
+
+        .deposit-button:hover,
+        .buy-button:hover,
+        .confirm-button:hover,
+        .copy-button:hover,
+        .retry-button:hover {
+          transform: translateY(-2px);
+          box-shadow:
+            0 9px 22px rgba(15, 23, 42, 0.15);
+        }
+
+        .section-heading {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-end;
+          gap: 20px;
+          margin-bottom: 20px;
+        }
+
+        .section-kicker {
+          font-size: 11px;
+          font-weight: 900;
+          color: #6b7280;
+          letter-spacing: 1.5px;
+        }
+
+        .section-heading h1,
+        .section-top h1 {
+          margin: 5px 0;
+          font-size: 28px;
+          font-weight: 900;
+          letter-spacing: -0.8px;
+        }
+
+        .section-heading p,
+        .section-top p {
+          margin: 0;
+          color: #6b7280;
+          font-size: 14px;
+        }
+
+        .catalog-count {
+          min-width: 100px;
+          padding: 13px 18px;
+          border-radius: 16px;
+          background: #fff;
+          border: 1px solid #e5e7eb;
+          text-align: center;
+        }
+
+        .catalog-count strong {
+          display: block;
+          font-size: 22px;
+        }
+
+        .catalog-count span {
+          color: #6b7280;
+          font-size: 12px;
+        }
+
+        .categories-grid {
+          display: grid;
+          grid-template-columns:
+            repeat(2, minmax(0, 1fr));
+          gap: 18px;
+        }
+
+        .category-card {
+          position: relative;
+          padding: 0;
+          overflow: hidden;
+          text-align: left;
+          cursor: pointer;
+          border: 1px solid #e5e7eb;
+          border-radius: 20px;
+          background: #fff;
+          color: inherit;
+          box-shadow:
+            0 8px 25px rgba(15, 23, 42, 0.05);
+          transition:
+            transform 0.22s ease,
+            box-shadow 0.22s ease,
+            border-color 0.22s ease;
+        }
+
+        .category-card:hover {
+          transform: translateY(-5px);
+          border-color: #d1d5db;
+          box-shadow:
+            0 18px 40px rgba(15, 23, 42, 0.12);
+        }
+
+        .category-image-wrap {
+          height: 145px;
+          overflow: hidden;
+          background: #eef2f7;
+        }
+
+        .category-image {
+          width: 100%;
+          height: 100%;
+          display: block;
+          object-fit: cover;
+          transition: transform 0.35s ease;
+        }
+
+        .category-card:hover
+          .category-image {
+          transform: scale(1.06);
+        }
+
+        .category-placeholder,
+        .product-placeholder {
+          width: 100%;
+          height: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background:
+            linear-gradient(
+              135deg,
+              #111827,
+              #374151
+            );
+          color: #fff;
+          font-size: 42px;
+          font-weight: 900;
+        }
+
+        .category-content {
+          display: flex;
+          justify-content: space-between;
+          gap: 15px;
+          padding: 18px 18px 12px;
+        }
+
+        .category-content h2 {
+          margin: 0;
+          font-size: 18px;
+          font-weight: 900;
+        }
+
+        .category-content p {
+          margin: 5px 0 0;
+          color: #6b7280;
+          font-size: 13px;
+        }
+
+        .category-stock {
+          text-align: right;
+          flex-shrink: 0;
+        }
+
+        .category-stock span {
+          display: block;
+          color: #6b7280;
+          font-size: 10px;
+          font-weight: 800;
+        }
+
+        .category-stock strong {
+          display: block;
+          margin-top: 3px;
+          font-size: 19px;
+        }
+
+        .category-footer {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin: 0 18px;
+          padding: 13px 0 17px;
+          border-top: 1px solid #f0f1f3;
+          color: #111827;
+          font-size: 11px;
+          font-weight: 900;
+        }
+
+        .arrow {
+          font-size: 18px;
+          transition: transform 0.18s ease;
+        }
+
+        .category-card:hover
+          .arrow {
+          transform: translateX(4px);
+        }
+
+        .section-top {
+          display: flex;
+          align-items: center;
+          gap: 18px;
+          margin-bottom: 22px;
+        }
+
+        .back-button {
+          border: 1px solid #e5e7eb;
+          background: #fff;
+          color: #111827;
+          padding: 11px 14px;
+          border-radius: 12px;
+          cursor: pointer;
+          font-weight: 900;
+        }
+
+        .products-grid {
+          display: grid;
+          grid-template-columns:
+            repeat(
+              auto-fit,
+              minmax(240px, 1fr)
+            );
+          gap: 18px;
+        }
+
+        .product-card {
+          overflow: hidden;
+          border: 1px solid #e5e7eb;
+          border-radius: 20px;
+          background: #fff;
+          box-shadow:
+            0 8px 25px rgba(15, 23, 42, 0.05);
+          transition:
+            transform 0.22s ease,
+            box-shadow 0.22s ease;
+        }
+
+        .product-card:hover {
+          transform: translateY(-5px);
+          box-shadow:
+            0 18px 40px rgba(15, 23, 42, 0.12);
+        }
+
+        .product-image-wrap {
+          position: relative;
+          height: 175px;
+          overflow: hidden;
+          background: #eef2f7;
+        }
+
+        .product-image {
+          width: 100%;
+          height: 100%;
+          display: block;
+          object-fit: cover;
+          transition: transform 0.35s ease;
+        }
+
+        .product-card:hover
+          .product-image {
+          transform: scale(1.06);
+        }
+
+        .stock-badge {
+          position: absolute;
+          top: 12px;
+          right: 12px;
+          padding: 7px 10px;
+          border-radius: 999px;
+          font-size: 10px;
+          font-weight: 900;
+          backdrop-filter: blur(8px);
+        }
+
+        .stock-badge.available {
+          background: rgba(255,255,255,.92);
+          color: #087443;
+        }
+
+        .stock-badge.soldout {
+          background: rgba(255,255,255,.92);
+          color: #b42318;
+        }
+
+        .product-content {
+          padding: 18px;
+        }
+
+        .product-content h2 {
+          margin: 0;
+          font-size: 18px;
+          font-weight: 900;
+        }
+
+        .product-description {
+          min-height: 40px;
+          margin: 7px 0 15px;
+          color: #6b7280;
+          font-size: 13px;
+          line-height: 1.5;
+        }
+
+        .product-info {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+          margin-bottom: 16px;
+        }
+
+        .product-info > div {
+          padding: 10px;
+          border-radius: 12px;
+          background: #f8fafc;
+        }
+
+        .product-info span {
+          display: block;
+          color: #6b7280;
+          font-size: 10px;
+          font-weight: 800;
+        }
+
+        .product-info strong {
+          display: block;
+          margin-top: 3px;
+          font-size: 13px;
+        }
+
+        .product-price strong {
+          font-size: 16px;
+        }
+
+        .buy-button {
+          width: 100%;
+          padding: 13px;
+          border-radius: 12px;
+          background: #111827;
+          color: #fff;
+        }
+
+        .buy-button:disabled {
+          cursor: not-allowed;
+          opacity: .45;
+          transform: none;
+          box-shadow: none;
+        }
+
+        .message-box {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          margin-bottom: 18px;
+          padding: 13px 15px;
+          border: 1px solid #fed7aa;
+          border-radius: 14px;
+          background: #fff7ed;
+          color: #9a3412;
+          font-size: 13px;
+          font-weight: 700;
+        }
+
+        .message-box span {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 23px;
+          height: 23px;
+          flex-shrink: 0;
+          border-radius: 50%;
+          background: #ea580c;
+          color: #fff;
+          font-weight: 900;
+        }
+
+        .error-card,
+        .empty-card {
+          padding: 55px 20px;
+          text-align: center;
+          border: 1px solid #e5e7eb;
+          border-radius: 22px;
+          background: #fff;
+        }
+
+        .error-icon,
+        .empty-icon {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 55px;
+          height: 55px;
+          margin: 0 auto 15px;
+          border-radius: 50%;
+          background: #f3f4f6;
+          font-size: 25px;
+          font-weight: 900;
+        }
+
+        .error-card h2,
+        .empty-card h2 {
+          margin: 0 0 7px;
+        }
+
+        .error-card p,
+        .empty-card p {
+          margin: 0 0 20px;
+          color: #6b7280;
+        }
+
+        .retry-button {
+          padding: 12px 18px;
+          border-radius: 12px;
+          background: #111827;
+          color: #fff;
+        }
+
+        .modal-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 9999;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 20px;
+          background: rgba(15, 23, 42, .58);
+          backdrop-filter: blur(8px);
+          animation: xenovaFade .18s ease;
+        }
+
+        .buy-modal,
+        .success-modal {
+          width: 100%;
+          max-width: 440px;
+          padding: 25px;
+          border-radius: 24px;
+          background: #fff;
+          color: #111827;
+          box-shadow:
+            0 25px 80px rgba(0,0,0,.25);
+          animation: xenovaModal .22s ease;
+        }
+
+        .modal-icon,
+        .success-icon {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 58px;
+          height: 58px;
+          margin-bottom: 15px;
+          border-radius: 18px;
+          background: #f3f4f6;
+          font-size: 27px;
+        }
+
+        .success-icon {
+          background: #dcfce7;
+          color: #15803d;
+          font-size: 30px;
+          font-weight: 900;
+        }
+
+        .buy-modal h2,
+        .success-modal h2 {
+          margin: 0 0 8px;
+          font-size: 22px;
+          font-weight: 900;
+        }
+
+        .buy-modal p,
+        .success-modal p {
+          margin: 0 0 8px;
+          color: #6b7280;
+          font-size: 14px;
+        }
+
+        .modal-product-name {
+          display: block;
+          margin-bottom: 18px;
+          font-size: 17px;
+        }
+
+        .modal-summary {
+          display: grid;
+          gap: 8px;
+          margin-bottom: 20px;
+        }
+
+        .modal-summary > div {
+          display: flex;
+          justify-content: space-between;
+          padding: 11px 13px;
+          border-radius: 12px;
+          background: #f8fafc;
+        }
+
+        .modal-summary span {
+          color: #6b7280;
+          font-size: 12px;
+        }
+
+        .modal-summary strong {
+          font-size: 13px;
+        }
+
+        .modal-actions,
+        .success-actions {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+        }
+
+        .cancel-button,
+        .close-button,
+        .keys-button {
+          padding: 13px;
+          border: 1px solid #e5e7eb;
+          border-radius: 12px;
+          background: #fff;
+          color: #111827;
+          cursor: pointer;
+          font-weight: 900;
+        }
+
+        .confirm-button,
+        .keys-button {
+          background: #111827;
+          color: #fff;
+        }
+
+        .confirm-button:disabled {
+          opacity: .65;
+          cursor: wait;
+        }
+
+        .spinner {
+          display: inline-block;
+          width: 14px;
+          height: 14px;
+          margin-right: 7px;
+          vertical-align: -2px;
+          border: 2px solid rgba(255,255,255,.4);
+          border-top-color: #fff;
+          border-radius: 50%;
+          animation: xenovaSpin .7s linear infinite;
+        }
+
+        .key-box {
+          margin: 15px 0;
+          padding: 15px;
+          overflow-x: auto;
+          border: 1px dashed #d1d5db;
+          border-radius: 14px;
+          background: #f8fafc;
+        }
+
+        .key-box code {
+          word-break: break-all;
+          color: #111827;
+          font-size: 15px;
+          font-weight: 900;
+        }
+
+        .copy-button {
+          width: 100%;
+          padding: 12px;
+          margin-bottom: 10px;
+          border-radius: 12px;
+          background: #111827;
+          color: #fff;
+        }
+
+        .loading-screen {
+          min-height: 45vh;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 15px;
+        }
+
+        .loading-spinner {
+          width: 42px;
+          height: 42px;
+          border: 4px solid #e5e7eb;
+          border-top-color: #111827;
+          border-radius: 50%;
+          animation: xenovaSpin .7s linear infinite;
+        }
+
+        .loading-screen span {
+          color: #6b7280;
+          font-size: 13px;
+          font-weight: 700;
+        }
+
+        @keyframes xenovaSpin {
+          to {
+            transform: rotate(360deg);
+          }
+        }
+
+        @keyframes xenovaFade {
+          from {
+            opacity: 0;
+          }
+
+          to {
+            opacity: 1;
+          }
+        }
+
+        @keyframes xenovaModal {
+          from {
+            opacity: 0;
+            transform: translateY(12px) scale(.98);
+          }
+
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+
+        @media (max-width: 700px) {
+          .shop-page {
+            padding: 82px 10px 75px;
+          }
+
+          .shop-header {
+            align-items: flex-start;
+            padding: 17px;
+            border-radius: 18px;
+          }
+
+          .shop-brand {
+            font-size: 22px;
+          }
+
+          .shop-wallet {
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 5px;
+          }
+
+          .wallet-value {
+            font-size: 13px;
+            text-align: right;
+          }
+
+          .deposit-button {
+            margin-top: 5px;
+            padding: 9px 11px;
+            font-size: 11px;
+          }
+
+          .section-heading {
+            align-items: center;
+          }
+
+          .section-heading h1,
+          .section-top h1 {
+            font-size: 21px;
+          }
+
+          .catalog-count {
+            min-width: 75px;
+            padding: 10px;
+          }
+
+          .categories-grid {
+            grid-template-columns:
+              repeat(2, minmax(0, 1fr));
+            gap: 10px;
+          }
+
+          .category-image-wrap {
+            height: 105px;
+          }
+
+          .category-content {
+            display: block;
+            padding: 12px;
+          }
+
+          .category-content h2 {
+            font-size: 14px;
+          }
+
+          .category-content p {
+            font-size: 11px;
+          }
+
+          .category-stock {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 8px;
+            text-align: left;
+          }
+
+          .category-stock strong {
+            font-size: 15px;
+          }
+
+          .category-footer {
+            margin: 0 12px;
+            padding: 10px 0 12px;
+            font-size: 9px;
+          }
+
+          .section-top {
+            align-items: flex-start;
+          }
+
+          .back-button {
+            padding: 9px;
+            font-size: 10px;
+            white-space: nowrap;
+          }
+
+          .products-grid {
+            grid-template-columns:
+              repeat(2, minmax(0, 1fr));
+            gap: 10px;
+          }
+
+          .product-image-wrap {
+            height: 120px;
+          }
+
+          .product-content {
+            padding: 12px;
+          }
+
+          .product-content h2 {
+            font-size: 14px;
+          }
+
+          .product-description {
+            min-height: 0;
+            font-size: 11px;
+          }
+
+          .product-info {
+            display: block;
+          }
+
+          .product-info > div {
+            margin-bottom: 5px;
+          }
+
+          .product-info strong {
+            font-size: 12px;
+          }
+
+          .product-price strong {
+            font-size: 14px;
+          }
+
+          .buy-button {
+            padding: 10px 5px;
+            font-size: 11px;
+          }
+
+          .modal-actions,
+          .success-actions {
+            grid-template-columns: 1fr;
+          }
+
+          .buy-modal,
+          .success-modal {
+            padding: 20px;
+            border-radius: 20px;
+          }
+        }
+
+        html[data-theme="dark"] .shop-page {
+          background: #080b12;
+          color: #f9fafb;
+        }
+
+        html[data-theme="dark"] .shop-header,
+        html[data-theme="dark"] .category-card,
+        html[data-theme="dark"] .product-card,
+        html[data-theme="dark"] .catalog-count,
+        html[data-theme="dark"] .error-card,
+        html[data-theme="dark"] .empty-card,
+        html[data-theme="dark"] .back-button {
+          background: #111722;
+          border-color: #252d3b;
+          color: #f9fafb;
+        }
+
+        html[data-theme="dark"] .shop-subtitle,
+        html[data-theme="dark"] .section-heading p,
+        html[data-theme="dark"] .section-top p,
+        html[data-theme="dark"] .category-content p,
+        html[data-theme="dark"] .product-description,
+        html[data-theme="dark"] .error-card p,
+        html[data-theme="dark"] .empty-card p,
+        html[data-theme="dark"] .catalog-count span,
+        html[data-theme="dark"] .wallet-label,
+        html[data-theme="dark"] .product-info span,
+        html[data-theme="dark"] .category-stock span {
+          color: #9ca3af;
+        }
+
+        html[data-theme="dark"] .category-footer {
+          border-top-color: #252d3b;
+          color: #f9fafb;
+        }
+
+        html[data-theme="dark"] .product-info > div,
+        html[data-theme="dark"] .modal-summary > div,
+        html[data-theme="dark"] .key-box {
+          background: #0b1019;
+        }
+
+        html[data-theme="dark"] .category-image-wrap,
+        html[data-theme="dark"] .product-image-wrap {
+          background: #0b1019;
+        }
+
+        html[data-theme="dark"] .modal-overlay {
+          background: rgba(0,0,0,.72);
+        }
+
+        html[data-theme="dark"] .buy-modal,
+        html[data-theme="dark"] .success-modal {
+          background: #111722;
+          color: #f9fafb;
+        }
+
+        html[data-theme="dark"] .modal-icon {
+          background: #202735;
+        }
+
+        html[data-theme="dark"] .key-box code {
+          color: #f9fafb;
+        }
+
+        html[data-theme="dark"] .cancel-button,
+        html[data-theme="dark"] .close-button {
+          background: #111722;
+          border-color: #303949;
+          color: #f9fafb;
+        }
+
+        html[data-theme="dark"] .back-button {
+          color: #f9fafb;
+        }
+      `}</style>
     </main>
   );
 }
 
-/* ============================
-   PRODUCT CARD
-============================ */
-
-function ProductCard({
-  product,
-  stock,
-  onBuy,
-  dark,
-  index,
-}) {
-  const soldOut = stock <= 0;
-
+function LoadingScreen() {
   return (
-    <div
-      style={{
-        ...styles.productCard,
-        ...themeStyles(dark).card,
-        animationDelay:
-          `${index * 50}ms`,
-      }}
-    >
-      <div style={styles.productImageBox}>
-        {product.demo_image_url ? (
-          <img
-            src={product.demo_image_url}
-            alt={product.name}
-            style={{
-              ...styles.productImage,
-              opacity: soldOut ? 0.45 : 1,
-            }}
-          />
-        ) : (
-          <div
-            style={{
-              ...styles.productNoImage,
-              ...themeStyles(dark).soft,
-            }}
-          >
-            🔑
-          </div>
-        )}
-
-        <div style={styles.productImageShade} />
-
-        <div
-          style={{
-            ...styles.productStockBadge,
-            background: soldOut
-              ? "#777"
-              : "#18a558",
-          }}
-        >
-          {soldOut
-            ? "HẾT HÀNG"
-            : `CÒN ${stock} KEY`}
-        </div>
-      </div>
-
-      <div style={styles.productBody}>
-        <div style={styles.productName}>
-          {product.name}
-        </div>
-
-        {product.description && (
-          <div
-            style={{
-              ...styles.productDescription,
-              ...themeStyles(dark).muted,
-            }}
-          >
-            {product.description}
-          </div>
-        )}
-
-        <div
-          style={{
-            ...styles.productInfo,
-            ...themeStyles(dark).soft,
-          }}
-        >
-          <div>
-            <span style={styles.productLabel}>
-              GIÁ
-            </span>
-
-            <strong
-              style={styles.productPrice}
-            >
-              {Number(
-                product.price || 0
-              ).toLocaleString("vi-VN")}
-              đ
-            </strong>
-          </div>
-
-          <div>
-            <span style={styles.productLabel}>
-              THỜI HẠN
-            </span>
-
-            <strong
-              style={{
-                ...styles.productDuration,
-                ...themeStyles(dark).text,
-              }}
-            >
-              {product.duration_days} ngày
-            </strong>
-          </div>
-        </div>
-
-        <button
-          onClick={onBuy}
-          disabled={soldOut}
-          style={{
-            ...styles.buyButton,
-            background: soldOut
-              ? "#888"
-              : "linear-gradient(135deg,#ff3838,#e51f1f)",
-            cursor: soldOut
-              ? "not-allowed"
-              : "pointer",
-            opacity: soldOut ? 0.6 : 1,
-          }}
-        >
-          {soldOut
-            ? "HẾT KEY"
-            : "🛒 MUA NGAY"}
-        </button>
-      </div>
+    <div className="loading-screen">
+      <div className="loading-spinner" />
+      <span>
+        Đang tải cửa hàng...
+      </span>
     </div>
   );
-}
-
-/* ============================
-   BUY MODAL
-============================ */
-
-function BuyModal({
-  product,
-  buying,
-  balance,
-  stock,
-  onClose,
-  onConfirm,
-  dark,
-}) {
-  const price = Number(
-    product.price || 0
-  );
-
-  const enough =
-    Number(balance || 0) >= price;
-
-  const soldOut = Number(stock || 0) <= 0;
-
-  return (
-    <div style={styles.modalBackdrop}>
-      <div
-        style={{
-          ...styles.modal,
-          ...themeStyles(dark).modal,
-        }}
-      >
-        <div style={styles.modalHeader}>
-          <div>
-            <div style={styles.modalSmall}>
-              XENOVA PLAY
-            </div>
-
-            <div style={styles.modalTitle}>
-              XÁC NHẬN MUA
-            </div>
-          </div>
-
-          <button
-            onClick={onClose}
-            disabled={buying}
-            style={{
-              ...styles.closeButton,
-              ...themeStyles(dark).button,
-            }}
-          >
-            ×
-          </button>
-        </div>
-
-        {product.demo_image_url && (
-          <img
-            src={product.demo_image_url}
-            alt={product.name}
-            style={styles.modalImage}
-          />
-        )}
-
-        <div
-          style={{
-            ...styles.confirmProduct,
-            ...themeStyles(dark).soft,
-          }}
-        >
-          <div style={styles.confirmName}>
-            {product.name}
-          </div>
-
-          <div style={styles.confirmRow}>
-            <span>Thời hạn</span>
-            <strong>
-              {product.duration_days} ngày
-            </strong>
-          </div>
-
-          <div style={styles.confirmRow}>
-            <span>Tồn kho</span>
-            <strong
-              style={{
-                color:
-                  stock > 0
-                    ? "#18a558"
-                    : "#ff3838",
-              }}
-            >
-              {stock} KEY
-            </strong>
-          </div>
-
-          <div style={styles.confirmRow}>
-            <span>Giá</span>
-            <strong
-              style={styles.confirmPrice}
-            >
-              {price.toLocaleString("vi-VN")}
-              đ
-            </strong>
-          </div>
-
-          <div style={styles.confirmRow}>
-            <span>Số dư hiện tại</span>
-            <strong>
-              {Number(
-                balance || 0
-              ).toLocaleString("vi-VN")}
-              đ
-            </strong>
-          </div>
-        </div>
-
-        {soldOut && (
-          <div
-            style={styles.warningBox}
-          >
-            Sản phẩm vừa hết KEY.
-          </div>
-        )}
-
-        {!soldOut && !enough && (
-          <div
-            style={styles.warningBox}
-          >
-            Số dư không đủ để mua sản
-            phẩm này.
-          </div>
-        )}
-
-        <div style={styles.modalActions}>
-          <button
-            onClick={onClose}
-            disabled={buying}
-            style={{
-              ...styles.cancelButton,
-              ...themeStyles(dark).button,
-            }}
-          >
-            HỦY
-          </button>
-
-          <button
-            onClick={onConfirm}
-            disabled={
-              buying ||
-              !enough ||
-              soldOut
-            }
-            style={{
-              ...styles.confirmButton,
-              opacity:
-                buying ||
-                !enough ||
-                soldOut
-                  ? 0.5
-                  : 1,
-            }}
-          >
-            {buying
-              ? "⏳ ĐANG MUA..."
-              : "🔑 XÁC NHẬN MUA"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ============================
-   SUCCESS MODAL
-============================ */
-
-function SuccessModal({
-  result,
-  onClose,
-  dark,
-}) {
-  return (
-    <div style={styles.modalBackdrop}>
-      <div
-        style={{
-          ...styles.successModal,
-          ...themeStyles(dark).modal,
-        }}
-      >
-        <div style={styles.successIcon}>
-          ✓
-        </div>
-
-        <div style={styles.successTitle}>
-          MUA KEY THÀNH CÔNG
-        </div>
-
-        <div
-          style={{
-            ...styles.successProduct,
-            ...themeStyles(dark).muted,
-          }}
-        >
-          {result.product_name}
-        </div>
-
-        <div style={styles.keyBox}>
-          <div style={styles.keyLabel}>
-            KEY CỦA BẠN
-          </div>
-
-          <div style={styles.keyCode}>
-            {result.key_code}
-          </div>
-        </div>
-
-        <div
-          style={{
-            ...styles.successInfo,
-            ...themeStyles(dark).muted,
-          }}
-        >
-          Thời hạn:{" "}
-          <strong>
-            {result.duration_days} ngày
-          </strong>
-        </div>
-
-        <button
-          onClick={onClose}
-          style={styles.confirmButton}
-        >
-          ĐÃ NHẬN KEY
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/* ============================
-   EMPTY
-============================ */
-
-function EmptyState({ dark, text }) {
-  return (
-    <div
-      style={{
-        ...styles.empty,
-        ...themeStyles(dark).card,
-      }}
-    >
-      <div style={styles.emptyIcon}>
-        📦
-      </div>
-
-      <div>{text}</div>
-    </div>
-  );
-}
-
-/* ============================
-   THEME
-============================ */
-
-function themeStyles(dark) {
-  if (dark) {
-    return {
-      page: {
-        background: "#070707",
-        color: "#fff",
-      },
-
-      card: {
-        background: "#101010",
-        borderColor: "#252525",
-        color: "#fff",
-      },
-
-      modal: {
-        background: "#111",
-        borderColor: "#303030",
-        color: "#fff",
-      },
-
-      button: {
-        background: "#151515",
-        borderColor: "#333",
-        color: "#fff",
-      },
-
-      soft: {
-        background: "#090909",
-        borderColor: "#252525",
-        color: "#fff",
-      },
-
-      muted: {
-        color: "#777",
-      },
-
-      text: {
-        color: "#fff",
-      },
-
-      hero: {
-        background:
-          "linear-gradient(135deg,#111,#080808)",
-        borderColor: "#252525",
-      },
-
-      error: {
-        background: "#2a0d0d",
-        borderColor: "#652020",
-        color: "#ff9999",
-      },
-
-      success: {
-        background: "#092518",
-        borderColor: "#185b34",
-        color: "#63e996",
-      },
-    };
-  }
-
-  return {
-    page: {
-      background: "#f7f8fa",
-      color: "#16181d",
-    },
-
-    card: {
-      background: "#fff",
-      borderColor: "#e8e9ed",
-      color: "#16181d",
-    },
-
-    modal: {
-      background: "#fff",
-      borderColor: "#e4e5e8",
-      color: "#16181d",
-    },
-
-    button: {
-      background: "#fff",
-      borderColor: "#dedfe4",
-      color: "#16181d",
-    },
-
-    soft: {
-      background: "#f5f6f8",
-      borderColor: "#e6e7eb",
-      color: "#16181d",
-    },
-
-    muted: {
-      color: "#777d87",
-    },
-
-    text: {
-      color: "#16181d",
-    },
-
-    hero: {
-      background:
-        "linear-gradient(135deg,#ffffff,#f2f3f6)",
-      borderColor: "#e5e6ea",
-    },
-
-    error: {
-      background: "#fff2f2",
-      borderColor: "#ffd0d0",
-      color: "#c62828",
-    },
-
-    success: {
-      background: "#effbf4",
-      borderColor: "#bce8cc",
-      color: "#178344",
-    },
-  };
-}
-
-/* ============================
-   STYLES
-============================ */
-
-const styles = {
-  loadingPage: {
-    minHeight: "100vh",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "20px",
-    fontFamily:
-      "Arial, Helvetica, sans-serif",
-  },
-
-  loadingLogo: {
-    width: "55px",
-    height: "55px",
-    borderRadius: "15px",
-    background:
-      "linear-gradient(135deg,#ff3838,#c91515)",
-    color: "#fff",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontWeight: "1000",
-    fontSize: "28px",
-    marginBottom: "18px",
-    boxShadow:
-      "0 12px 35px rgba(255,40,40,.25)",
-  },
-
-  spinner: {
-    width: "34px",
-    height: "34px",
-    borderRadius: "50%",
-    border: "3px solid rgba(120,120,120,.2)",
-    borderTopColor: "#ff3030",
-    animation:
-      "xenovaShopSpin .7s linear infinite",
-    marginBottom: "15px",
-  },
-
-  loadingTitle: {
-    fontSize: "18px",
-    fontWeight: "900",
-    letterSpacing: "2px",
-  },
-
-  loadingText: {
-    color: "#888",
-    fontSize: "13px",
-    marginTop: "6px",
-  },
-
-  page: {
-    minHeight: "100vh",
-    padding:
-      "82px 15px 55px",
-    fontFamily:
-      "Arial, Helvetica, sans-serif",
-    transition:
-      "background .25s ease,color .25s ease",
-  },
-
-  container: {
-    width: "100%",
-    maxWidth: "1120px",
-    margin: "0 auto",
-  },
-
-  shopNav: {
-    height: "58px",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: "12px",
-    marginBottom: "16px",
-  },
-
-  navHome: {
-    width: "42px",
-    height: "42px",
-    border: "1px solid",
-    borderRadius: "12px",
-    cursor: "pointer",
-    fontSize: "20px",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  navBack: {
-    border: "1px solid",
-    padding: "10px 13px",
-    borderRadius: "11px",
-    cursor: "pointer",
-    fontWeight: "800",
-    fontSize: "12px",
-  },
-
-  navBrand: {
-    fontSize: "18px",
-    fontWeight: "1000",
-    letterSpacing: "1px",
-  },
-
-  navBrandSpan: {
-    color: "#ff3030",
-  },
-
-  navRight: {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-  },
-
-  balanceButton: {
-    border: "1px solid #ffdddd",
-    background: "#fff5f5",
-    color: "#e52626",
-    borderRadius: "11px",
-    padding: "10px 13px",
-    cursor: "pointer",
-    fontWeight: "900",
-    fontSize: "12px",
-    whiteSpace: "nowrap",
-  },
-
-  navLogin: {
-    border: "none",
-    background:
-      "linear-gradient(135deg,#ff3838,#e51f1f)",
-    color: "#fff",
-    borderRadius: "11px",
-    padding: "11px 14px",
-    cursor: "pointer",
-    fontWeight: "900",
-    fontSize: "11px",
-  },
-
-  mainHero: {
-    position: "relative",
-    overflow: "hidden",
-    border: "1px solid",
-    borderRadius: "22px",
-    minHeight: "260px",
-    display: "flex",
-    alignItems: "center",
-    marginBottom: "34px",
-    boxShadow:
-      "0 12px 40px rgba(0,0,0,.07)",
-  },
-
-  heroGlow: {
-    position: "absolute",
-    width: "300px",
-    height: "300px",
-    right: "-100px",
-    top: "-130px",
-    borderRadius: "50%",
-    background:
-      "rgba(255,48,48,.13)",
-    filter: "blur(10px)",
-  },
-
-  heroInner: {
-    position: "relative",
-    zIndex: 1,
-    padding: "35px",
-    maxWidth: "650px",
-  },
-
-  heroPill: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "7px",
-    border:
-      "1px solid rgba(255,48,48,.2)",
-    background:
-      "rgba(255,48,48,.07)",
-    color: "#e52626",
-    borderRadius: "999px",
-    padding: "7px 11px",
-    fontSize: "10px",
-    fontWeight: "900",
-    letterSpacing: "1px",
-  },
-
-  liveDot: {
-    width: "7px",
-    height: "7px",
-    borderRadius: "50%",
-    background: "#18a558",
-    boxShadow:
-      "0 0 0 4px rgba(24,165,88,.12)",
-  },
-
-  mainTitle: {
-    margin: "16px 0 7px",
-    fontSize:
-      "clamp(38px,7vw,68px)",
-    lineHeight: ".95",
-    fontWeight: "1000",
-    letterSpacing: "-3px",
-  },
-
-  mainSubtitle: {
-    margin: 0,
-    fontSize: "14px",
-    lineHeight: "1.6",
-    maxWidth: "540px",
-  },
-
-  mainDeposit: {
-    marginTop: "22px",
-    border: "none",
-    background:
-      "linear-gradient(135deg,#ff3838,#e51f1f)",
-    color: "#fff",
-    padding: "13px 18px",
-    borderRadius: "11px",
-    cursor: "pointer",
-    fontWeight: "900",
-    boxShadow:
-      "0 8px 22px rgba(255,40,40,.25)",
-  },
-
-  mainDepositArrow: {
-    marginLeft: "13px",
-  },
-
-  categoryHeading: {
-    display: "flex",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    gap: "15px",
-    marginBottom: "16px",
-  },
-
-  categoryHeadingTitle: {
-    fontSize: "21px",
-    fontWeight: "1000",
-  },
-
-  categoryHeadingSub: {
-    fontSize: "12px",
-    marginTop: "5px",
-  },
-
-  totalBadge: {
-    border: "1px solid",
-    borderRadius: "999px",
-    padding: "7px 10px",
-    fontSize: "9px",
-    fontWeight: "1000",
-    letterSpacing: "1px",
-  },
-
-  /* LUÔN 2 CỘT */
-
-  categoryGrid: {
-    display: "grid",
-    gridTemplateColumns:
-      "repeat(2,minmax(0,1fr))",
-    gap: "16px",
-  },
-
-  categoryCard: {
-    padding: 0,
-    width: "100%",
-    border: "1px solid",
-    borderRadius: "17px",
-    overflow: "hidden",
-    textAlign: "left",
-    cursor: "pointer",
-    animation:
-      "xenovaFadeUp .45s ease both",
-    transition:
-      "transform .2s ease,box-shadow .2s ease",
-  },
-
-  categoryImageBox: {
-    position: "relative",
-    width: "100%",
-    height: "180px",
-    overflow: "hidden",
-  },
-
-  categoryImage: {
-    width: "100%",
-    height: "100%",
-    objectFit: "cover",
-    display: "block",
-    transition:
-      "transform .35s ease",
-  },
-
-  categoryNoImage: {
-    width: "100%",
-    height: "100%",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: "55px",
-    background:
-      "linear-gradient(135deg,#151515,#292929)",
-  },
-
-  imageOverlay: {
-    position: "absolute",
-    inset: 0,
-    background:
-      "linear-gradient(180deg,rgba(0,0,0,.05),rgba(0,0,0,.7))",
-  },
-
-  categoryTopBadge: {
-    position: "absolute",
-    top: "12px",
-    right: "12px",
-    background:
-      "rgba(0,0,0,.65)",
-    backdropFilter: "blur(8px)",
-    color: "#fff",
-    borderRadius: "999px",
-    padding: "6px 9px",
-    fontSize: "9px",
-    fontWeight: "900",
-  },
-
-  categoryContent: {
-    padding: "15px",
-  },
-
-  categoryName: {
-    fontSize: "19px",
-    fontWeight: "1000",
-    lineHeight: "1.2",
-  },
-
-  categoryDescription: {
-    fontSize: "12px",
-    marginTop: "5px",
-  },
-
-  categoryBottom: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: "8px",
-    marginTop: "14px",
-  },
-
-  availableText: {
-    fontSize: "10px",
-    fontWeight: "900",
-  },
-
-  viewButton: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "6px",
-    color: "#e52626",
-    fontSize: "10px",
-    fontWeight: "1000",
-    whiteSpace: "nowrap",
-  },
-
-  categoryHero: {
-    position: "relative",
-    width: "100%",
-    height: "255px",
-    overflow: "hidden",
-    border: "1px solid",
-    borderRadius: "19px",
-    marginBottom: "24px",
-  },
-
-  categoryHeroImage: {
-    width: "100%",
-    height: "100%",
-    objectFit: "cover",
-  },
-
-  categoryHeroNoImage: {
-    width: "100%",
-    height: "100%",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: "65px",
-    background: "#151515",
-  },
-
-  heroGradient: {
-    position: "absolute",
-    inset: 0,
-    background:
-      "linear-gradient(180deg,transparent 15%,rgba(0,0,0,.88))",
-  },
-
-  heroContent: {
-    position: "absolute",
-    left: "22px",
-    right: "22px",
-    bottom: "20px",
-    color: "#fff",
-  },
-
-  heroLabel: {
-    color: "#ff4848",
-    fontSize: "10px",
-    fontWeight: "1000",
-    letterSpacing: "2px",
-  },
-
-  heroTitle: {
-    margin: "5px 0",
-    fontSize: "30px",
-    fontWeight: "1000",
-  },
-
-  heroMeta: {
-    display: "flex",
-    alignItems: "center",
-    gap: "7px",
-    color: "#ddd",
-    fontSize: "12px",
-  },
-
-  sectionHeader: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: "10px",
-    marginBottom: "15px",
-  },
-
-  sectionTitle: {
-    fontSize: "19px",
-    fontWeight: "1000",
-  },
-
-  sectionSubtitle: {
-    fontSize: "12px",
-    marginTop: "4px",
-  },
-
-  stockBadge: {
-    border: "1px solid",
-    borderRadius: "999px",
-    padding: "7px 10px",
-    fontSize: "10px",
-    fontWeight: "900",
-  },
-
-  productGrid: {
-    display: "grid",
-    gridTemplateColumns:
-      "repeat(auto-fit,minmax(250px,1fr))",
-    gap: "16px",
-  },
-
-  productCard: {
-    border: "1px solid",
-    borderRadius: "16px",
-    overflow: "hidden",
-    animation:
-      "xenovaFadeUp .45s ease both",
-    transition:
-      "transform .2s ease,box-shadow .2s ease",
-  },
-
-  productImageBox: {
-    position: "relative",
-    width: "100%",
-    height: "175px",
-    overflow: "hidden",
-    background: "#101010",
-  },
-
-  productImage: {
-    width: "100%",
-    height: "100%",
-    objectFit: "cover",
-    display: "block",
-    transition:
-      "transform .3s ease",
-  },
-
-  productNoImage: {
-    width: "100%",
-    height: "100%",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: "55px",
-  },
-
-  productImageShade: {
-    position: "absolute",
-    inset: 0,
-    background:
-      "linear-gradient(transparent 35%,rgba(0,0,0,.55))",
-  },
-
-  productStockBadge: {
-    position: "absolute",
-    top: "11px",
-    right: "11px",
-    color: "#fff",
-    borderRadius: "999px",
-    padding: "6px 9px",
-    fontSize: "9px",
-    fontWeight: "1000",
-  },
-
-  productBody: {
-    padding: "16px",
-  },
-
-  productName: {
-    fontSize: "18px",
-    fontWeight: "1000",
-  },
-
-  productDescription: {
-    minHeight: "18px",
-    fontSize: "12px",
-    lineHeight: "1.5",
-    marginTop: "6px",
-  },
-
-  productInfo: {
-    display: "grid",
-    gridTemplateColumns:
-      "1fr 1fr",
-    gap: "10px",
-    padding: "11px",
-    border: "1px solid",
-    borderRadius: "10px",
-    marginTop: "13px",
-  },
-
-  productLabel: {
-    display: "block",
-    color: "#888",
-    fontSize: "8px",
-    fontWeight: "1000",
-    marginBottom: "4px",
-  },
-
-  productPrice: {
-    color: "#e52626",
-    fontSize: "15px",
-  },
-
-  productDuration: {
-    fontSize: "13px",
-  },
-
-  buyButton: {
-    width: "100%",
-    border: "none",
-    color: "#fff",
-    padding: "13px",
-    borderRadius: "10px",
-    marginTop: "11px",
-    fontWeight: "1000",
-  },
-
-  depositButton: {
-    width: "100%",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "9px",
-    marginTop: "25px",
-    border: "none",
-    background:
-      "linear-gradient(135deg,#ff3838,#e51f1f)",
-    color: "#fff",
-    padding: "14px",
-    borderRadius: "11px",
-    cursor: "pointer",
-    fontWeight: "1000",
-    boxShadow:
-      "0 8px 25px rgba(255,40,40,.18)",
-  },
-
-  buttonArrow: {
-    marginLeft: "10px",
-  },
-
-  errorBox: {
-    display: "flex",
-    alignItems: "center",
-    gap: "9px",
-    padding: "12px 14px",
-    marginBottom: "18px",
-    border: "1px solid",
-    borderRadius: "11px",
-    fontSize: "12px",
-  },
-
-  errorRetry: {
-    border: "none",
-    background: "#e52626",
-    color: "#fff",
-    padding: "7px 10px",
-    borderRadius: "7px",
-    fontSize: "9px",
-    fontWeight: "900",
-    cursor: "pointer",
-  },
-
-  successBox: {
-    padding: "12px 14px",
-    marginBottom: "18px",
-    border: "1px solid",
-    borderRadius: "11px",
-    fontSize: "12px",
-  },
-
-  empty: {
-    padding: "55px 20px",
-    border: "1px solid",
-    borderRadius: "15px",
-    textAlign: "center",
-  },
-
-  emptyIcon: {
-    fontSize: "40px",
-    marginBottom: "10px",
-  },
-
-  footer: {
-    textAlign: "center",
-    fontSize: "10px",
-    marginTop: "45px",
-    paddingBottom: "10px",
-  },
-
-  footerLogo: {
-    color: "#e52626",
-    fontWeight: "1000",
-    letterSpacing: "2px",
-    marginBottom: "5px",
-  },
-
-  modalBackdrop: {
-    position: "fixed",
-    inset: 0,
-    zIndex: 10000,
-    background:
-      "rgba(0,0,0,.72)",
-    backdropFilter: "blur(7px)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "15px",
-  },
-
-  modal: {
-    width: "100%",
-    maxWidth: "440px",
-    maxHeight: "90vh",
-    overflowY: "auto",
-    border: "1px solid",
-    borderRadius: "18px",
-    padding: "20px",
-    boxSizing: "border-box",
-    boxShadow:
-      "0 25px 80px rgba(0,0,0,.35)",
-  },
-
-  modalHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: "15px",
-  },
-
-  modalSmall: {
-    color: "#e52626",
-    fontSize: "9px",
-    fontWeight: "1000",
-    letterSpacing: "2px",
-  },
-
-  modalTitle: {
-    fontSize: "20px",
-    fontWeight: "1000",
-    marginTop: "4px",
-  },
-
-  closeButton: {
-    width: "34px",
-    height: "34px",
-    borderRadius: "50%",
-    border: "1px solid",
-    fontSize: "22px",
-    cursor: "pointer",
-  },
-
-  modalImage: {
-    width: "100%",
-    maxHeight: "210px",
-    objectFit: "cover",
-    borderRadius: "11px",
-    marginBottom: "14px",
-  },
-
-  confirmProduct: {
-    border: "1px solid",
-    borderRadius: "11px",
-    padding: "14px",
-  },
-
-  confirmName: {
-    fontSize: "18px",
-    fontWeight: "1000",
-    marginBottom: "10px",
-  },
-
-  confirmRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    gap: "10px",
-    padding: "8px 0",
-    borderBottom:
-      "1px solid rgba(128,128,128,.15)",
-    color: "#777",
-    fontSize: "12px",
-  },
-
-  confirmPrice: {
-    color: "#e52626",
-  },
-
-  warningBox: {
-    marginTop: "12px",
-    padding: "11px",
-    background: "#fff8e8",
-    border: "1px solid #f1d999",
-    color: "#9a711b",
-    borderRadius: "9px",
-    fontSize: "12px",
-  },
-
-  modalActions: {
-    display: "grid",
-    gridTemplateColumns:
-      "1fr 1.5fr",
-    gap: "9px",
-    marginTop: "15px",
-  },
-
-  cancelButton: {
-    border: "1px solid",
-    borderRadius: "9px",
-    padding: "12px",
-    cursor: "pointer",
-    fontWeight: "900",
-  },
-
-  confirmButton: {
-    border: "none",
-    background:
-      "linear-gradient(135deg,#ff3838,#e51f1f)",
-    color: "#fff",
-    borderRadius: "9px",
-    padding: "12px",
-    cursor: "pointer",
-    fontWeight: "900",
-  },
-
-  successModal: {
-    width: "100%",
-    maxWidth: "420px",
-    border: "1px solid",
-    borderRadius: "18px",
-    padding: "25px",
-    textAlign: "center",
-    boxSizing: "border-box",
-    boxShadow:
-      "0 25px 80px rgba(0,0,0,.35)",
-  },
-
-  successIcon: {
-    width: "65px",
-    height: "65px",
-    margin: "0 auto 15px",
-    borderRadius: "50%",
-    background: "#0c5b2e",
-    color: "#57f18b",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: "35px",
-    fontWeight: "1000",
-  },
-
-  successTitle: {
-    fontSize: "21px",
-    fontWeight: "1000",
-  },
-
-  successProduct: {
-    marginTop: "6px",
-    fontSize: "13px",
-  },
-
-  keyBox: {
-    margin: "20px 0 15px",
-    padding: "17px",
-    background: "#080808",
-    border: "1px solid #292929",
-    borderRadius: "10px",
-  },
-
-  keyLabel: {
-    color: "#777",
-    fontSize: "9px",
-    fontWeight: "1000",
-    marginBottom: "8px",
-  },
-
-  keyCode: {
-    color: "#ff4040",
-    fontSize: "21px",
-    fontWeight: "1000",
-    wordBreak: "break-all",
-    letterSpacing: "1px",
-  },
-
-  successInfo: {
-    fontSize: "13px",
-    marginBottom: "15px",
-  },
-};
-
-/* ============================
-   ANIMATION
-============================ */
-
-if (
-  typeof document !== "undefined" &&
-  !document.getElementById(
-    "xenova-shop-animation"
-  )
-) {
-  const style =
-    document.createElement("style");
-
-  style.id = "xenova-shop-animation";
-
-  style.textContent = `
-    @keyframes xenovaShopSpin {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
-    }
-
-    @keyframes xenovaFadeUp {
-      from {
-        opacity: 0;
-        transform: translateY(12px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    @media (max-width: 600px) {
-      .xenova-category-card:hover {
-        transform: none !important;
-      }
-    }
-  `;
-
-  document.head.appendChild(style);
 }
