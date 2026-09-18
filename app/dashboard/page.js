@@ -7,9 +7,10 @@ import { supabase } from "../../lib/supabase";
 export default function DashboardPage() {
   const [user, setUser] = useState(null);
   const [wallet, setWallet] = useState(null);
-  const [keys, setKeys] = useState([]);
-  const [orders, setOrders] = useState([]);
-  const [deposits, setDeposits] = useState([]);
+  const [keyCount, setKeyCount] = useState(0);
+  const [orderCount, setOrderCount] = useState(0);
+  const [depositCount, setDepositCount] = useState(0);
+
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
@@ -45,60 +46,18 @@ export default function DashboardPage() {
 
         supabase
           .from("keys")
-          .select(`
-            id,
-            key_code,
-            product_id,
-            user_id,
-            expires_at,
-            status,
-            created_at,
-            order_id,
-            sold_at,
-            products (
-              id,
-              name,
-              price,
-              duration_days
-            )
-          `)
-          .eq("user_id", currentUser.id)
-          .order("id", { ascending: false })
-          .limit(5),
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", currentUser.id),
 
         supabase
           .from("orders")
-          .select(`
-            id,
-            product_id,
-            amount,
-            status,
-            created_at,
-            updated_at,
-            transaction_id,
-            products (
-              id,
-              name,
-              duration_days
-            )
-          `)
-          .eq("user_id", currentUser.id)
-          .order("id", { ascending: false })
-          .limit(5),
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", currentUser.id),
 
         supabase
           .from("deposit_requests")
-          .select(`
-            id,
-            amount,
-            status,
-            transfer_content,
-            created_at,
-            updated_at
-          `)
-          .eq("user_id", currentUser.id)
-          .order("id", { ascending: false })
-          .limit(5),
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", currentUser.id),
       ]);
 
       if (walletResult.error) {
@@ -106,21 +65,21 @@ export default function DashboardPage() {
       }
 
       if (keysResult.error) {
-        console.error("KEYS ERROR:", keysResult.error);
+        console.error("KEY COUNT ERROR:", keysResult.error);
       }
 
       if (ordersResult.error) {
-        console.error("ORDERS ERROR:", ordersResult.error);
+        console.error("ORDER COUNT ERROR:", ordersResult.error);
       }
 
       if (depositsResult.error) {
-        console.error("DEPOSITS ERROR:", depositsResult.error);
+        console.error("DEPOSIT COUNT ERROR:", depositsResult.error);
       }
 
       setWallet(walletResult.data || null);
-      setKeys(keysResult.data || []);
-      setOrders(ordersResult.data || []);
-      setDeposits(depositsResult.data || []);
+      setKeyCount(keysResult.count || 0);
+      setOrderCount(ordersResult.count || 0);
+      setDepositCount(depositsResult.count || 0);
     } catch (error) {
       console.error("DASHBOARD ERROR:", error);
       setMessage("Không thể tải dữ liệu tài khoản.");
@@ -137,676 +96,358 @@ export default function DashboardPage() {
     return Number(value || 0).toLocaleString("vi-VN") + "đ";
   }
 
-  function formatDate(value) {
-    if (!value) return "—";
-
-    return new Date(value).toLocaleString("vi-VN", {
-      dateStyle: "short",
-      timeStyle: "short",
-    });
+  if (loading) {
+    return (
+      <main style={styles.page}>
+        <div style={styles.loading}>
+          <div style={styles.loadingIcon}>X</div>
+          <div>Đang tải tài khoản...</div>
+        </div>
+      </main>
+    );
   }
 
-  function getDepositStatus(status) {
-    if (status === "completed") {
-      return {
-        text: "ĐÃ DUYỆT",
-        bg: "#12351f",
-        color: "#55e58a",
-      };
-    }
+  if (message) {
+    return (
+      <main style={styles.page}>
+        <div style={styles.errorPage}>
+          <div style={styles.errorIcon}>🔐</div>
+          <h2>Chưa đăng nhập</h2>
+          <p>{message}</p>
 
-    if (status === "pending") {
-      return {
-        text: "CHỜ DUYỆT",
-        bg: "#352d12",
-        color: "#ffd866",
-      };
-    }
-
-    return {
-      text: "ĐÃ TỪ CHỐI",
-      bg: "#35171a",
-      color: "#ff777d",
-    };
-  }
-
-  function getOrderStatus(status) {
-    if (status === "completed") {
-      return {
-        text: "HOÀN TẤT",
-        bg: "#12351f",
-        color: "#55e58a",
-      };
-    }
-
-    if (status === "pending" || status === "waiting") {
-      return {
-        text: "ĐANG XỬ LÝ",
-        bg: "#352d12",
-        color: "#ffd866",
-      };
-    }
-
-    return {
-      text: "ĐÃ HỦY",
-      bg: "#35171a",
-      color: "#ff777d",
-    };
+          <Link href="/login" style={styles.primaryButton}>
+            ĐĂNG NHẬP
+          </Link>
+        </div>
+      </main>
+    );
   }
 
   return (
     <main style={styles.page}>
-      <div style={styles.container}>
+      <div style={styles.backgroundGlow} />
 
-        {/* HEADER */}
-        <header style={styles.header}>
+      <div style={styles.container}>
+        <section style={styles.hero}>
           <div>
-            <div style={styles.logo}>
-              XENOVA PLAY
-            </div>
+            <div style={styles.badge}>XENOVA PLAY</div>
 
             <h1 style={styles.title}>
-              👤 TÀI KHOẢN
+              Xin chào 👋
             </h1>
 
-            <p style={styles.subtitle}>
-              Quản lý số dư, KEY và đơn hàng của bạn.
+            <p style={styles.email}>
+              {user?.email}
             </p>
           </div>
 
-          <button
-            style={styles.menuButton}
-            onClick={() => {
-              window.dispatchEvent(
-                new CustomEvent("xenova-open-menu")
-              );
-            }}
-          >
-            ☰
-          </button>
-        </header>
-
-        {loading && (
-          <div style={styles.loading}>
-            Đang tải dữ liệu tài khoản...
+          <div style={styles.accountIcon}>
+            {user?.email?.charAt(0).toUpperCase() || "U"}
           </div>
-        )}
+        </section>
 
-        {!loading && message && (
-          <div style={styles.error}>
-            {message}
+        <section style={styles.walletCard}>
+          <div style={styles.walletTop}>
+            <div>
+              <div style={styles.walletLabel}>
+                SỐ DƯ VÍ
+              </div>
 
-            <Link href="/login" style={styles.loginButton}>
-              ĐĂNG NHẬP
+              <div style={styles.balance}>
+                {formatMoney(wallet?.balance)}
+              </div>
+            </div>
+
+            <div style={styles.walletIcon}>
+              💰
+            </div>
+          </div>
+
+          <div style={styles.walletBottom}>
+            <span>
+              Dùng số dư để mua KEY
+            </span>
+
+            <Link
+              href="/deposit"
+              style={styles.depositButton}
+            >
+              + NẠP TIỀN
             </Link>
           </div>
-        )}
+        </section>
 
-        {!loading && !message && user && (
-          <>
-            {/* ACCOUNT */}
-            <section style={styles.accountCard}>
-              <div style={styles.avatar}>
-                {user.email?.charAt(0).toUpperCase() || "U"}
-              </div>
+        <section style={styles.stats}>
+          <StatCard
+            icon="🔑"
+            value={keyCount}
+            label="KEY của tôi"
+          />
 
-              <div style={{ flex: 1 }}>
-                <div style={styles.smallText}>
-                  TÀI KHOẢN
-                </div>
+          <StatCard
+            icon="📦"
+            value={orderCount}
+            label="Đơn hàng"
+          />
 
-                <div style={styles.email}>
-                  {user.email}
-                </div>
+          <StatCard
+            icon="💳"
+            value={depositCount}
+            label="Lần nạp tiền"
+          />
+        </section>
 
-                <div style={styles.userId}>
-                  ID: {user.id.slice(0, 8)}...
-                </div>
-              </div>
+        <section>
+          <h2 style={styles.sectionTitle}>
+            Thao tác nhanh
+          </h2>
 
-              <Link
-                href="/deposit"
-                style={styles.depositButton}
-              >
-                💰 NẠP TIỀN
-              </Link>
-            </section>
+          <div style={styles.actions}>
+            <ActionCard
+              href="/shop"
+              icon="🛒"
+              title="Cửa hàng"
+              text="Mua KEY"
+            />
 
-            {/* STATS */}
-            <section style={styles.statsGrid}>
+            <ActionCard
+              href="/keys"
+              icon="🔑"
+              title="KEY của tôi"
+              text="Xem KEY đã mua"
+            />
 
-              <div style={styles.statCard}>
-                <div style={styles.statIcon}>
-                  💰
-                </div>
+            <ActionCard
+              href="/orders"
+              icon="📦"
+              title="Đơn hàng"
+              text="Lịch sử giao dịch"
+            />
 
-                <div>
-                  <div style={styles.statLabel}>
-                    SỐ DƯ
-                  </div>
+            <ActionCard
+              href="/deposit"
+              icon="💰"
+              title="Nạp tiền"
+              text="Nạp vào ví"
+            />
 
-                  <div style={styles.statValue}>
-                    {formatMoney(wallet?.balance)}
-                  </div>
-                </div>
-              </div>
+            <ActionCard
+              href="/settings"
+              icon="⚙️"
+              title="Cài đặt"
+              text="Quản lý tài khoản"
+            />
+          </div>
+        </section>
 
-              <div style={styles.statCard}>
-                <div style={styles.statIcon}>
-                  🔑
-                </div>
+        <section style={styles.infoCard}>
+          <div style={styles.infoIcon}>🛡️</div>
 
-                <div>
-                  <div style={styles.statLabel}>
-                    KEY CỦA TÔI
-                  </div>
+          <div>
+            <h3 style={styles.infoTitle}>
+              Tài khoản của bạn
+            </h3>
 
-                  <div style={styles.statValue}>
-                    {keys.length}
-                  </div>
-                </div>
-              </div>
+            <p style={styles.infoText}>
+              Tài khoản được bảo vệ bằng hệ thống xác thực
+              của XENOVA PLAY. Không chia sẻ mật khẩu cho
+              người khác.
+            </p>
+          </div>
+        </section>
 
-              <div style={styles.statCard}>
-                <div style={styles.statIcon}>
-                  📦
-                </div>
-
-                <div>
-                  <div style={styles.statLabel}>
-                    ĐƠN HÀNG
-                  </div>
-
-                  <div style={styles.statValue}>
-                    {orders.length}
-                  </div>
-                </div>
-              </div>
-
-              <div style={styles.statCard}>
-                <div style={styles.statIcon}>
-                  💳
-                </div>
-
-                <div>
-                  <div style={styles.statLabel}>
-                    LẦN NẠP
-                  </div>
-
-                  <div style={styles.statValue}>
-                    {deposits.length}
-                  </div>
-                </div>
-              </div>
-
-            </section>
-
-            {/* QUICK ACTIONS */}
-            <section style={styles.section}>
-              <div style={styles.sectionHeader}>
-                <div>
-                  <h2 style={styles.sectionTitle}>
-                    ⚡ Thao tác nhanh
-                  </h2>
-
-                  <p style={styles.sectionSub}>
-                    Truy cập nhanh các chức năng chính.
-                  </p>
-                </div>
-              </div>
-
-              <div style={styles.actionGrid}>
-
-                <Link
-                  href="/shop"
-                  style={styles.actionCard}
-                >
-                  <span style={styles.actionIcon}>
-                    🛒
-                  </span>
-
-                  <span>
-                    <strong>Mua KEY</strong>
-                    <small>
-                      Chọn sản phẩm và mua bằng số dư
-                    </small>
-                  </span>
-                </Link>
-
-                <Link
-                  href="/keys"
-                  style={styles.actionCard}
-                >
-                  <span style={styles.actionIcon}>
-                    🔑
-                  </span>
-
-                  <span>
-                    <strong>KEY của tôi</strong>
-                    <small>
-                      Xem các KEY đã mua
-                    </small>
-                  </span>
-                </Link>
-
-                <Link
-                  href="/orders"
-                  style={styles.actionCard}
-                >
-                  <span style={styles.actionIcon}>
-                    📦
-                  </span>
-
-                  <span>
-                    <strong>Đơn hàng</strong>
-                    <small>
-                      Xem lịch sử mua hàng
-                    </small>
-                  </span>
-                </Link>
-
-                <Link
-                  href="/deposit"
-                  style={styles.actionCard}
-                >
-                  <span style={styles.actionIcon}>
-                    💰
-                  </span>
-
-                  <span>
-                    <strong>Nạp tiền</strong>
-                    <small>
-                      Nạp tiền vào ví XENOVA
-                    </small>
-                  </span>
-                </Link>
-
-              </div>
-            </section>
-
-            {/* KEYS */}
-            <section style={styles.section}>
-              <div style={styles.sectionHeader}>
-                <div>
-                  <h2 style={styles.sectionTitle}>
-                    🔑 KEY gần đây
-                  </h2>
-
-                  <p style={styles.sectionSub}>
-                    Các KEY mới nhất trong tài khoản.
-                  </p>
-                </div>
-
-                <Link
-                  href="/keys"
-                  style={styles.viewAll}
-                >
-                  XEM TẤT CẢ →
-                </Link>
-              </div>
-
-              {keys.length === 0 ? (
-                <div style={styles.empty}>
-                  Bạn chưa có KEY nào.
-                </div>
-              ) : (
-                <div style={styles.list}>
-                  {keys.map((key) => (
-                    <div
-                      key={key.id}
-                      style={styles.item}
-                    >
-                      <div style={styles.itemIcon}>
-                        🔑
-                      </div>
-
-                      <div style={{ flex: 1 }}>
-                        <strong style={styles.itemTitle}>
-                          {key.products?.name ||
-                            `Sản phẩm #${key.product_id}`}
-                        </strong>
-
-                        <div style={styles.itemSub}>
-                          {key.key_code}
-                        </div>
-                      </div>
-
-                      <div style={styles.itemRight}>
-                        <span style={styles.soldBadge}>
-                          ĐÃ MUA
-                        </span>
-
-                        <small>
-                          {formatDate(key.created_at)}
-                        </small>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-
-            {/* ORDERS */}
-            <section style={styles.section}>
-              <div style={styles.sectionHeader}>
-                <div>
-                  <h2 style={styles.sectionTitle}>
-                    📦 Đơn hàng gần đây
-                  </h2>
-
-                  <p style={styles.sectionSub}>
-                    Những đơn hàng mới nhất của bạn.
-                  </p>
-                </div>
-
-                <Link
-                  href="/orders"
-                  style={styles.viewAll}
-                >
-                  XEM TẤT CẢ →
-                </Link>
-              </div>
-
-              {orders.length === 0 ? (
-                <div style={styles.empty}>
-                  Bạn chưa có đơn hàng.
-                </div>
-              ) : (
-                <div style={styles.list}>
-                  {orders.map((order) => {
-                    const status = getOrderStatus(
-                      order.status
-                    );
-
-                    return (
-                      <div
-                        key={order.id}
-                        style={styles.item}
-                      >
-                        <div style={styles.itemIcon}>
-                          📦
-                        </div>
-
-                        <div style={{ flex: 1 }}>
-                          <strong style={styles.itemTitle}>
-                            {order.products?.name ||
-                              `Sản phẩm #${order.product_id}`}
-                          </strong>
-
-                          <div style={styles.itemSub}>
-                            Đơn #{order.id} •{" "}
-                            {formatDate(order.created_at)}
-                          </div>
-                        </div>
-
-                        <div style={styles.orderRight}>
-                          <strong>
-                            {formatMoney(order.amount)}
-                          </strong>
-
-                          <span
-                            style={{
-                              ...styles.status,
-                              background: status.bg,
-                              color: status.color,
-                            }}
-                          >
-                            {status.text}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-
-            {/* DEPOSITS */}
-            <section style={styles.section}>
-              <div style={styles.sectionHeader}>
-                <div>
-                  <h2 style={styles.sectionTitle}>
-                    💳 Nạp tiền gần đây
-                  </h2>
-
-                  <p style={styles.sectionSub}>
-                    Theo dõi các yêu cầu nạp tiền.
-                  </p>
-                </div>
-
-                <Link
-                  href="/deposit"
-                  style={styles.viewAll}
-                >
-                  NẠP TIỀN →
-                </Link>
-              </div>
-
-              {deposits.length === 0 ? (
-                <div style={styles.empty}>
-                  Bạn chưa có giao dịch nạp tiền.
-                </div>
-              ) : (
-                <div style={styles.list}>
-                  {deposits.map((deposit) => {
-                    const status = getDepositStatus(
-                      deposit.status
-                    );
-
-                    return (
-                      <div
-                        key={deposit.id}
-                        style={styles.item}
-                      >
-                        <div style={styles.itemIcon}>
-                          💳
-                        </div>
-
-                        <div style={{ flex: 1 }}>
-                          <strong style={styles.itemTitle}>
-                            Nạp tiền #{deposit.id}
-                          </strong>
-
-                          <div style={styles.itemSub}>
-                            {formatDate(
-                              deposit.created_at
-                            )}
-                          </div>
-                        </div>
-
-                        <div style={styles.orderRight}>
-                          <strong>
-                            {formatMoney(deposit.amount)}
-                          </strong>
-
-                          <span
-                            style={{
-                              ...styles.status,
-                              background: status.bg,
-                              color: status.color,
-                            }}
-                          >
-                            {status.text}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-
-            {/* FOOTER NAV */}
-            <div style={styles.footerNav}>
-              <Link href="/shop">
-                🛒 Cửa hàng
-              </Link>
-
-              <Link href="/deposit">
-                💰 Nạp tiền
-              </Link>
-
-              <Link href="/keys">
-                🔑 KEY của tôi
-              </Link>
-
-              <Link href="/orders">
-                📦 Đơn hàng
-              </Link>
-            </div>
-          </>
-        )}
+        <div style={styles.bottomLinks}>
+          <Link href="/">Trang chủ</Link>
+          <Link href="/shop">Cửa hàng</Link>
+          <Link href="/keys">KEY</Link>
+          <Link href="/orders">Đơn hàng</Link>
+        </div>
       </div>
     </main>
+  );
+}
+
+function StatCard({ icon, value, label }) {
+  return (
+    <div style={styles.statCard}>
+      <div style={styles.statIcon}>{icon}</div>
+
+      <div>
+        <div style={styles.statValue}>{value}</div>
+        <div style={styles.statLabel}>{label}</div>
+      </div>
+    </div>
+  );
+}
+
+function ActionCard({ href, icon, title, text }) {
+  return (
+    <Link href={href} style={styles.actionCard}>
+      <div style={styles.actionIcon}>{icon}</div>
+
+      <div style={{ flex: 1 }}>
+        <div style={styles.actionTitle}>
+          {title}
+        </div>
+
+        <div style={styles.actionText}>
+          {text}
+        </div>
+      </div>
+
+      <div style={styles.arrow}>›</div>
+    </Link>
   );
 }
 
 const styles = {
   page: {
     minHeight: "100vh",
+    position: "relative",
+    overflow: "hidden",
     background:
-      "radial-gradient(circle at top, #111d36 0%, #070b12 42%, #05070b 100%)",
+      "radial-gradient(circle at top, #111d36 0%, #070b12 45%, #040609 100%)",
     color: "#fff",
-    padding: "22px 15px 60px",
+    padding: "30px 15px 60px",
+  },
+
+  backgroundGlow: {
+    position: "fixed",
+    width: "400px",
+    height: "400px",
+    borderRadius: "50%",
+    background: "rgba(36, 105, 255, .07)",
+    filter: "blur(100px)",
+    top: "-180px",
+    left: "50%",
+    transform: "translateX(-50%)",
+    pointerEvents: "none",
   },
 
   container: {
     width: "100%",
-    maxWidth: "1000px",
+    maxWidth: "950px",
     margin: "0 auto",
+    position: "relative",
+    zIndex: 2,
   },
 
-  header: {
+  hero: {
     display: "flex",
     justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: "15px",
+    alignItems: "center",
+    gap: "20px",
     marginBottom: "25px",
   },
 
-  logo: {
+  badge: {
     display: "inline-block",
-    padding: "7px 11px",
+    padding: "6px 10px",
     borderRadius: "999px",
     background: "#101b30",
     border: "1px solid #263c65",
     color: "#72a9ff",
-    fontSize: "11px",
+    fontSize: "9px",
     fontWeight: "900",
-    letterSpacing: "1px",
+    letterSpacing: "2px",
   },
 
   title: {
-    fontSize: "clamp(27px, 6vw, 42px)",
-    margin: "12px 0 6px",
-  },
-
-  subtitle: {
-    margin: 0,
-    color: "#7e8ba0",
-    fontSize: "14px",
-  },
-
-  menuButton: {
-    width: "45px",
-    height: "45px",
-    borderRadius: "12px",
-    border: "1px solid #26354c",
-    background: "#0d1420",
-    color: "#fff",
-    fontSize: "22px",
-    cursor: "pointer",
-  },
-
-  loading: {
-    padding: "50px",
-    textAlign: "center",
-    background: "#0d1420",
-    border: "1px solid #202d42",
-    borderRadius: "17px",
-    color: "#8491a5",
-  },
-
-  error: {
-    padding: "20px",
-    background: "#241417",
-    border: "1px solid #5b292f",
-    borderRadius: "15px",
-    color: "#ff858c",
-  },
-
-  loginButton: {
-    display: "inline-block",
-    marginLeft: "12px",
-    padding: "9px 12px",
-    borderRadius: "8px",
-    background: "#fff",
-    color: "#000",
-    textDecoration: "none",
-    fontWeight: "800",
-  },
-
-  accountCard: {
-    display: "flex",
-    alignItems: "center",
-    gap: "14px",
-    padding: "18px",
-    background:
-      "linear-gradient(135deg, #101a2b, #0b111c)",
-    border: "1px solid #24334a",
-    borderRadius: "18px",
-    marginBottom: "15px",
-  },
-
-  avatar: {
-    width: "48px",
-    height: "48px",
-    borderRadius: "14px",
-    display: "grid",
-    placeItems: "center",
-    background: "#17263d",
-    color: "#75aaff",
-    fontSize: "19px",
-    fontWeight: "900",
-  },
-
-  smallText: {
-    fontSize: "9px",
-    color: "#64738a",
-    fontWeight: "800",
-    letterSpacing: "1px",
+    margin: "10px 0 4px",
+    fontSize: "clamp(27px, 5vw, 38px)",
+    fontWeight: "950",
   },
 
   email: {
-    marginTop: "3px",
-    fontSize: "15px",
-    fontWeight: "800",
+    margin: 0,
+    color: "#78869c",
+    fontSize: "13px",
     wordBreak: "break-all",
   },
 
-  userId: {
-    marginTop: "4px",
+  accountIcon: {
+    width: "58px",
+    height: "58px",
+    flexShrink: 0,
+    display: "grid",
+    placeItems: "center",
+    borderRadius: "16px",
+    background: "#15243c",
+    border: "1px solid #2b456d",
+    color: "#72a9ff",
+    fontSize: "20px",
+    fontWeight: "900",
+  },
+
+  walletCard: {
+    padding: "22px",
+    borderRadius: "18px",
+    background:
+      "linear-gradient(135deg, #10203a 0%, #0c1523 100%)",
+    border: "1px solid #29466f",
+    boxShadow: "0 20px 60px rgba(0,0,0,.25)",
+    marginBottom: "15px",
+  },
+
+  walletTop: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "20px",
+  },
+
+  walletLabel: {
+    color: "#71819a",
     fontSize: "10px",
-    color: "#59677c",
+    fontWeight: "900",
+    letterSpacing: "1.5px",
+  },
+
+  balance: {
+    marginTop: "7px",
+    fontSize: "clamp(28px, 6vw, 42px)",
+    fontWeight: "950",
+  },
+
+  walletIcon: {
+    width: "55px",
+    height: "55px",
+    display: "grid",
+    placeItems: "center",
+    borderRadius: "15px",
+    background: "#172b48",
+    fontSize: "24px",
+  },
+
+  walletBottom: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "15px",
+    flexWrap: "wrap",
+    marginTop: "20px",
+    paddingTop: "15px",
+    borderTop: "1px solid #203651",
+    color: "#718098",
+    fontSize: "12px",
   },
 
   depositButton: {
-    padding: "11px 14px",
+    padding: "10px 14px",
     borderRadius: "9px",
     background: "#fff",
     color: "#000",
     textDecoration: "none",
-    fontWeight: "900",
     fontSize: "11px",
-    whiteSpace: "nowrap",
+    fontWeight: "900",
   },
 
-  statsGrid: {
+  stats: {
     display: "grid",
     gridTemplateColumns:
-      "repeat(auto-fit, minmax(190px, 1fr))",
+      "repeat(auto-fit, minmax(180px, 1fr))",
     gap: "12px",
-    marginBottom: "25px",
+    marginBottom: "30px",
   },
 
   statCard: {
@@ -814,80 +455,54 @@ const styles = {
     alignItems: "center",
     gap: "12px",
     padding: "17px",
+    borderRadius: "14px",
     background: "#0d1420",
     border: "1px solid #202d42",
-    borderRadius: "15px",
   },
 
   statIcon: {
-    width: "40px",
-    height: "40px",
+    width: "42px",
+    height: "42px",
     display: "grid",
     placeItems: "center",
     borderRadius: "11px",
-    background: "#151f30",
+    background: "#141f31",
     fontSize: "19px",
   },
 
-  statLabel: {
-    fontSize: "9px",
-    color: "#64738a",
-    fontWeight: "800",
-    letterSpacing: ".7px",
+  statValue: {
+    fontSize: "22px",
+    fontWeight: "950",
   },
 
-  statValue: {
-    marginTop: "4px",
+  statLabel: {
+    marginTop: "2px",
+    color: "#718097",
+    fontSize: "11px",
+  },
+
+  sectionTitle: {
+    margin: "0 0 13px",
     fontSize: "17px",
     fontWeight: "900",
   },
 
-  section: {
-    marginTop: "25px",
-  },
-
-  sectionHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: "15px",
-    marginBottom: "12px",
-  },
-
-  sectionTitle: {
-    margin: 0,
-    fontSize: "19px",
-  },
-
-  sectionSub: {
-    margin: "4px 0 0",
-    color: "#68778d",
-    fontSize: "12px",
-  },
-
-  viewAll: {
-    color: "#75aaff",
-    textDecoration: "none",
-    fontSize: "10px",
-    fontWeight: "900",
-    whiteSpace: "nowrap",
-  },
-
-  actionGrid: {
+  actions: {
     display: "grid",
     gridTemplateColumns:
-      "repeat(auto-fit, minmax(220px, 1fr))",
-    gap: "11px",
+      "repeat(auto-fit, minmax(230px, 1fr))",
+    gap: "10px",
   },
 
   actionCard: {
     display: "flex",
     alignItems: "center",
     gap: "12px",
-    padding: "15px",
+    minHeight: "68px",
+    padding: "0 14px",
+    borderRadius: "13px",
     background: "#0d1420",
     border: "1px solid #202d42",
-    borderRadius: "14px",
     color: "#fff",
     textDecoration: "none",
   },
@@ -898,101 +513,106 @@ const styles = {
     display: "grid",
     placeItems: "center",
     borderRadius: "10px",
-    background: "#151f30",
-    fontSize: "19px",
+    background: "#141f31",
+    fontSize: "18px",
   },
 
-  actionCardStrong: {
-    display: "block",
-  },
-
-  list: {
-    display: "grid",
-    gap: "9px",
-  },
-
-  item: {
-    display: "flex",
-    alignItems: "center",
-    gap: "12px",
-    padding: "14px",
-    background: "#0d1420",
-    border: "1px solid #202d42",
-    borderRadius: "13px",
-  },
-
-  itemIcon: {
-    width: "38px",
-    height: "38px",
-    display: "grid",
-    placeItems: "center",
-    borderRadius: "10px",
-    background: "#151f30",
-    fontSize: "17px",
-  },
-
-  itemTitle: {
-    display: "block",
+  actionTitle: {
     fontSize: "13px",
+    fontWeight: "850",
   },
 
-  itemSub: {
-    marginTop: "4px",
-    color: "#68778d",
+  actionText: {
+    marginTop: "3px",
+    color: "#6f7c91",
     fontSize: "10px",
-    wordBreak: "break-all",
   },
 
-  itemRight: {
+  arrow: {
+    color: "#526078",
+    fontSize: "23px",
+  },
+
+  infoCard: {
     display: "flex",
-    flexDirection: "column",
-    alignItems: "flex-end",
-    gap: "5px",
-    color: "#68778d",
-    fontSize: "9px",
+    alignItems: "flex-start",
+    gap: "13px",
+    marginTop: "20px",
+    padding: "17px",
+    borderRadius: "14px",
+    background: "#0b111b",
+    border: "1px solid #1d2a3c",
   },
 
-  orderRight: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "flex-end",
-    gap: "6px",
-    whiteSpace: "nowrap",
+  infoIcon: {
+    fontSize: "22px",
   },
 
-  status: {
-    padding: "5px 7px",
-    borderRadius: "6px",
-    fontSize: "8px",
-    fontWeight: "900",
-  },
-
-  soldBadge: {
-    padding: "5px 7px",
-    borderRadius: "6px",
-    background: "#12351f",
-    color: "#55e58a",
-    fontSize: "8px",
-    fontWeight: "900",
-  },
-
-  empty: {
-    padding: "25px",
-    textAlign: "center",
-    background: "#0d1420",
-    border: "1px solid #202d42",
-    borderRadius: "13px",
-    color: "#68778d",
+  infoTitle: {
+    margin: "0 0 5px",
     fontSize: "13px",
   },
 
-  footerNav: {
+  infoText: {
+    margin: 0,
+    color: "#68758a",
+    fontSize: "11px",
+    lineHeight: 1.6,
+  },
+
+  bottomLinks: {
     display: "flex",
     justifyContent: "center",
     flexWrap: "wrap",
     gap: "20px",
-    marginTop: "35px",
-    paddingTop: "20px",
-    borderTop: "1px solid #172131",
+    marginTop: "30px",
+  },
+
+  loading: {
+    minHeight: "70vh",
+    display: "grid",
+    placeItems: "center",
+    alignContent: "center",
+    gap: "12px",
+    color: "#8491a5",
+    fontSize: "13px",
+  },
+
+  loadingIcon: {
+    width: "48px",
+    height: "48px",
+    display: "grid",
+    placeItems: "center",
+    borderRadius: "14px",
+    background: "#13223a",
+    color: "#72a9ff",
+    fontWeight: "950",
+    fontSize: "18px",
+  },
+
+  errorPage: {
+    maxWidth: "400px",
+    margin: "15vh auto 0",
+    padding: "30px 20px",
+    textAlign: "center",
+    borderRadius: "18px",
+    background: "#0d1420",
+    border: "1px solid #202d42",
+  },
+
+  errorIcon: {
+    fontSize: "45px",
+  },
+
+  primaryButton: {
+    display: "inline-block",
+    marginTop: "15px",
+    padding: "12px 18px",
+    borderRadius: "9px",
+    background: "#fff",
+    color: "#000",
+    textDecoration: "none",
+    fontWeight: "900",
+    fontSize: "12px",
   },
 };
