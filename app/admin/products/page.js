@@ -1,146 +1,140 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 
-export default function ProductsPage() {
-  const [loading, setLoading] = useState(true);
+export default function AdminProductsPage() {
+  const router = useRouter();
+
   const [products, setProducts] = useState([]);
-  const [allowed, setAllowed] = useState(false);
+  const [categories, setCategories] = useState([]);
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [uploadingId, setUploadingId] = useState(null);
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [duration, setDuration] = useState("");
+  const [categoryId, setCategoryId] = useState("");
 
-  const [editingId, setEditingId] = useState(null);
-  const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [message, setMessage] = useState("");
 
-  const [uploadingId, setUploadingId] = useState(null);
+  useEffect(() => {
+    checkAdmin();
+  }, []);
 
   async function checkAdmin() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
 
-    if (!user) {
-      window.location.href = "/";
-      return;
+      if (userError || !user) {
+        router.replace("/login");
+        return;
+      }
+
+      const { data: profile, error: profileError } =
+        await supabase
+          .from("profiles")
+          .select("id, email, role")
+          .eq("id", user.id)
+          .maybeSingle();
+
+      if (
+        profileError ||
+        !profile ||
+        profile.role !== "admin"
+      ) {
+        router.replace("/dashboard");
+        return;
+      }
+
+      await Promise.all([
+        loadProducts(),
+        loadCategories(),
+      ]);
+    } catch (error) {
+      console.error("ADMIN PRODUCT CHECK ERROR:", error);
+      router.replace("/dashboard");
     }
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    if (profile?.role !== "admin") {
-      setLoading(false);
-      return;
-    }
-
-    setAllowed(true);
-    await loadProducts();
-    setLoading(false);
   }
 
   async function loadProducts() {
     const { data, error } = await supabase
       .from("products")
-      .select("*")
-      .order("created_at", { ascending: false });
+      .select(
+        `
+        id,
+        name,
+        description,
+        price,
+        duration_days,
+        active,
+        is_active,
+        created_at,
+        demo_image_url,
+        category_id,
+        product_categories (
+          id,
+          name
+        )
+        `
+      )
+      .order("id", { ascending: true });
 
     if (error) {
-      alert("Không thể tải sản phẩm: " + error.message);
+      console.error("PRODUCT LOAD ERROR:", error);
+      setMessage("Không thể tải danh sách sản phẩm.");
       return;
     }
 
     setProducts(data || []);
   }
 
-  useEffect(() => {
-    checkAdmin();
-  }, []);
+  async function loadCategories() {
+    const { data, error } = await supabase
+      .from("product_categories")
+      .select("id, name, active")
+      .order("id", { ascending: true });
+
+    if (error) {
+      console.error("CATEGORY LOAD ERROR:", error);
+      setMessage("Không thể tải danh sách thư mục.");
+      return;
+    }
+
+    setCategories(data || []);
+  }
 
   function resetForm() {
+    setEditing(null);
     setName("");
     setDescription("");
     setPrice("");
     setDuration("");
-    setEditingId(null);
+    setCategoryId("");
   }
 
-  async function saveProduct(e) {
-    e.preventDefault();
+  function startEdit(product) {
+    setEditing(product);
 
-    if (!name.trim()) {
-      alert("Vui lòng nhập tên sản phẩm.");
-      return;
-    }
-
-    if (!price || Number(price) < 0) {
-      alert("Vui lòng nhập giá hợp lệ.");
-      return;
-    }
-
-    if (!duration || Number(duration) <= 0) {
-      alert("Vui lòng nhập số ngày sử dụng.");
-      return;
-    }
-
-    setSaving(true);
-
-    const productData = {
-      name: name.trim(),
-      description: description.trim(),
-      price: Number(price),
-      duration_days: Number(duration),
-    };
-
-    let error;
-
-    if (editingId) {
-      const result = await supabase
-        .from("products")
-        .update(productData)
-        .eq("id", editingId);
-
-      error = result.error;
-    } else {
-      const result = await supabase
-        .from("products")
-        .insert({
-          ...productData,
-          is_active: true,
-          active: true,
-        });
-
-      error = result.error;
-    }
-
-    setSaving(false);
-
-    if (error) {
-      alert("Lỗi: " + error.message);
-      return;
-    }
-
-    alert(
-      editingId
-        ? "Đã cập nhật sản phẩm!"
-        : "Đã thêm sản phẩm!"
-    );
-
-    resetForm();
-    await loadProducts();
-  }
-
-  function editProduct(product) {
-    setEditingId(product.id);
     setName(product.name || "");
     setDescription(product.description || "");
-    setPrice(product.price ?? "");
-    setDuration(product.duration_days ?? "");
+    setPrice(String(product.price || ""));
+    setDuration(String(product.duration_days || ""));
+    setCategoryId(
+      product.category_id
+        ? String(product.category_id)
+        : ""
+    );
+
+    setMessage("");
 
     window.scrollTo({
       top: 0,
@@ -148,54 +142,114 @@ export default function ProductsPage() {
     });
   }
 
-  async function deleteProduct(id) {
-    const ok = confirm(
-      "Bạn có chắc muốn xóa sản phẩm này không?"
-    );
+  async function saveProduct() {
+    const cleanName = name.trim();
+    const cleanDescription = description.trim();
+    const cleanPrice = Number(price);
+    const cleanDuration = Number(duration);
 
-    if (!ok) return;
-
-    const product = products.find(
-      (item) => item.id === id
-    );
-
-    // Xóa ảnh cũ nếu có
-    if (product?.demo_image_url) {
-      const path = getStoragePath(product.demo_image_url);
-
-      if (path) {
-        await supabase.storage
-          .from("product-demo")
-          .remove([path]);
-      }
-    }
-
-    const { error } = await supabase
-      .from("products")
-      .delete()
-      .eq("id", id);
-
-    if (error) {
-      alert("Không thể xóa: " + error.message);
+    if (!cleanName) {
+      setMessage("Vui lòng nhập tên sản phẩm.");
       return;
     }
 
-    await loadProducts();
+    if (
+      !Number.isInteger(cleanPrice) ||
+      cleanPrice <= 0
+    ) {
+      setMessage("Giá sản phẩm không hợp lệ.");
+      return;
+    }
+
+    if (
+      !Number.isInteger(cleanDuration) ||
+      cleanDuration <= 0
+    ) {
+      setMessage("Thời hạn sản phẩm không hợp lệ.");
+      return;
+    }
+
+    setSaving(true);
+    setMessage("");
+
+    try {
+      const payload = {
+        name: cleanName,
+        description: cleanDescription,
+        price: cleanPrice,
+        duration_days: cleanDuration,
+        category_id: categoryId
+          ? Number(categoryId)
+          : null,
+      };
+
+      if (editing) {
+        const { error } = await supabase
+          .from("products")
+          .update({
+            ...payload,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", editing.id);
+
+        if (error) {
+          console.error("UPDATE PRODUCT ERROR:", error);
+          setMessage(
+            error.message ||
+              "Không thể cập nhật sản phẩm."
+          );
+          setSaving(false);
+          return;
+        }
+
+        setMessage("Đã cập nhật sản phẩm.");
+      } else {
+        const { error } = await supabase
+          .from("products")
+          .insert({
+            ...payload,
+            active: true,
+            is_active: true,
+          });
+
+        if (error) {
+          console.error("CREATE PRODUCT ERROR:", error);
+          setMessage(
+            error.message ||
+              "Không thể tạo sản phẩm."
+          );
+          setSaving(false);
+          return;
+        }
+
+        setMessage("Đã tạo sản phẩm mới.");
+      }
+
+      resetForm();
+      await loadProducts();
+    } catch (error) {
+      console.error("SAVE PRODUCT ERROR:", error);
+      setMessage("Đã xảy ra lỗi.");
+    }
+
+    setSaving(false);
   }
 
   async function toggleProduct(product) {
+    const nextStatus = !product.is_active;
+
     const { error } = await supabase
       .from("products")
       .update({
-        is_active: !product.is_active,
+        is_active: nextStatus,
+        active: nextStatus,
+        updated_at: new Date().toISOString(),
       })
       .eq("id", product.id);
 
     if (error) {
-      alert(
-        "Không thể thay đổi trạng thái: " +
-          error.message
-      );
+      console.error("TOGGLE PRODUCT ERROR:", error);
+      setMessage("Không thể thay đổi trạng thái sản phẩm.");
       return;
     }
 
@@ -221,16 +275,17 @@ export default function ProductsPage() {
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      alert("Vui lòng chọn file ảnh.");
+      setMessage("Chỉ được upload file hình ảnh.");
       return;
     }
 
     if (file.size > 10 * 1024 * 1024) {
-      alert("Ảnh tối đa 10MB.");
+      setMessage("Ảnh không được vượt quá 10MB.");
       return;
     }
 
     setUploadingId(product.id);
+    setMessage("");
 
     try {
       // Xóa ảnh cũ nếu có
@@ -258,45 +313,72 @@ export default function ProductsPage() {
           .from("product-demo")
           .upload(filePath, file, {
             cacheControl: "3600",
-            upsert: true,
-            contentType: file.type,
+            upsert: false,
           });
 
       if (uploadError) {
-        throw uploadError;
+        console.error(
+          "UPLOAD DEMO ERROR:",
+          uploadError
+        );
+
+        setMessage(
+          uploadError.message ||
+            "Không thể upload ảnh."
+        );
+
+        setUploadingId(null);
+        return;
       }
 
       const {
-        data: { publicUrl },
+        data: publicData,
       } = supabase.storage
         .from("product-demo")
         .getPublicUrl(filePath);
+
+      const publicUrl =
+        publicData?.publicUrl;
+
+      if (!publicUrl) {
+        setMessage("Không lấy được URL ảnh.");
+        setUploadingId(null);
+        return;
+      }
 
       const { error: updateError } =
         await supabase
           .from("products")
           .update({
             demo_image_url: publicUrl,
+            updated_at: new Date().toISOString(),
           })
           .eq("id", product.id);
 
       if (updateError) {
-        await supabase.storage
-          .from("product-demo")
-          .remove([filePath]);
+        console.error(
+          "SAVE DEMO URL ERROR:",
+          updateError
+        );
 
-        throw updateError;
+        setMessage(
+          updateError.message ||
+            "Không thể lưu ảnh demo."
+        );
+
+        setUploadingId(null);
+        return;
       }
 
-      alert("Đã upload ảnh demo!");
-
+      setMessage("Đã upload ảnh demo.");
       await loadProducts();
     } catch (error) {
-      console.error("UPLOAD DEMO ERROR:", error);
-      alert(
-        "Không thể upload ảnh: " +
-          (error?.message || "Lỗi không xác định.")
+      console.error(
+        "UPLOAD DEMO SERVER ERROR:",
+        error
       );
+
+      setMessage("Không thể upload ảnh.");
     }
 
     setUploadingId(null);
@@ -305,13 +387,14 @@ export default function ProductsPage() {
   async function removeDemoImage(product) {
     if (!product.demo_image_url) return;
 
-    const ok = confirm(
-      "Bạn có chắc muốn xóa ảnh demo của sản phẩm này?"
+    const confirmed = window.confirm(
+      "Bạn có chắc muốn xóa ảnh demo này?"
     );
 
-    if (!ok) return;
+    if (!confirmed) return;
 
     setUploadingId(product.id);
+    setMessage("");
 
     try {
       const path = getStoragePath(
@@ -319,15 +402,15 @@ export default function ProductsPage() {
       );
 
       if (path) {
-        const { error: storageError } =
+        const { error: removeError } =
           await supabase.storage
             .from("product-demo")
             .remove([path]);
 
-        if (storageError) {
+        if (removeError) {
           console.error(
-            "REMOVE STORAGE ERROR:",
-            storageError
+            "REMOVE STORAGE IMAGE ERROR:",
+            removeError
           );
         }
       }
@@ -336,49 +419,128 @@ export default function ProductsPage() {
         .from("products")
         .update({
           demo_image_url: null,
+          updated_at: new Date().toISOString(),
         })
         .eq("id", product.id);
 
       if (error) {
-        throw error;
+        console.error(
+          "REMOVE DEMO URL ERROR:",
+          error
+        );
+
+        setMessage(
+          error.message ||
+            "Không thể xóa ảnh demo."
+        );
+
+        setUploadingId(null);
+        return;
       }
 
+      setMessage("Đã xóa ảnh demo.");
       await loadProducts();
     } catch (error) {
-      console.error("DELETE DEMO ERROR:", error);
-      alert(
-        "Không thể xóa ảnh: " +
-          (error?.message || "Lỗi không xác định.")
+      console.error(
+        "REMOVE DEMO ERROR:",
+        error
       );
+
+      setMessage("Không thể xóa ảnh demo.");
     }
 
     setUploadingId(null);
   }
 
-  if (loading) {
-    return (
-      <main style={styles.loading}>
-        <div>Đang kiểm tra quyền Admin...</div>
-      </main>
+  async function deleteProduct(product) {
+    const confirmed = window.confirm(
+      `Bạn có chắc muốn xóa sản phẩm "${product.name}"?\n\nLưu ý: các KEY đã bán không bị xóa.`
     );
+
+    if (!confirmed) return;
+
+    try {
+      // Xóa ảnh demo nếu có
+      if (product.demo_image_url) {
+        const path = getStoragePath(
+          product.demo_image_url
+        );
+
+        if (path) {
+          await supabase.storage
+            .from("product-demo")
+            .remove([path]);
+        }
+      }
+
+      const { error } = await supabase
+        .from("products")
+        .delete()
+        .eq("id", product.id);
+
+      if (error) {
+        console.error(
+          "DELETE PRODUCT ERROR:",
+          error
+        );
+
+        setMessage(
+          error.message ||
+            "Không thể xóa sản phẩm."
+        );
+
+        return;
+      }
+
+      if (editing?.id === product.id) {
+        resetForm();
+      }
+
+      setMessage("Đã xóa sản phẩm.");
+      await loadProducts();
+    } catch (error) {
+      console.error(
+        "DELETE PRODUCT ERROR:",
+        error
+      );
+
+      setMessage("Không thể xóa sản phẩm.");
+    }
   }
 
-  if (!allowed) {
+  function getCategoryName(product) {
+    if (
+      product.product_categories &&
+      !Array.isArray(product.product_categories)
+    ) {
+      return product.product_categories.name;
+    }
+
+    if (
+      Array.isArray(product.product_categories) &&
+      product.product_categories.length > 0
+    ) {
+      return product.product_categories[0].name;
+    }
+
+    if (product.category_id) {
+      const category = categories.find(
+        (item) =>
+          String(item.id) ===
+          String(product.category_id)
+      );
+
+      return category?.name || "Chưa có thư mục";
+    }
+
+    return "Chưa có thư mục";
+  }
+
+  if (loading) {
     return (
-      <main style={styles.loading}>
-        <div style={styles.denied}>
-          <h1>🚫 Không có quyền</h1>
-
-          <p>
-            Tài khoản này không phải Admin.
-          </p>
-
-          <a
-            href="/dashboard"
-            style={styles.back}
-          >
-            ← Dashboard
-          </a>
+      <main style={styles.page}>
+        <div style={styles.loading}>
+          Đang tải quản lý sản phẩm...
         </div>
       </main>
     );
@@ -387,125 +549,175 @@ export default function ProductsPage() {
   return (
     <main style={styles.page}>
       <div style={styles.container}>
-
-        {/* HEADER */}
         <div style={styles.header}>
           <div>
-            <div style={styles.logo}>
-              XENOVA PLAY
+            <div style={styles.badge}>
+              XENOVA PLAY · ADMIN
             </div>
 
             <h1 style={styles.title}>
-              📦 SẢN PHẨM
+              QUẢN LÝ SẢN PHẨM
             </h1>
 
             <p style={styles.subtitle}>
-              Quản lý các gói KEY
+              Tạo sản phẩm, gán thư mục và quản lý
+              ảnh demo.
             </p>
           </div>
 
-          <a
-            href="/admin"
-            style={styles.back}
+          <button
+            onClick={() =>
+              router.push("/admin/categories")
+            }
+            style={styles.categoryButton}
           >
-            ← Admin Panel
-          </a>
+            📁 QUẢN LÝ THƯ MỤC
+          </button>
         </div>
 
-        {/* FORM */}
-        <div style={styles.card}>
-          <h2 style={styles.cardTitle}>
-            {editingId
-              ? "✏️ Chỉnh sửa sản phẩm"
-              : "➕ Thêm sản phẩm"}
+        {message && (
+          <div style={styles.message}>
+            {message}
+          </div>
+        )}
+
+        <section style={styles.formCard}>
+          <h2 style={styles.sectionTitle}>
+            {editing
+              ? "✏️ SỬA SẢN PHẨM"
+              : "➕ TẠO SẢN PHẨM MỚI"}
           </h2>
 
-          <form onSubmit={saveProduct}>
-            <label style={styles.label}>
-              Tên sản phẩm
-            </label>
+          <div style={styles.gridForm}>
+            <div style={styles.field}>
+              <label style={styles.label}>
+                Tên sản phẩm
+              </label>
 
-            <input
-              style={styles.input}
-              value={name}
-              onChange={(e) =>
-                setName(e.target.value)
-              }
-              placeholder="VD: KEY ADR 7 NGÀY"
-            />
+              <input
+                value={name}
+                onChange={(e) =>
+                  setName(e.target.value)
+                }
+                placeholder="Ví dụ: KEY VIP 7 NGÀY"
+                style={styles.input}
+              />
+            </div>
 
+            <div style={styles.field}>
+              <label style={styles.label}>
+                Thư mục
+              </label>
+
+              <select
+                value={categoryId}
+                onChange={(e) =>
+                  setCategoryId(e.target.value)
+                }
+                style={styles.input}
+              >
+                <option value="">
+                  — Chưa chọn thư mục —
+                </option>
+
+                {categories
+                  .filter(
+                    (category) =>
+                      category.active ||
+                      String(category.id) ===
+                        String(categoryId)
+                  )
+                  .map((category) => (
+                    <option
+                      key={category.id}
+                      value={category.id}
+                    >
+                      {category.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            <div style={styles.field}>
+              <label style={styles.label}>
+                Giá bán
+              </label>
+
+              <input
+                type="number"
+                min="0"
+                value={price}
+                onChange={(e) =>
+                  setPrice(e.target.value)
+                }
+                placeholder="50000"
+                style={styles.input}
+              />
+            </div>
+
+            <div style={styles.field}>
+              <label style={styles.label}>
+                Thời hạn (ngày)
+              </label>
+
+              <input
+                type="number"
+                min="1"
+                value={duration}
+                onChange={(e) =>
+                  setDuration(e.target.value)
+                }
+                placeholder="7"
+                style={styles.input}
+              />
+            </div>
+          </div>
+
+          <div style={styles.field}>
             <label style={styles.label}>
               Mô tả
             </label>
 
-            <input
-              style={styles.input}
+            <textarea
               value={description}
               onChange={(e) =>
                 setDescription(e.target.value)
               }
-              placeholder="VD: Key sử dụng 7 ngày"
+              placeholder="Mô tả sản phẩm..."
+              rows={4}
+              style={styles.textarea}
             />
+          </div>
 
-            <label style={styles.label}>
-              Giá (VNĐ)
-            </label>
+          <div style={styles.formActions}>
+            <button
+              onClick={saveProduct}
+              disabled={saving}
+              style={styles.saveButton}
+            >
+              {saving
+                ? "ĐANG LƯU..."
+                : editing
+                ? "LƯU THAY ĐỔI"
+                : "+ TẠO SẢN PHẨM"}
+            </button>
 
-            <input
-              style={styles.input}
-              type="number"
-              value={price}
-              onChange={(e) =>
-                setPrice(e.target.value)
-              }
-              placeholder="80000"
-            />
-
-            <label style={styles.label}>
-              Thời hạn (ngày)
-            </label>
-
-            <input
-              style={styles.input}
-              type="number"
-              value={duration}
-              onChange={(e) =>
-                setDuration(e.target.value)
-              }
-              placeholder="7"
-            />
-
-            <div style={styles.formButtons}>
+            {editing && (
               <button
-                type="submit"
+                onClick={resetForm}
                 disabled={saving}
-                style={styles.saveButton}
+                style={styles.cancelButton}
               >
-                {saving
-                  ? "Đang lưu..."
-                  : editingId
-                  ? "💾 Lưu thay đổi"
-                  : "➕ Thêm sản phẩm"}
+                HỦY
               </button>
+            )}
+          </div>
+        </section>
 
-              {editingId && (
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  style={styles.cancelButton}
-                >
-                  Hủy
-                </button>
-              )}
-            </div>
-          </form>
-        </div>
-
-        {/* PRODUCT LIST */}
-        <div style={styles.card}>
+        <section>
           <div style={styles.listHeader}>
-            <h2 style={styles.cardTitle}>
-              📦 Danh sách sản phẩm
+            <h2 style={styles.sectionTitle}>
+              📦 DANH SÁCH SẢN PHẨM
             </h2>
 
             <span style={styles.count}>
@@ -524,41 +736,6 @@ export default function ProductsPage() {
                   key={product.id}
                   style={styles.product}
                 >
-                  <div style={styles.productTop}>
-                    <div style={styles.productMain}>
-                      <h3
-                        style={
-                          styles.productName
-                        }
-                      >
-                        {product.name}
-                      </h3>
-
-                      <p
-                        style={
-                          styles.description
-                        }
-                      >
-                        {product.description ||
-                          "Không có mô tả"}
-                      </p>
-                    </div>
-
-                    <span
-                      style={{
-                        ...styles.status,
-                        ...(product.is_active
-                          ? styles.active
-                          : styles.inactive),
-                      }}
-                    >
-                      {product.is_active
-                        ? "ĐANG BẬT"
-                        : "ĐANG TẮT"}
-                    </span>
-                  </div>
-
-                  {/* DEMO IMAGE */}
                   {product.demo_image_url && (
                     <div style={styles.demoPreview}>
                       <img
@@ -566,56 +743,79 @@ export default function ProductsPage() {
                           product.demo_image_url
                         }
                         alt={`Demo ${product.name}`}
-                        style={
-                          styles.demoImage
-                        }
+                        style={styles.demoImage}
                       />
                     </div>
                   )}
 
-                  <div style={styles.info}>
+                  <div style={styles.productTop}>
                     <div>
-                      💰{" "}
+                      <div style={styles.productName}>
+                        {product.name}
+                      </div>
+
+                      <div style={styles.productId}>
+                        ID: {product.id}
+                      </div>
+                    </div>
+
+                    <div
+                      style={
+                        product.is_active
+                          ? styles.active
+                          : styles.inactive
+                      }
+                    >
+                      {product.is_active
+                        ? "● ĐANG BÁN"
+                        : "● ĐANG ẨN"}
+                    </div>
+                  </div>
+
+                  <div style={styles.categoryTag}>
+                    📁 {getCategoryName(product)}
+                  </div>
+
+                  <div style={styles.productInfo}>
+                    <div>
+                      <span>Giá</span>
                       <strong>
                         {Number(
                           product.price || 0
                         ).toLocaleString(
                           "vi-VN"
                         )}
-                        ₫
+                        đ
                       </strong>
                     </div>
 
                     <div>
-                      ⏱️{" "}
+                      <span>Thời hạn</span>
                       <strong>
                         {product.duration_days} ngày
                       </strong>
                     </div>
                   </div>
 
-                  {/* IMAGE ACTIONS */}
-                  <div
-                    style={
-                      styles.imageActions
-                    }
-                  >
+                  {product.description && (
+                    <div style={styles.description}>
+                      {product.description}
+                    </div>
+                  )}
+
+                  <div style={styles.imageActions}>
                     <label
-                      style={{
-                        ...styles.uploadButton,
-                        ...(uploadingId ===
-                        product.id
-                          ? styles.disabledButton
-                          : {}),
-                      }}
+                      style={
+                        uploadingId === product.id
+                          ? styles.uploadButtonDisabled
+                          : styles.uploadButton
+                      }
                     >
-                      📷{" "}
-                      {uploadingId ===
-                      product.id
+                      {uploadingId === product.id
                         ? "ĐANG UPLOAD..."
                         : product.demo_image_url
-                        ? "ĐỔI ẢNH DEMO"
-                        : "UPLOAD ẢNH DEMO"}
+                        ? "📷 ĐỔI ẢNH DEMO"
+                        : "📷 UPLOAD ẢNH DEMO"}
 
                       <input
                         type="file"
@@ -628,78 +828,72 @@ export default function ProductsPage() {
                           const file =
                             e.target.files?.[0];
 
-                          e.target.value = "";
+                          if (file) {
+                            uploadDemoImage(
+                              product,
+                              file
+                            );
+                          }
 
-                          uploadDemoImage(
-                            product,
-                            file
-                          );
+                          e.target.value = "";
                         }}
-                        style={
-                          styles.hiddenFile
-                        }
+                        style={{
+                          display: "none",
+                        }}
                       />
                     </label>
 
                     {product.demo_image_url && (
                       <button
-                        type="button"
+                        onClick={() =>
+                          removeDemoImage(product)
+                        }
                         disabled={
                           uploadingId ===
                           product.id
                         }
-                        onClick={() =>
-                          removeDemoImage(
-                            product
-                          )
-                        }
-                        style={
-                          styles.removeImage
-                        }
+                        style={styles.removeImageButton}
                       >
-                        🗑️ XÓA ẢNH
+                        XÓA ẢNH
                       </button>
                     )}
                   </div>
 
-                  {/* PRODUCT ACTIONS */}
                   <div style={styles.actions}>
                     <button
                       onClick={() =>
-                        editProduct(product)
+                        startEdit(product)
                       }
-                      style={styles.edit}
+                      style={styles.editButton}
                     >
-                      ✏️ Sửa
+                      SỬA
                     </button>
 
                     <button
                       onClick={() =>
                         toggleProduct(product)
                       }
-                      style={styles.toggle}
+                      style={styles.toggleButton}
                     >
                       {product.is_active
-                        ? "⛔ Tắt"
-                        : "✅ Bật"}
+                        ? "ẨN"
+                        : "HIỆN"}
                     </button>
 
                     <button
                       onClick={() =>
-                        deleteProduct(
-                          product.id
-                        )
+                        deleteProduct(product)
                       }
-                      style={styles.delete}
+                      style={styles.deleteButton}
                     >
-                      🗑️ Xóa
+                      XÓA
                     </button>
                   </div>
                 </div>
               ))}
             </div>
           )}
-        </div>
+        </section>
       </div>
     </main>
   );
@@ -708,117 +902,157 @@ export default function ProductsPage() {
 const styles = {
   page: {
     minHeight: "100vh",
-    background: "#050505",
+    background:
+      "radial-gradient(circle at top, #111d36 0%, #070b12 45%, #05070b 100%)",
     color: "#fff",
-    padding: "20px 14px 60px",
-    fontFamily:
-      "Arial, Helvetica, sans-serif",
+    padding: "25px 15px 70px",
+    fontFamily: "Arial, sans-serif",
   },
 
   container: {
     width: "100%",
-    maxWidth: "1000px",
+    maxWidth: "1100px",
     margin: "0 auto",
   },
 
-  header: {
-    padding: "24px",
-    borderRadius: "20px",
-    background: "#111",
-    border: "1px solid #292929",
-    marginBottom: "20px",
+  loading: {
+    minHeight: "100vh",
+    display: "grid",
+    placeItems: "center",
+    color: "#8995a8",
   },
 
-  logo: {
-    color: "#ff1744",
-    fontWeight: "900",
-    letterSpacing: "3px",
-    fontSize: "14px",
+  header: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: "20px",
+    marginBottom: "25px",
+  },
+
+  badge: {
+    display: "inline-block",
+    padding: "7px 10px",
+    borderRadius: "999px",
+    background: "#101b30",
+    border: "1px solid #263c65",
+    color: "#72a9ff",
+    fontSize: "10px",
+    fontWeight: "800",
+    letterSpacing: "1px",
   },
 
   title: {
-    margin: "8px 0",
-    fontSize: "38px",
+    margin: "12px 0 6px",
+    fontSize: "clamp(28px, 5vw, 44px)",
     fontWeight: "900",
   },
 
   subtitle: {
     margin: 0,
-    color: "#888",
+    color: "#7f8ba0",
+    lineHeight: 1.5,
   },
 
-  back: {
-    display: "inline-block",
-    marginTop: "18px",
-    padding: "12px 18px",
-    borderRadius: "12px",
-    background: "#181818",
-    border: "1px solid #333",
+  categoryButton: {
+    padding: "11px 14px",
+    borderRadius: "9px",
+    border: "1px solid #293850",
+    background: "#111927",
     color: "#fff",
-    textDecoration: "none",
-    fontWeight: "700",
+    fontWeight: "800",
+    cursor: "pointer",
   },
 
-  card: {
-    background: "#0e0e0e",
-    border: "1px solid #252525",
-    borderRadius: "20px",
+  message: {
+    marginBottom: "18px",
+    padding: "13px 15px",
+    borderRadius: "10px",
+    background: "#151e2c",
+    border: "1px solid #293850",
+    color: "#aebbd0",
+  },
+
+  formCard: {
+    marginBottom: "30px",
     padding: "22px",
-    marginBottom: "20px",
+    borderRadius: "16px",
+    background: "#0d1420",
+    border: "1px solid #202d42",
   },
 
-  cardTitle: {
-    marginTop: 0,
-    marginBottom: "20px",
-    fontSize: "23px",
+  sectionTitle: {
+    margin: 0,
+    fontSize: "18px",
+    fontWeight: "900",
+  },
+
+  gridForm: {
+    display: "grid",
+    gridTemplateColumns:
+      "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: "15px",
+    marginTop: "18px",
+  },
+
+  field: {
+    marginTop: "18px",
   },
 
   label: {
     display: "block",
     marginBottom: "7px",
-    marginTop: "15px",
-    color: "#aaa",
-    fontSize: "14px",
-    fontWeight: "700",
+    color: "#8995a8",
+    fontSize: "12px",
+    fontWeight: "800",
   },
 
   input: {
     width: "100%",
     boxSizing: "border-box",
-    padding: "14px",
-    borderRadius: "12px",
-    border: "1px solid #333",
-    background: "#181818",
+    padding: "13px",
+    borderRadius: "9px",
+    border: "1px solid #293850",
+    background: "#070b12",
     color: "#fff",
-    fontSize: "15px",
     outline: "none",
   },
 
-  formButtons: {
+  textarea: {
+    width: "100%",
+    boxSizing: "border-box",
+    padding: "13px",
+    borderRadius: "9px",
+    border: "1px solid #293850",
+    background: "#070b12",
+    color: "#fff",
+    outline: "none",
+    resize: "vertical",
+  },
+
+  formActions: {
     display: "flex",
     gap: "10px",
-    marginTop: "20px",
+    marginTop: "18px",
   },
 
   saveButton: {
-    flex: 1,
-    padding: "14px",
+    padding: "12px 16px",
     border: 0,
-    borderRadius: "12px",
-    background: "#ff1744",
-    color: "#fff",
+    borderRadius: "9px",
+    background: "#fff",
+    color: "#000",
     fontWeight: "900",
-    fontSize: "15px",
     cursor: "pointer",
   },
 
   cancelButton: {
-    padding: "14px 20px",
-    border: "1px solid #333",
-    borderRadius: "12px",
-    background: "#181818",
+    padding: "12px 16px",
+    borderRadius: "9px",
+    border: "1px solid #293850",
+    background: "#151d29",
     color: "#fff",
-    fontWeight: "700",
+    fontWeight: "800",
     cursor: "pointer",
   },
 
@@ -826,196 +1060,207 @@ const styles = {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    gap: "10px",
+    gap: "15px",
+    marginBottom: "14px",
   },
 
   count: {
-    color: "#888",
-    fontSize: "13px",
-  },
-
-  empty: {
-    padding: "30px 10px",
-    textAlign: "center",
-    color: "#777",
+    color: "#718097",
+    fontSize: "12px",
   },
 
   products: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "14px",
+    display: "grid",
+    gridTemplateColumns:
+      "repeat(auto-fit, minmax(280px, 1fr))",
+    gap: "15px",
   },
 
   product: {
     padding: "18px",
-    borderRadius: "16px",
-    background: "#151515",
-    border: "1px solid #292929",
-  },
-
-  productTop: {
-    display: "flex",
-    justifyContent: "space-between",
-    gap: "15px",
-  },
-
-  productMain: {
-    minWidth: 0,
-    flex: 1,
-  },
-
-  productName: {
-    margin: 0,
-    fontSize: "19px",
-  },
-
-  description: {
-    color: "#888",
-    margin: "7px 0 0",
-    fontSize: "14px",
-  },
-
-  status: {
-    height: "fit-content",
-    padding: "6px 9px",
-    borderRadius: "999px",
-    fontSize: "10px",
-    fontWeight: "900",
-    whiteSpace: "nowrap",
-  },
-
-  active: {
-    color: "#00e676",
+    borderRadius: "15px",
     background:
-      "rgba(0,230,118,.1)",
-    border:
-      "1px solid rgba(0,230,118,.3)",
-  },
-
-  inactive: {
-    color: "#ff5252",
-    background:
-      "rgba(255,82,82,.1)",
-    border:
-      "1px solid rgba(255,82,82,.3)",
-  },
-
-  info: {
-    display: "flex",
-    gap: "25px",
-    marginTop: "18px",
-    color: "#aaa",
-    fontSize: "14px",
+      "linear-gradient(145deg, #111927, #0b111b)",
+    border: "1px solid #202d42",
   },
 
   demoPreview: {
-    marginTop: "18px",
-    borderRadius: "14px",
+    marginBottom: "15px",
+    borderRadius: "11px",
     overflow: "hidden",
-    background: "#080808",
-    border: "1px solid #292929",
+    background: "#070b10",
+    border: "1px solid #26344a",
   },
 
   demoImage: {
     display: "block",
     width: "100%",
-    maxHeight: "500px",
+    maxHeight: "240px",
     objectFit: "contain",
-    background: "#080808",
+    background: "#070b10",
+  },
+
+  productTop: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: "10px",
+  },
+
+  productName: {
+    fontSize: "18px",
+    fontWeight: "900",
+  },
+
+  productId: {
+    marginTop: "4px",
+    color: "#5e6c80",
+    fontSize: "10px",
+  },
+
+  active: {
+    color: "#61e28b",
+    fontSize: "10px",
+    fontWeight: "900",
+    whiteSpace: "nowrap",
+  },
+
+  inactive: {
+    color: "#ff777d",
+    fontSize: "10px",
+    fontWeight: "900",
+    whiteSpace: "nowrap",
+  },
+
+  categoryTag: {
+    display: "inline-block",
+    marginTop: "13px",
+    padding: "7px 9px",
+    borderRadius: "7px",
+    background: "#15223a",
+    border: "1px solid #263c65",
+    color: "#8db9ff",
+    fontSize: "10px",
+    fontWeight: "800",
+  },
+
+  productInfo: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "10px",
+    marginTop: "15px",
+  },
+
+  productInfoItem: {},
+
+  productInfo: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "10px",
+    marginTop: "15px",
+  },
+
+  description: {
+    marginTop: "13px",
+    color: "#78869a",
+    fontSize: "12px",
+    lineHeight: 1.5,
   },
 
   imageActions: {
     display: "flex",
-    gap: "8px",
     flexWrap: "wrap",
-    marginTop: "14px",
+    gap: "8px",
+    marginTop: "16px",
   },
 
   uploadButton: {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    padding: "10px 14px",
-    borderRadius: "10px",
-    background: "#202020",
-    border: "1px solid #333",
-    color: "#fff",
-    fontWeight: "800",
-    fontSize: "13px",
+    padding: "9px 11px",
+    borderRadius: "8px",
+    background: "#17243a",
+    border: "1px solid #31486a",
+    color: "#8db9ff",
+    fontSize: "10px",
+    fontWeight: "900",
     cursor: "pointer",
   },
 
-  hiddenFile: {
-    display: "none",
-  },
-
-  disabledButton: {
-    opacity: 0.6,
+  uploadButtonDisabled: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "9px 11px",
+    borderRadius: "8px",
+    background: "#151b25",
+    border: "1px solid #293850",
+    color: "#657287",
+    fontSize: "10px",
+    fontWeight: "900",
     cursor: "not-allowed",
   },
 
-  removeImage: {
-    padding: "10px 14px",
-    borderRadius: "10px",
-    border: "1px solid #5a1515",
-    background: "#241010",
-    color: "#ff5252",
-    fontWeight: "700",
+  removeImageButton: {
+    padding: "9px 11px",
+    borderRadius: "8px",
+    background: "#261417",
+    border: "1px solid #542b30",
+    color: "#ff777d",
+    fontSize: "10px",
+    fontWeight: "900",
     cursor: "pointer",
   },
 
   actions: {
     display: "flex",
-    gap: "8px",
-    marginTop: "18px",
     flexWrap: "wrap",
+    gap: "8px",
+    marginTop: "15px",
+    paddingTop: "15px",
+    borderTop: "1px solid #202d42",
   },
 
-  edit: {
-    padding: "10px 14px",
-    borderRadius: "10px",
-    border: "1px solid #333",
-    background: "#202020",
-    color: "#fff",
-    fontWeight: "700",
+  editButton: {
+    padding: "9px 12px",
+    borderRadius: "8px",
+    border: "1px solid #31486a",
+    background: "#17243a",
+    color: "#8db9ff",
+    fontSize: "10px",
+    fontWeight: "900",
     cursor: "pointer",
   },
 
-  toggle: {
-    padding: "10px 14px",
-    borderRadius: "10px",
-    border: "1px solid #333",
-    background: "#202020",
-    color: "#fff",
-    fontWeight: "700",
+  toggleButton: {
+    padding: "9px 12px",
+    borderRadius: "8px",
+    border: "1px solid #4d4a25",
+    background: "#292714",
+    color: "#e7dc73",
+    fontSize: "10px",
+    fontWeight: "900",
     cursor: "pointer",
   },
 
-  delete: {
-    padding: "10px 14px",
-    borderRadius: "10px",
-    border: "1px solid #5a1515",
-    background: "#241010",
-    color: "#ff5252",
-    fontWeight: "700",
+  deleteButton: {
+    padding: "9px 12px",
+    borderRadius: "8px",
+    border: "1px solid #542b30",
+    background: "#261417",
+    color: "#ff777d",
+    fontSize: "10px",
+    fontWeight: "900",
     cursor: "pointer",
   },
 
-  loading: {
-    minHeight: "100vh",
-    background: "#050505",
-    color: "#fff",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "20px",
-  },
-
-  denied: {
-    background: "#111",
-    border: "1px solid #333",
-    borderRadius: "20px",
-    padding: "30px",
+  empty: {
+    padding: "50px 20px",
     textAlign: "center",
+    borderRadius: "15px",
+    background: "#0d1420",
+    border: "1px solid #202d42",
+    color: "#718097",
   },
 };
