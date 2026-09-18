@@ -11,21 +11,12 @@ export default function Menu() {
   const [themeReady, setThemeReady] = useState(false);
 
   useEffect(() => {
-    // =========================
-    // KIỂM TRA ĐĂNG NHẬP
-    // =========================
-
     supabase.auth.getUser().then(({ data }) => {
       setUser(data?.user || null);
     });
 
-    // =========================
-    // LOAD THEME
-    // Mặc định là sáng
-    // =========================
-
+    // Mặc định SÁNG
     const savedTheme = localStorage.getItem("xenova-theme");
-
     const isDark = savedTheme === "dark";
 
     setDark(isDark);
@@ -37,10 +28,6 @@ export default function Menu() {
 
     setThemeReady(true);
 
-    // =========================
-    // MỞ MENU TỪ NƠI KHÁC
-    // =========================
-
     const handler = () => setOpen(true);
 
     window.addEventListener("xenova-open-menu", handler);
@@ -49,10 +36,6 @@ export default function Menu() {
       window.removeEventListener("xenova-open-menu", handler);
     };
   }, []);
-
-  // =========================
-  // ĐỔI THEME
-  // =========================
 
   function toggleTheme() {
     const nextDark = !dark;
@@ -70,10 +53,6 @@ export default function Menu() {
     );
   }
 
-  // =========================
-  // ĐĂNG XUẤT
-  // =========================
-
   async function logout() {
     await supabase.auth.signOut();
     setOpen(false);
@@ -83,28 +62,59 @@ export default function Menu() {
   return (
     <>
       {/* =========================
-          NÚT MENU
+          CỤM NÚT GÓC PHẢI
           ========================= */}
 
-      <button
-        onClick={() => setOpen(true)}
-        aria-label="Mở menu"
-        style={{
-          ...styles.menuButton,
-          background: dark
-            ? "rgba(10, 16, 27, .94)"
-            : "rgba(255,255,255,.95)",
-          color: dark ? "#fff" : "#111",
-          border: dark
-            ? "1px solid #26364e"
-            : "1px solid #d9dfe8",
-          boxShadow: dark
-            ? "0 8px 30px rgba(0,0,0,.3)"
-            : "0 8px 30px rgba(0,0,0,.12)",
-        }}
-      >
-        ☰
-      </button>
+      <div style={styles.topButtons}>
+        {/* NÚT SÁNG / TỐI */}
+
+        {themeReady && (
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label={
+              dark
+                ? "Chuyển sang chế độ sáng"
+                : "Chuyển sang chế độ tối"
+            }
+            style={{
+              ...styles.themeButton,
+              background: dark ? "#101010" : "#ffffff",
+              color: dark ? "#fff" : "#111",
+              border: dark
+                ? "1px solid #26364e"
+                : "1px solid #d9dfe8",
+              boxShadow: dark
+                ? "0 8px 30px rgba(0,0,0,.3)"
+                : "0 8px 30px rgba(0,0,0,.12)",
+            }}
+          >
+            {dark ? "🌙" : "☀️"}
+          </button>
+        )}
+
+        {/* MENU - LUÔN SÁT GÓC PHẢI */}
+
+        <button
+          onClick={() => setOpen(true)}
+          aria-label="Mở menu"
+          style={{
+            ...styles.menuButton,
+            background: dark
+              ? "rgba(10,16,27,.94)"
+              : "rgba(255,255,255,.96)",
+            color: dark ? "#fff" : "#111",
+            border: dark
+              ? "1px solid #26364e"
+              : "1px solid #d9dfe8",
+            boxShadow: dark
+              ? "0 8px 30px rgba(0,0,0,.3)"
+              : "0 8px 30px rgba(0,0,0,.12)",
+          }}
+        >
+          ☰
+        </button>
+      </div>
 
       {/* =========================
           DRAWER
@@ -124,21 +134,14 @@ export default function Menu() {
             style={{
               ...styles.drawer,
               background: dark
-                ? "linear-gradient(180deg, #0d1420 0%, #070b12 100%)"
-                : "linear-gradient(180deg, #ffffff 0%, #f5f7fa 100%)",
+                ? "linear-gradient(180deg,#0d1420 0%,#070b12 100%)"
+                : "linear-gradient(180deg,#ffffff 0%,#f5f7fa 100%)",
               borderLeft: dark
                 ? "1px solid #24344c"
                 : "1px solid #dce2ea",
-              boxShadow: dark
-                ? "-15px 0 50px rgba(0,0,0,.45)"
-                : "-15px 0 50px rgba(0,0,0,.15)",
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* =========================
-                HEADER
-                ========================= */}
-
             <div style={styles.drawerHeader}>
               <div>
                 <div
@@ -182,10 +185,6 @@ export default function Menu() {
               }}
             />
 
-            {/* =========================
-                USER
-                ========================= */}
-
             {user && (
               <div
                 style={{
@@ -227,10 +226,6 @@ export default function Menu() {
                 </div>
               </div>
             )}
-
-            {/* =========================
-                NAVIGATION
-                ========================= */}
 
             <nav style={styles.nav}>
               <MenuLink
@@ -290,53 +285,6 @@ export default function Menu() {
               />
             </nav>
 
-            {/* =========================
-                ĐỔI SÁNG / TỐI
-                ========================= */}
-
-            {themeReady && (
-              <button
-                type="button"
-                onClick={toggleTheme}
-                style={{
-                  ...styles.themeButton,
-                  background: dark ? "#101a29" : "#ffffff",
-                  border: dark
-                    ? "1px solid #26364e"
-                    : "1px solid #dce2ea",
-                  color: dark ? "#fff" : "#111",
-                }}
-              >
-                <span style={styles.themeLeft}>
-                  <span style={styles.themeIcon}>
-                    {dark ? "🌙" : "☀️"}
-                  </span>
-
-                  <span>
-                    {dark
-                      ? "Chế độ tối"
-                      : "Chế độ sáng"}
-                  </span>
-                </span>
-
-                <span
-                  style={{
-                    ...styles.switch,
-                    background: dark ? "#ff3030" : "#d8dde5",
-                    justifyContent: dark
-                      ? "flex-end"
-                      : "flex-start",
-                  }}
-                >
-                  <span style={styles.switchDot} />
-                </span>
-              </button>
-            )}
-
-            {/* =========================
-                BOTTOM
-                ========================= */}
-
             <div
               style={{
                 ...styles.bottom,
@@ -350,15 +298,11 @@ export default function Menu() {
                   onClick={logout}
                   style={{
                     ...styles.logout,
+                    background: dark ? "#211316" : "#fff5f6",
+                    color: dark ? "#ff858c" : "#d9363e",
                     border: dark
                       ? "1px solid #4a252b"
                       : "1px solid #f0c7cb",
-                    background: dark
-                      ? "#211316"
-                      : "#fff5f6",
-                    color: dark
-                      ? "#ff858c"
-                      : "#d9363e",
                   }}
                 >
                   <span>🚪</span>
@@ -385,10 +329,6 @@ export default function Menu() {
   );
 }
 
-/* =========================================================
-   MENU LINK
-   ========================================================= */
-
 function MenuLink({
   href,
   icon,
@@ -403,19 +343,15 @@ function MenuLink({
       style={{
         ...styles.link,
         color: dark ? "#dbe4f0" : "#202733",
-        background: dark ? "#0d1522" : "#ffffff",
+        background: dark ? "#0d1522" : "#fff",
         border: dark
           ? "1px solid #18263a"
           : "1px solid #dce2ea",
       }}
     >
-      <span style={styles.linkIcon}>
-        {icon}
-      </span>
+      <span style={styles.linkIcon}>{icon}</span>
 
-      <span>
-        {text}
-      </span>
+      <span>{text}</span>
 
       <span
         style={{
@@ -429,16 +365,30 @@ function MenuLink({
   );
 }
 
-/* =========================================================
-   STYLES
-   ========================================================= */
-
 const styles = {
-  menuButton: {
+  topButtons: {
     position: "fixed",
     top: "16px",
     right: "16px",
     zIndex: 9990,
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+  },
+
+  themeButton: {
+    width: "46px",
+    height: "46px",
+    borderRadius: "13px",
+    fontSize: "21px",
+    cursor: "pointer",
+    backdropFilter: "blur(12px)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  menuButton: {
     width: "46px",
     height: "46px",
     borderRadius: "13px",
@@ -458,10 +408,11 @@ const styles = {
     position: "absolute",
     top: 0,
     right: 0,
-    width: "min(88vw, 350px)",
+    width: "min(88vw,350px)",
     height: "100%",
     padding: "22px 16px",
     overflowY: "auto",
+    boxShadow: "-15px 0 50px rgba(0,0,0,.25)",
   },
 
   drawerHeader: {
@@ -556,52 +507,6 @@ const styles = {
   arrow: {
     marginLeft: "auto",
     fontSize: "22px",
-  },
-
-  themeButton: {
-    width: "100%",
-    minHeight: "52px",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: "10px",
-    padding: "0 13px",
-    marginTop: "12px",
-    borderRadius: "12px",
-    fontSize: "14px",
-    fontWeight: "800",
-    cursor: "pointer",
-  },
-
-  themeLeft: {
-    display: "flex",
-    alignItems: "center",
-    gap: "12px",
-  },
-
-  themeIcon: {
-    width: "28px",
-    textAlign: "center",
-    fontSize: "18px",
-  },
-
-  switch: {
-    width: "42px",
-    height: "24px",
-    padding: "3px",
-    borderRadius: "999px",
-    display: "flex",
-    alignItems: "center",
-    transition: "all .2s ease",
-  },
-
-  switchDot: {
-    width: "18px",
-    height: "18px",
-    borderRadius: "50%",
-    background: "#fff",
-    display: "block",
-    boxShadow: "0 1px 4px rgba(0,0,0,.25)",
   },
 
   bottom: {
