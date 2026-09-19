@@ -1,6 +1,5 @@
 import "./globals.css";
 import Menu from "./components/Menu";
-import ChatButton from "./components/ChatButton";
 
 export default function RootLayout({ children }) {
   return (
@@ -9,8 +8,6 @@ export default function RootLayout({ children }) {
         <Menu />
 
         {children}
-
-        <ChatButton />
       </body>
     </html>
   );
