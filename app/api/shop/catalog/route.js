@@ -1,32 +1,74 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !serviceRoleKey) {
+  console.error("Missing Supabase environment variables");
+}
+
 const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
+  supabaseUrl,
+  serviceRoleKey
 );
 
 export async function GET() {
   try {
+    // ==========================================
+    // LẤY DANH MỤC
+    // ==========================================
+
     const { data: categories, error: categoryError } =
       await supabaseAdmin
         .from("product_categories")
         .select(
-          "id,name,description,image_url,demo_image_url,active,parent_id,created_at,updated_at"
+          `
+          id,
+          name,
+          description,
+          image_url,
+          demo_image_url,
+          active,
+          parent_id,
+          created_at,
+          updated_at
+          `
         )
-        .order("id", { ascending: true });
+        .eq("active", true)
+        .order("id", {
+          ascending: true,
+        });
 
     if (categoryError) {
-      console.error("CATEGORY ERROR:", categoryError);
+      console.error(
+        "SHOP CATALOG CATEGORY ERROR:",
+        categoryError
+      );
 
-      return NextResponse.json(
-        {
+      return new NextResponse(
+        JSON.stringify({
           success: false,
           error: categoryError.message,
-        },
-        { status: 500 }
+        }),
+        {
+          status: 500,
+          headers: {
+            "Content-Type":
+              "application/json; charset=utf-8",
+            "Cache-Control":
+              "no-store, no-cache, must-revalidate",
+          },
+        }
       );
     }
+
+    // ==========================================
+    // LẤY SẢN PHẨM
+    // ==========================================
 
     const { data: products, error: productError } =
       await supabaseAdmin
@@ -45,47 +87,79 @@ export async function GET() {
           media_type,
           video_url,
           created_at
-        `
+          `
         )
         .eq("active", true)
         .eq("is_active", true)
-        .order("id", { ascending: true });
+        .order("id", {
+          ascending: true,
+        });
 
     if (productError) {
-      console.error("PRODUCT ERROR:", productError);
+      console.error(
+        "SHOP CATALOG PRODUCT ERROR:",
+        productError
+      );
 
-      return NextResponse.json(
-        {
+      return new NextResponse(
+        JSON.stringify({
           success: false,
           error: productError.message,
-        },
-        { status: 500 }
+        }),
+        {
+          status: 500,
+          headers: {
+            "Content-Type":
+              "application/json; charset=utf-8",
+            "Cache-Control":
+              "no-store, no-cache, must-revalidate",
+          },
+        }
       );
     }
 
-    /*
-      Tạo thêm thông tin đường dẫn danh mục:
-
-      KEY
-        └── ANDROID
-
-      ACC GAME
-        └── FREE FIRE
-
-      để frontend không phải tự truy vấn lại database.
-    */
+    // ==========================================
+    // TẠO MAP CATEGORY
+    // ==========================================
 
     const categoryMap = new Map();
 
     for (const category of categories || []) {
-      categoryMap.set(Number(category.id), category);
+      categoryMap.set(
+        Number(category.id),
+        category
+      );
     }
 
+    // ==========================================
+    // LẤY ĐƯỜNG DẪN CATEGORY
+    //
+    // Ví dụ:
+    //
+    // KEY
+    //  └── ANDROID
+    //
+    // sẽ trả:
+    //
+    // [
+    //   KEY,
+    //   ANDROID
+    // ]
+    // ==========================================
+
     function getCategoryPath(categoryId) {
-      if (!categoryId) return [];
+      if (
+        categoryId === null ||
+        categoryId === undefined
+      ) {
+        return [];
+      }
 
       const result = [];
-      let current = categoryMap.get(Number(categoryId));
+
+      let current = categoryMap.get(
+        Number(categoryId)
+      );
 
       let guard = 0;
 
@@ -93,56 +167,132 @@ export async function GET() {
         result.unshift({
           id: current.id,
           name: current.name,
-          parent_id: current.parent_id ?? null,
+          parent_id:
+            current.parent_id ?? null,
         });
 
-        if (!current.parent_id) break;
+        if (
+          current.parent_id === null ||
+          current.parent_id === undefined
+        ) {
+          break;
+        }
 
-        current = categoryMap.get(Number(current.parent_id));
+        current = categoryMap.get(
+          Number(current.parent_id)
+        );
+
         guard++;
       }
 
       return result;
     }
 
-    const productsWithCategory = (products || []).map((product) => {
-      const categoryPath = getCategoryPath(product.category_id);
+    // ==========================================
+    // GẮN CATEGORY VÀO PRODUCT
+    // ==========================================
 
-      return {
-        ...product,
+    const productsWithCategory =
+      (products || []).map((product) => {
+        const categoryPath =
+          getCategoryPath(product.category_id);
 
-        category: categoryPath.length
-          ? categoryPath[categoryPath.length - 1]
-          : null,
+        const parentCategory =
+          categoryPath.length > 0
+            ? categoryPath[0]
+            : null;
 
-        category_path: categoryPath,
-
-        parent_category:
-          categoryPath.length > 0 ? categoryPath[0] : null,
-
-        child_category:
+        const childCategory =
           categoryPath.length > 1
-            ? categoryPath[categoryPath.length - 1]
-            : null,
-      };
-    });
+            ? categoryPath[
+                categoryPath.length - 1
+              ]
+            : null;
 
-    return NextResponse.json({
+        return {
+          ...product,
+
+          category:
+            categoryPath.length > 0
+              ? categoryPath[
+                  categoryPath.length - 1
+                ]
+              : null,
+
+          category_path: categoryPath,
+
+          parent_category:
+            parentCategory,
+
+          child_category:
+            childCategory,
+        };
+      });
+
+    // ==========================================
+    // RESPONSE
+    // ==========================================
+
+    const responseData = {
       success: true,
 
       categories: categories || [],
 
       products: productsWithCategory,
-    });
-  } catch (error) {
-    console.error("CATALOG API ERROR:", error);
 
-    return NextResponse.json(
-      {
-        success: false,
-        error: error?.message || "Lỗi server",
+      meta: {
+        category_count:
+          (categories || []).length,
+
+        product_count:
+          productsWithCategory.length,
+
+        generated_at:
+          new Date().toISOString(),
       },
-      { status: 500 }
+    };
+
+    return new NextResponse(
+      JSON.stringify(responseData),
+      {
+        status: 200,
+
+        headers: {
+          "Content-Type":
+            "application/json; charset=utf-8",
+
+          "Cache-Control":
+            "no-store, no-cache, must-revalidate, proxy-revalidate",
+
+          Pragma: "no-cache",
+
+          Expires: "0",
+        },
+      }
+    );
+  } catch (error) {
+    console.error(
+      "SHOP CATALOG UNEXPECTED ERROR:",
+      error
+    );
+
+    return new NextResponse(
+      JSON.stringify({
+        success: false,
+        error:
+          error?.message ||
+          "Không thể tải danh mục cửa hàng",
+      }),
+      {
+        status: 500,
+        headers: {
+          "Content-Type":
+            "application/json; charset=utf-8",
+
+          "Cache-Control":
+            "no-store",
+        },
+      }
     );
   }
 }
