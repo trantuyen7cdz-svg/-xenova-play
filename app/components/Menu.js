@@ -2,23 +2,51 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 
 export default function Menu() {
+  const pathname = usePathname();
+  const router = useRouter();
+
   const [open, setOpen] = useState(false);
   const [user, setUser] = useState(null);
   const [dark, setDark] = useState(false);
   const [themeReady, setThemeReady] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setUser(data?.user || null);
-    });
+    let mounted = true;
+
+    async function loadUser() {
+      const {
+        data,
+        error,
+      } = await supabase.auth.getUser();
+
+      if (!mounted) return;
+
+      if (!error) {
+        setUser(data?.user || null);
+      }
+    }
+
+    loadUser();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (mounted) {
+          setUser(session?.user || null);
+        }
+      }
+    );
 
     const savedTheme =
       localStorage.getItem("xenova-theme");
 
-    const isDark = savedTheme === "dark";
+    const isDark =
+      savedTheme === "dark";
 
     setDark(isDark);
 
@@ -29,7 +57,9 @@ export default function Menu() {
 
     setThemeReady(true);
 
-    const handler = () => setOpen(true);
+    const handler = () => {
+      setOpen(true);
+    };
 
     window.addEventListener(
       "xenova-open-menu",
@@ -37,6 +67,10 @@ export default function Menu() {
     );
 
     return () => {
+      mounted = false;
+
+      subscription.unsubscribe();
+
       window.removeEventListener(
         "xenova-open-menu",
         handler
@@ -62,13 +96,36 @@ export default function Menu() {
 
   async function logout() {
     await supabase.auth.signOut();
+
+    setUser(null);
     setOpen(false);
-    window.location.href = "/";
+
+    router.push("/");
+  }
+
+  function isActive(path) {
+    if (path === "/") {
+      return pathname === "/";
+    }
+
+    return (
+      pathname === path ||
+      pathname?.startsWith(`${path}/`)
+    );
   }
 
   return (
     <>
-      <div className="global-menu-buttons">
+      {/* =========================
+          TOP MENU BUTTON
+      ========================= */}
+
+      <div
+        className="global-menu-buttons"
+        style={{
+          display: "flex",
+        }}
+      >
         {themeReady && (
           <button
             type="button"
@@ -94,6 +151,10 @@ export default function Menu() {
         </button>
       </div>
 
+      {/* =========================
+          DRAWER MENU
+      ========================= */}
+
       {open && (
         <div
           className="xenova-menu-overlay"
@@ -101,8 +162,8 @@ export default function Menu() {
         >
           <aside
             className="xenova-drawer"
-            onClick={(e) =>
-              e.stopPropagation()
+            onClick={(event) =>
+              event.stopPropagation()
             }
           >
             <div className="xenova-drawer-header">
@@ -114,7 +175,10 @@ export default function Menu() {
               <button
                 type="button"
                 className="drawer-close"
-                onClick={() => setOpen(false)}
+                onClick={() =>
+                  setOpen(false)
+                }
+                aria-label="Đóng menu"
               >
                 ×
               </button>
@@ -122,7 +186,9 @@ export default function Menu() {
 
             <div className="drawer-line" />
 
-            {user && (
+            {/* USER */}
+
+            {user ? (
               <div className="drawer-user">
                 <div className="drawer-avatar">
                   {user.email
@@ -131,16 +197,45 @@ export default function Menu() {
                 </div>
 
                 <div className="drawer-user-info">
-                  <small>TÀI KHOẢN</small>
+                  <small>
+                    TÀI KHOẢN
+                  </small>
+
                   <strong>
                     {user.email}
                   </strong>
                 </div>
               </div>
+            ) : (
+              <Link
+                href="/login"
+                className="drawer-login-card"
+                onClick={() =>
+                  setOpen(false)
+                }
+              >
+                <span className="drawer-login-icon">
+                  🔐
+                </span>
+
+                <span>
+                  <small>
+                    XIN CHÀO
+                  </small>
+
+                  <strong>
+                    Đăng nhập tài khoản
+                  </strong>
+                </span>
+
+                <span className="drawer-arrow">
+                  ›
+                </span>
+              </Link>
             )}
 
             <div className="drawer-title">
-              MENU
+              MENU CHÍNH
             </div>
 
             <nav className="drawer-nav">
@@ -148,51 +243,112 @@ export default function Menu() {
                 href="/"
                 icon="⌂"
                 text="Trang chủ"
-                close={() => setOpen(false)}
+                active={isActive("/")}
+                close={() =>
+                  setOpen(false)
+                }
               />
 
               <MenuLink
                 href="/shop"
                 icon="🛒"
                 text="Cửa hàng"
-                close={() => setOpen(false)}
+                active={isActive("/shop")}
+                close={() =>
+                  setOpen(false)
+                }
               />
 
               <MenuLink
                 href="/deposit"
                 icon="💳"
                 text="Nạp tiền"
-                close={() => setOpen(false)}
+                active={isActive(
+                  "/deposit"
+                )}
+                close={() =>
+                  setOpen(false)
+                }
               />
 
               <MenuLink
                 href="/keys"
                 icon="🔑"
                 text="KEY của tôi"
-                close={() => setOpen(false)}
+                active={isActive("/keys")}
+                close={() =>
+                  setOpen(false)
+                }
               />
 
               <MenuLink
                 href="/orders"
-                icon="▣"
+                icon="🧾"
                 text="Đơn hàng"
-                close={() => setOpen(false)}
+                active={isActive(
+                  "/orders"
+                )}
+                close={() =>
+                  setOpen(false)
+                }
               />
 
               <MenuLink
                 href="/dashboard"
-                icon="♙"
+                icon="👤"
                 text="Tài khoản"
-                close={() => setOpen(false)}
+                active={isActive(
+                  "/dashboard"
+                )}
+                close={() =>
+                  setOpen(false)
+                }
               />
 
               <MenuLink
                 href="/settings"
-                icon="⚙"
+                icon="⚙️"
                 text="Cài đặt"
-                close={() => setOpen(false)}
+                active={isActive(
+                  "/settings"
+                )}
+                close={() =>
+                  setOpen(false)
+                }
               />
             </nav>
+
+            {/* THEME */}
+
+            <div className="drawer-section">
+              <div className="drawer-section-title">
+                GIAO DIỆN
+              </div>
+
+              <button
+                type="button"
+                className="drawer-theme"
+                onClick={toggleTheme}
+              >
+                <span className="drawer-theme-icon">
+                  {dark ? "🌙" : "☀️"}
+                </span>
+
+                <span>
+                  {dark
+                    ? "Chế độ tối"
+                    : "Chế độ sáng"}
+                </span>
+
+                <span className="drawer-theme-state">
+                  {dark
+                    ? "DARK"
+                    : "LIGHT"}
+                </span>
+              </button>
+            </div>
+
+            {/* BOTTOM */}
 
             <div className="drawer-bottom">
               {user ? (
@@ -201,8 +357,13 @@ export default function Menu() {
                   className="drawer-logout"
                   onClick={logout}
                 >
-                  🚪
-                  <span>Đăng xuất</span>
+                  <span>
+                    🚪
+                  </span>
+
+                  <span>
+                    Đăng xuất
+                  </span>
                 </button>
               ) : (
                 <Link
@@ -212,13 +373,79 @@ export default function Menu() {
                     setOpen(false)
                   }
                 >
-                  🔐 Đăng nhập
+                  <span>
+                    🔐
+                  </span>
+
+                  <span>
+                    Đăng nhập
+                  </span>
                 </Link>
               )}
             </div>
           </aside>
         </div>
       )}
+
+      {/* =========================
+          BOTTOM TOOLBAR
+      ========================= */}
+
+      <nav
+        className="mobile-bottom-bar"
+        aria-label="Thanh điều hướng"
+      >
+        <BottomLink
+          href="/"
+          icon="⌂"
+          label="Trang chủ"
+          active={isActive("/")}
+        />
+
+        <BottomLink
+          href="/shop"
+          icon="🛒"
+          label="Cửa hàng"
+          active={isActive("/shop")}
+        />
+
+        <button
+          type="button"
+          className="bottom-main-button"
+          onClick={() => setOpen(true)}
+          aria-label="Mở menu"
+        >
+          <span className="bottom-menu-icon">
+            ☰
+          </span>
+
+          <small>
+            MENU
+          </small>
+        </button>
+
+        <BottomLink
+          href="/keys"
+          icon="🔑"
+          label="KEY"
+          active={isActive("/keys")}
+        />
+
+        <BottomLink
+          href={user ? "/dashboard" : "/login"}
+          icon="👤"
+          label={
+            user
+              ? "Tài khoản"
+              : "Đăng nhập"
+          }
+          active={
+            user
+              ? isActive("/dashboard")
+              : isActive("/login")
+          }
+        />
+      </nav>
     </>
   );
 }
@@ -227,23 +454,56 @@ function MenuLink({
   href,
   icon,
   text,
+  active,
   close,
 }) {
   return (
     <Link
       href={href}
       onClick={close}
-      className="drawer-link"
+      className={
+        active
+          ? "drawer-link active"
+          : "drawer-link"
+      }
     >
       <span className="drawer-link-icon">
         {icon}
       </span>
 
-      <span>{text}</span>
+      <span className="drawer-link-text">
+        {text}
+      </span>
 
       <span className="drawer-arrow">
         ›
       </span>
+    </Link>
+  );
+}
+
+function BottomLink({
+  href,
+  icon,
+  label,
+  active,
+}) {
+  return (
+    <Link
+      href={href}
+      className={
+        active
+          ? "bottom-nav-link active"
+          : "bottom-nav-link"
+      }
+    >
+      <span className="bottom-nav-icon">
+        {icon}
+      </span>
+
+      <small>
+        {label}
+      </small>
     </Link>
   );
 }
