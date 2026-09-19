@@ -70,11 +70,13 @@ export default function Menu() {
 
     if (savedTheme === "dark") {
       setDark(true);
+
       document.documentElement.classList.add(
         "dark"
       );
     } else {
       setDark(false);
+
       document.documentElement.classList.remove(
         "dark"
       );
@@ -362,27 +364,62 @@ export default function Menu() {
       {/* =========================
           THANH CÔNG CỤ DƯỚI
           
-          CHỈ CÒN AVATAR
-          KHÔNG SỐ DƯ
-          KHÔNG CHỮ TÀI KHOẢN
-          KHÔNG KHO KEY
-          KHÔNG XEM KEY
+          SỐ DƯ | AVATAR | KEY
+          
+          TÀI KHOẢN:
+          CHỈ HIỆN AVATAR
+          
+          KEY:
+          CHỈ HIỆN ICON KEY
       ========================= */}
 
       <div className="xenova-bottom-toolbar">
+
+        {/* SỐ DƯ */}
+        <Link
+          href="/deposit"
+          className="xenova-bottom-item"
+          aria-label="Số dư"
+        >
+          <span className="xenova-bottom-icon">
+            💰
+          </span>
+
+          <span className="xenova-bottom-text">
+            <small>SỐ DƯ</small>
+
+            <strong>
+              {formatPrice(balance)}
+            </strong>
+          </span>
+        </Link>
+
+        {/* TÀI KHOẢN - CHỈ AVATAR */}
         <Link
           href={
             user
               ? "/dashboard"
               : "/login"
           }
-          className="xenova-bottom-avatar"
+          className="xenova-bottom-item xenova-account-bottom"
           aria-label="Tài khoản"
         >
           <span className="xenova-avatar">
             🐰
           </span>
         </Link>
+
+        {/* KEY - CHỈ ICON */}
+        <Link
+          href="/keys"
+          className="xenova-bottom-item xenova-key-bottom"
+          aria-label="KEY"
+        >
+          <span className="xenova-bottom-icon">
+            🔑
+          </span>
+        </Link>
+
       </div>
     </>
   );
