@@ -29,7 +29,6 @@ export default function MyKeysPage() {
         return;
       }
 
-      // Lấy KEY của tài khoản đang đăng nhập
       const {
         data: keyData,
         error: keyError,
@@ -54,7 +53,6 @@ export default function MyKeysPage() {
         return;
       }
 
-      // Lấy thông tin sản phẩm
       const productIds = [
         ...new Set(keyData.map((item) => item.product_id)),
       ];
@@ -103,7 +101,6 @@ export default function MyKeysPage() {
     } catch (err) {
       console.error("COPY ERROR:", err);
 
-      // Fallback cho một số trình duyệt
       try {
         const textarea = document.createElement("textarea");
         textarea.value = keyCode;
@@ -219,7 +216,8 @@ export default function MyKeysPage() {
               Hãy mua một sản phẩm để KEY của bạn xuất hiện tại đây.
             </p>
 
-            <a href="/products" className="buyButton">
+            {/* ĐÃ SỬA: /products → /shop */}
+            <a href="/shop" className="buyButton">
               🛒 MUA KEY
             </a>
           </div>
