@@ -6,14 +6,9 @@ import { supabase } from "../../lib/supabase";
 
 const ZALO_ADMIN = "https://zalo.me/0987654321";
 
-const NAV_ITEMS = [
-  { key: "all", label: "Tất cả sản phẩm", icon: "▦" },
-  { key: "steam", label: "Steam", icon: "●" },
-  { key: "windows", label: "Windows", icon: "⊞" },
-  { key: "office", label: "Office", icon: "▣" },
-  { key: "adobe", label: "Adobe", icon: "A" },
-  { key: "game", label: "Game", icon: "⌁" },
-];
+function formatPrice(value) {
+  return new Intl.NumberFormat("vi-VN").format(Number(value || 0)) + "đ";
+}
 
 function normalize(value) {
   return String(value || "")
@@ -22,482 +17,40 @@ function normalize(value) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
-function formatPrice(value) {
-  const n = Number(value || 0);
-
-  if (!Number.isFinite(n)) return "0đ";
-
-  return new Intl.NumberFormat("vi-VN").format(n) + "đ";
-}
-
-function getProductName(product) {
+function getProductImage(product) {
   return (
-    product?.name ||
-    product?.title ||
-    product?.product_name ||
-    product?.productName ||
-    "Sản phẩm"
+    product?.demo_image_url ||
+    product?.image_url ||
+    "/placeholder-product.png"
   );
 }
 
-function getProductPrice(product) {
-  return (
-    product?.price ??
-    product?.selling_price ??
-    product?.sale_price ??
-    product?.amount ??
-    0
+function getCategoryName(categoryId, categories) {
+  const category = categories.find(
+    (item) => Number(item.id) === Number(categoryId)
   );
+
+  return category?.name || "Chưa phân loại";
 }
 
-function getProductDays(product) {
-  return (
-    product?.days ??
-    product?.duration ??
-    product?.duration_days ??
-    product?.valid_days ??
-    null
+function getCategoryChain(categoryId, categories) {
+  const current = categories.find(
+    (item) => Number(item.id) === Number(categoryId)
   );
-}
 
-function getProductCategory(product) {
-  return (
-    product?.category_name ||
-    product?.category ||
-    product?.category_slug ||
-    product?.type ||
-    ""
-  );
-}
+  if (!current) return [];
 
-function getProductStock(product, stockMap) {
-  const id = String(product?.id ?? "");
+  const result = [current];
 
-  if (
-    stockMap &&
-    Object.prototype.hasOwnProperty.call(stockMap, id)
-  ) {
-    return Number(stockMap[id] || 0);
+  if (current.parent_id) {
+    const parent = categories.find(
+      (item) => Number(item.id) === Number(current.parent_id)
+    );
+
+    if (parent) result.unshift(parent);
   }
 
-  return Number(
-    product?.stock ??
-      product?.stock_count ??
-      product?.quantity ??
-      product?.available ??
-      0
-  );
-}
-
-function getCategoryKey(product) {
-  const name = normalize(
-    `${getProductName(product)} ${getProductCategory(product)}`
-  );
-
-  if (name.includes("steam") || name.includes("valve")) {
-    return "steam";
-  }
-
-  if (
-    name.includes("windows") ||
-    name.includes("win ")
-  ) {
-    return "windows";
-  }
-
-  if (
-    name.includes("office") ||
-    name.includes("microsoft")
-  ) {
-    return "office";
-  }
-
-  if (
-    name.includes("adobe") ||
-    name.includes("photoshop") ||
-    name.includes("premiere")
-  ) {
-    return "adobe";
-  }
-
-  if (
-    name.includes("game") ||
-    name.includes("genshin") ||
-    name.includes("valorant") ||
-    name.includes("roblox")
-  ) {
-    return "game";
-  }
-
-  return "all";
-}
-
-function getIconKind(product) {
-  const name = normalize(getProductName(product));
-
-  if (name.includes("steam")) return "steam";
-  if (name.includes("windows")) return "windows";
-  if (name.includes("office")) return "office";
-  if (name.includes("photoshop")) return "photoshop";
-  if (name.includes("premiere")) return "premiere";
-  if (name.includes("genshin")) return "genshin";
-  if (name.includes("valorant")) return "valorant";
-  if (name.includes("roblox")) return "roblox";
-
-  return "generic";
-}
-
-function ProductIcon({ product }) {
-  const kind = getIconKind(product);
-
-  const icons = {
-    steam: (
-      <svg viewBox="0 0 64 64">
-        <circle
-          cx="32"
-          cy="32"
-          r="30"
-          fill="#111827"
-        />
-        <circle
-          cx="39"
-          cy="22"
-          r="10"
-          fill="none"
-          stroke="#fff"
-          strokeWidth="6"
-        />
-        <circle
-          cx="39"
-          cy="22"
-          r="3"
-          fill="#fff"
-        />
-        <circle
-          cx="23"
-          cy="40"
-          r="9"
-          fill="none"
-          stroke="#fff"
-          strokeWidth="6"
-        />
-        <path
-          d="M29 35 36 27"
-          stroke="#fff"
-          strokeWidth="6"
-          strokeLinecap="round"
-        />
-      </svg>
-    ),
-
-    windows: (
-      <svg viewBox="0 0 64 64">
-        <path
-          d="M6 11 30 8v22H6z"
-          fill="#13a8f5"
-        />
-        <path
-          d="M34 7 58 4v26H34z"
-          fill="#0787e8"
-        />
-        <path
-          d="M6 34h24v22L6 53z"
-          fill="#0787e8"
-        />
-        <path
-          d="M34 34h24v26l-24-3z"
-          fill="#13a8f5"
-        />
-      </svg>
-    ),
-
-    office: (
-      <svg viewBox="0 0 64 64">
-        <rect
-          x="5"
-          y="5"
-          width="54"
-          height="54"
-          rx="8"
-          fill="#f04a23"
-        />
-        <path
-          d="M18 13h27l8 8v30H18z"
-          fill="#d93617"
-        />
-        <path
-          d="M32 18 43 46h-8l-2-7h-9l-2 7h-8zm-3 15h4l-2-7z"
-          fill="#fff"
-        />
-      </svg>
-    ),
-
-    photoshop: (
-      <svg viewBox="0 0 64 64">
-        <rect
-          x="4"
-          y="4"
-          width="56"
-          height="56"
-          rx="8"
-          fill="#061c35"
-        />
-        <rect
-          x="9"
-          y="9"
-          width="46"
-          height="46"
-          rx="5"
-          fill="none"
-          stroke="#31a8ff"
-          strokeWidth="2"
-        />
-        <text
-          x="13"
-          y="41"
-          fontSize="22"
-          fontWeight="900"
-          fill="#31a8ff"
-        >
-          Ps
-        </text>
-      </svg>
-    ),
-
-    premiere: (
-      <svg viewBox="0 0 64 64">
-        <rect
-          x="4"
-          y="4"
-          width="56"
-          height="56"
-          rx="8"
-          fill="#211034"
-        />
-        <rect
-          x="9"
-          y="9"
-          width="46"
-          height="46"
-          rx="5"
-          fill="none"
-          stroke="#d45cff"
-          strokeWidth="2"
-        />
-        <text
-          x="13"
-          y="41"
-          fontSize="21"
-          fontWeight="900"
-          fill="#d45cff"
-        >
-          Pr
-        </text>
-      </svg>
-    ),
-
-    genshin: (
-      <svg viewBox="0 0 64 64">
-        <defs>
-          <linearGradient
-            id="genshinGradient"
-            x1="0"
-            x2="1"
-            y1="0"
-            y2="1"
-          >
-            <stop
-              offset="0"
-              stopColor="#dff4ff"
-            />
-            <stop
-              offset="1"
-              stopColor="#7cb8ec"
-            />
-          </linearGradient>
-        </defs>
-
-        <circle
-          cx="32"
-          cy="32"
-          r="30"
-          fill="url(#genshinGradient)"
-        />
-
-        <path
-          d="M32 11c4 10 12 14 21 16-9 3-16 9-21 25-5-16-12-22-21-25 9-2 17-6 21-16z"
-          fill="#fff"
-        />
-
-        <circle
-          cx="24"
-          cy="31"
-          r="2"
-          fill="#42617e"
-        />
-
-        <circle
-          cx="40"
-          cy="31"
-          r="2"
-          fill="#42617e"
-        />
-      </svg>
-    ),
-
-    valorant: (
-      <svg viewBox="0 0 64 64">
-        <path
-          d="M8 7h14l10 23L43 7h13L37 56H25z"
-          fill="#ef3340"
-        />
-        <path
-          d="M8 7h14l7 16H17z"
-          fill="#fff"
-        />
-      </svg>
-    ),
-
-    roblox: (
-      <svg viewBox="0 0 64 64">
-        <rect
-          x="5"
-          y="5"
-          width="54"
-          height="54"
-          rx="11"
-          fill="#ed1b2f"
-        />
-        <rect
-          x="20"
-          y="20"
-          width="24"
-          height="24"
-          rx="3"
-          transform="rotate(45 32 32)"
-          fill="#fff"
-        />
-        <rect
-          x="29"
-          y="29"
-          width="6"
-          height="6"
-          rx="1"
-          transform="rotate(45 32 32)"
-          fill="#ed1b2f"
-        />
-      </svg>
-    ),
-
-    generic: (
-      <svg viewBox="0 0 64 64">
-        <path
-          d="M32 5 38 25 59 32 38 39 32 59 26 39 5 32 26 25z"
-          fill="currentColor"
-        />
-        <circle
-          cx="32"
-          cy="32"
-          r="7"
-          fill="#fff"
-        />
-      </svg>
-    ),
-  };
-
-  return (
-    <div className={`product-icon product-icon-${kind}`}>
-      {icons[kind]}
-    </div>
-  );
-}
-
-function ProductCard({
-  product,
-  stock,
-  onBuy,
-}) {
-  const name = getProductName(product);
-  const price = getProductPrice(product);
-  const days = getProductDays(product);
-  const category = normalize(
-    getProductCategory(product)
-  );
-
-  const sold =
-    category.includes("office") ||
-    category.includes("adobe") ||
-    normalize(name).includes("valorant") ||
-    normalize(name).includes("genshin");
-
-  const iconKind = getIconKind(product);
-
-  return (
-    <article className="product-card">
-      <div
-        className={`product-cover product-cover-${iconKind}`}
-      >
-        <div className="cover-corner">
-          {sold ? "Bán chạy" : "Hot"}
-        </div>
-
-        <div className="cover-glow" />
-
-        <ProductIcon product={product} />
-      </div>
-
-      <div className="product-body">
-        <div
-          className="product-name"
-          title={name}
-        >
-          {name}
-        </div>
-
-        <div className="product-tags">
-          <span
-            className={
-              sold ? "tag-hot" : "tag-new"
-            }
-          >
-            {sold ? "Bán chạy" : "Hot"}
-          </span>
-
-          <span className="tag-auto">
-            {days
-              ? `${days} ngày`
-              : "Tự động"}
-          </span>
-        </div>
-
-        <div className="product-price">
-          {formatPrice(price)}
-        </div>
-
-        <button
-          className="buy-button"
-          onClick={() => onBuy(product)}
-          disabled={stock <= 0}
-        >
-          {stock > 0
-            ? "Mua ngay →"
-            : "Hết hàng"}
-        </button>
-      </div>
-    </article>
-  );
-}
-
-function ProductSkeleton() {
-  return (
-    <div className="product-card skeleton-card">
-      <div className="skeleton cover-skeleton" />
-      <div className="skeleton-line large skeleton" />
-      <div className="skeleton-line small skeleton" />
-      <div className="skeleton-line price skeleton" />
-      <div className="skeleton-button skeleton" />
-    </div>
-  );
+  return result;
 }
 
 export default function ShopPage() {
@@ -505,110 +58,92 @@ export default function ShopPage() {
 
   const [user, setUser] = useState(null);
   const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [stockMap, setStockMap] = useState({});
   const [wallet, setWallet] = useState(0);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const [selectedCategory, setSelectedCategory] =
-    useState("all");
+  const [selectedParent, setSelectedParent] = useState(null);
+  const [selectedChild, setSelectedChild] = useState(null);
 
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("default");
 
+  const [openParents, setOpenParents] = useState({});
   const [buyModal, setBuyModal] = useState(null);
-  const [successModal, setSuccessModal] =
-    useState(null);
-
+  const [successModal, setSuccessModal] = useState(null);
   const [buying, setBuying] = useState(false);
   const [message, setMessage] = useState("");
 
-  async function loadWallet(currentUser) {
-    if (!currentUser) {
-      setWallet(0);
-      return;
+  // =========================
+  // AUTH
+  // =========================
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadUser() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!mounted) return;
+
+      setUser(user || null);
     }
 
-    try {
-      const { data } = await supabase
-        .from("profiles")
-        .select(
-          "wallet_balance,balance"
-        )
-        .eq("id", currentUser.id)
-        .maybeSingle();
+    loadUser();
 
-      setWallet(
-        Number(
-          data?.wallet_balance ??
-            data?.balance ??
-            0
-        )
-      );
-    } catch {
-      setWallet(0);
-    }
-  }
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  // =========================
+  // LOAD SHOP
+  // =========================
 
   async function loadShop() {
-    setLoading(true);
-    setError("");
-
     try {
-      const catalogResponse = await fetch(
-        "/api/shop/catalog",
-        {
-          cache: "no-store",
-        }
-      );
+      setLoading(true);
+      setError("");
 
-      if (!catalogResponse.ok) {
-        throw new Error(
-          "Không tải được danh sách sản phẩm"
-        );
+      const [catalogResponse, stockResponse] = await Promise.all([
+        fetch("/api/shop/catalog", {
+          cache: "no-store",
+        }),
+        fetch("/api/shop/stock", {
+          cache: "no-store",
+        }),
+      ]);
+
+      const catalog = await catalogResponse.json();
+      const stock = await stockResponse.json();
+
+      if (!catalogResponse.ok || !catalog.success) {
+        throw new Error(catalog.error || "Không tải được sản phẩm");
       }
 
-      const catalogData =
-        await catalogResponse.json();
+      setCategories(catalog.categories || []);
+      setProducts(catalog.products || []);
 
-      const loadedProducts =
-        Array.isArray(catalogData)
-          ? catalogData
-          : catalogData?.products ||
-            catalogData?.data ||
-            [];
-
-      setProducts(loadedProducts);
-
-      try {
-        const stockResponse =
-          await fetch(
-            "/api/shop/stock",
-            {
-              cache: "no-store",
-            }
-          );
-
-        if (stockResponse.ok) {
-          const stockData =
-            await stockResponse.json();
-
-          setStockMap(
-            stockData?.stock ||
-              stockData?.stocks ||
-              stockData?.data ||
-              {}
-          );
-        }
-      } catch {
+      if (stock?.success) {
+        setStockMap(stock.stock || stock.stockMap || {});
+      } else {
         setStockMap({});
       }
     } catch (err) {
-      setError(
-        err?.message ||
-          "Không thể tải cửa hàng."
-      );
+      console.error(err);
+      setError(err.message || "Không thể tải cửa hàng");
     } finally {
       setLoading(false);
     }
@@ -616,201 +151,225 @@ export default function ShopPage() {
 
   useEffect(() => {
     loadShop();
-
-    let mounted = true;
-
-    supabase.auth.getUser().then(
-      ({ data }) => {
-        if (!mounted) return;
-
-        const currentUser =
-          data?.user || null;
-
-        setUser(currentUser);
-        loadWallet(currentUser);
-      }
-    );
-
-    const {
-      data: listener,
-    } =
-      supabase.auth.onAuthStateChange(
-        async (_event, session) => {
-          if (!mounted) return;
-
-          const currentUser =
-            session?.user || null;
-
-          setUser(currentUser);
-          loadWallet(currentUser);
-        }
-      );
-
-    return () => {
-      mounted = false;
-      listener?.subscription?.unsubscribe();
-    };
   }, []);
 
-  const categoryCounts = useMemo(() => {
-    const counts = {
-      all: products.length,
-      steam: 0,
-      windows: 0,
-      office: 0,
-      adobe: 0,
-      game: 0,
-    };
+  // =========================
+  // LOAD WALLET
+  // =========================
 
-    for (const product of products) {
-      const key =
-        getCategoryKey(product);
-
-      if (
-        counts[key] !== undefined
-      ) {
-        counts[key] += 1;
-      }
+  useEffect(() => {
+    if (!user) {
+      setWallet(0);
+      return;
     }
 
-    return counts;
-  }, [products]);
+    async function loadWallet() {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("wallet_balance,balance")
+        .eq("id", user.id)
+        .maybeSingle();
 
-  const visibleProducts = useMemo(() => {
-    let list = [...products];
+      if (error) {
+        console.error("WALLET ERROR:", error);
+        return;
+      }
 
-    if (selectedCategory !== "all") {
-      list = list.filter(
+      setWallet(
+        Number(data?.wallet_balance ?? data?.balance ?? 0)
+      );
+    }
+
+    loadWallet();
+  }, [user]);
+
+  // =========================
+  // CATEGORY TREE
+  // =========================
+
+  const parentCategories = useMemo(() => {
+    return categories.filter(
+      (category) => !category.parent_id
+    );
+  }, [categories]);
+
+  function getChildren(parentId) {
+    return categories.filter(
+      (category) =>
+        Number(category.parent_id) === Number(parentId)
+    );
+  }
+
+  // =========================
+  // FILTER PRODUCTS
+  // =========================
+
+  const filteredProducts = useMemo(() => {
+    let result = [...products];
+
+    if (selectedChild) {
+      result = result.filter(
         (product) =>
-          getCategoryKey(product) ===
-          selectedCategory
+          Number(product.category_id) ===
+          Number(selectedChild)
+      );
+    } else if (selectedParent) {
+      const children = getChildren(selectedParent);
+
+      const allowedIds = [
+        Number(selectedParent),
+        ...children.map((item) => Number(item.id)),
+      ];
+
+      result = result.filter((product) =>
+        allowedIds.includes(Number(product.category_id))
       );
     }
 
     const keyword = normalize(search);
 
     if (keyword) {
-      list = list.filter(
-        (product) =>
-          normalize(
-            `${getProductName(
-              product
-            )} ${getProductCategory(
-              product
-            )}`
-          ).includes(keyword)
-      );
+      result = result.filter((product) => {
+        const categoryName = getCategoryName(
+          product.category_id,
+          categories
+        );
+
+        return (
+          normalize(product.name).includes(keyword) ||
+          normalize(product.description).includes(keyword) ||
+          normalize(categoryName).includes(keyword)
+        );
+      });
     }
 
-    if (sort === "price-low") {
-      list.sort(
+    if (sort === "price-asc") {
+      result.sort(
         (a, b) =>
-          Number(
-            getProductPrice(a)
-          ) -
-          Number(
-            getProductPrice(b)
-          )
+          Number(a.price || 0) -
+          Number(b.price || 0)
       );
     }
 
-    if (sort === "price-high") {
-      list.sort(
+    if (sort === "price-desc") {
+      result.sort(
         (a, b) =>
-          Number(
-            getProductPrice(b)
-          ) -
-          Number(
-            getProductPrice(a)
-          )
+          Number(b.price || 0) -
+          Number(a.price || 0)
       );
     }
 
-    return list;
+    if (sort === "name") {
+      result.sort((a, b) =>
+        String(a.name || "").localeCompare(
+          String(b.name || ""),
+          "vi"
+        )
+      );
+    }
+
+    return result;
   }, [
     products,
-    selectedCategory,
+    categories,
+    selectedParent,
+    selectedChild,
     search,
     sort,
   ]);
 
-  function handleBuyClick(product) {
-    if (!user) {
-      router.push("/login");
-      return;
-    }
+  // =========================
+  // CATEGORY CLICK
+  // =========================
 
-    const stock =
-      getProductStock(
-        product,
-        stockMap
-      );
+  function selectParent(id) {
+    setSelectedParent(id);
+    setSelectedChild(null);
 
-    if (stock <= 0) {
-      setMessage(
-        "Sản phẩm hiện đã hết hàng."
-      );
-      return;
-    }
-
-    setMessage("");
-    setBuyModal(product);
+    setOpenParents((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
   }
 
-  async function confirmBuy() {
-    if (!buyModal || buying) return;
+  function selectChild(parentId, childId) {
+    setSelectedParent(parentId);
+    setSelectedChild(childId);
+  }
+
+  function selectAll() {
+    setSelectedParent(null);
+    setSelectedChild(null);
+  }
+
+  // =========================
+  // STOCK
+  // =========================
+
+  function getStock(productId) {
+    const value =
+      stockMap?.[productId] ??
+      stockMap?.[String(productId)] ??
+      0;
+
+    return Number(value || 0);
+  }
+
+  // =========================
+  // BUY
+  // =========================
+
+  async function handleBuy() {
+    if (!buyModal) return;
 
     if (!user) {
       router.push("/login");
       return;
     }
 
-    setBuying(true);
-    setMessage("");
+    const stock = getStock(buyModal.id);
+
+    if (stock <= 0) {
+      setMessage("Sản phẩm hiện đã hết hàng.");
+      return;
+    }
+
+    if (wallet < Number(buyModal.price || 0)) {
+      setMessage("Số dư không đủ. Vui lòng nạp tiền.");
+      return;
+    }
 
     try {
+      setBuying(true);
+      setMessage("");
+
       const {
-        data: sessionData,
-      } =
-        await supabase.auth.getSession();
+        data: { session },
+      } = await supabase.auth.getSession();
 
-      const token =
-        sessionData?.session
-          ?.access_token;
-
-      if (!token) {
-        throw new Error(
-          "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
-        );
+      if (!session?.access_token) {
+        router.push("/login");
+        return;
       }
 
-      const response =
-        await fetch(
-          "/api/buy-key",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type":
-                "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              product_id:
-                Number(
-                  buyModal.id
-                ),
-            }),
-          }
-        );
+      const response = await fetch("/api/buy-key", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          product_id: Number(buyModal.id),
+        }),
+      });
 
-      const data =
-        await response.json();
+      const data = await response.json();
 
-      if (!response.ok) {
+      if (!response.ok || data?.success === false) {
         throw new Error(
           data?.error ||
             data?.message ||
-            "Mua sản phẩm thất bại."
+            "Không thể mua sản phẩm"
         );
       }
 
@@ -824,684 +383,612 @@ export default function ShopPage() {
       setBuyModal(null);
 
       setSuccessModal({
-        product:
-          getProductName(
-            buyModal
-          ),
+        product: buyModal,
         key,
       });
 
       await loadShop();
-      await loadWallet(user);
+
+      // cập nhật số dư
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("wallet_balance,balance")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profile) {
+        setWallet(
+          Number(
+            profile.wallet_balance ??
+              profile.balance ??
+              0
+          )
+        );
+      }
     } catch (err) {
+      console.error(err);
       setMessage(
-        err?.message ||
-          "Có lỗi xảy ra khi mua sản phẩm."
+        err.message || "Mua sản phẩm thất bại"
       );
     } finally {
       setBuying(false);
     }
   }
 
-  async function copyKey() {
-    if (!successModal?.key) return;
+  // =========================
+  // MEDIA
+  // =========================
 
-    try {
-      await navigator.clipboard.writeText(
-        successModal.key
-      );
+  function ProductMedia({ product }) {
+    const image = getProductImage(product);
 
-      setMessage("Đã sao chép KEY.");
-    } catch {
-      setMessage(
-        "Không thể sao chép tự động."
+    if (
+      product.media_type === "video" &&
+      product.video_url
+    ) {
+      return (
+        <video
+          src={product.video_url}
+          className="product-media"
+          muted
+          loop
+          playsInline
+          autoPlay
+        />
       );
     }
+
+    if (
+      product.media_type === "both" &&
+      product.video_url
+    ) {
+      return (
+        <div className="media-wrap">
+          <img
+            src={image}
+            alt={product.name}
+            className="product-media"
+          />
+
+          <span className="video-badge">
+            ▶ VIDEO
+          </span>
+        </div>
+      );
+    }
+
+    return (
+      <img
+        src={image}
+        alt={product.name}
+        className="product-media"
+      />
+    );
   }
 
-  function deposit() {
-    router.push("/deposit");
+  // =========================
+  // LOADING
+  // =========================
+
+  if (loading) {
+    return (
+      <div className="loading-screen">
+        <div className="loading-box">
+          <div className="loader" />
+          <p>Đang tải cửa hàng...</p>
+        </div>
+
+        <style jsx>{styles}</style>
+      </div>
+    );
   }
 
   return (
-    <main className="shop-page">
-      <div className="petal petal-1">
-        ✦
-      </div>
+    <main className="page">
 
-      <div className="petal petal-2">
-        ✧
-      </div>
-
-      <div className="petal petal-3">
-        ❀
-      </div>
-
-      <div className="petal petal-4">
-        ✦
-      </div>
-
-      <div className="petal petal-5">
-        ❀
-      </div>
-
+      {/* HEADER */}
       <header className="topbar">
         <div className="topbar-inner">
-          <button
-            className="mobile-menu"
-            onClick={() =>
-              setSelectedCategory(
-                "all"
-              )
-            }
-          >
-            ☰
-          </button>
 
           <button
             className="logo"
-            onClick={() =>
-              router.push("/")
-            }
+            onClick={() => router.push("/")}
           >
-            <span>XENOVA</span>
-            <small>PLAY</small>
+            <span className="logo-x">
+              X
+            </span>
+
+            <span>
+              XENOVA
+              <small> PLAY</small>
+            </span>
           </button>
 
-          <nav className="main-nav">
+          <nav className="top-nav">
             <button
-              className="nav-item active"
-              onClick={() =>
-                setSelectedCategory(
-                  "all"
-                )
-              }
+              onClick={() => router.push("/")}
             >
-              <span className="nav-icon">
-                ⌂
-              </span>
-              <span>Trang chủ</span>
+              Trang chủ
+            </button>
+
+            <button className="active">
+              Cửa hàng
             </button>
 
             <button
-              className="nav-item"
-              onClick={() =>
-                document
-                  .getElementById(
-                    "shop-products"
-                  )
-                  ?.scrollIntoView({
-                    behavior:
-                      "smooth",
-                  })
-              }
+              onClick={() => router.push("/keys")}
             >
-              <span className="nav-icon">
-                ▣
-              </span>
-              <span>Cửa hàng</span>
+              Kho KEY
             </button>
 
             <button
-              className="nav-item"
-              onClick={deposit}
+              onClick={() => router.push("/orders")}
             >
-              <span className="nav-icon">
-                ▤
-              </span>
-              <span>Nạp tiền</span>
-            </button>
-
-            <button
-              className="nav-item"
-              onClick={() =>
-                router.push(
-                  user
-                    ? "/keys"
-                    : "/login"
-                )
-              }
-            >
-              <span className="nav-icon">
-                ♢
-              </span>
-              <span>KEY của tôi</span>
-            </button>
-
-            <button
-              className="nav-item"
-              onClick={() =>
-                router.push(
-                  user
-                    ? "/orders"
-                    : "/login"
-                )
-              }
-            >
-              <span className="nav-icon">
-                ▱
-              </span>
-              <span>Đơn hàng</span>
-            </button>
-
-            <button
-              className="nav-item"
-              onClick={() =>
-                router.push(
-                  user
-                    ? "/account"
-                    : "/login"
-                )
-              }
-            >
-              <span className="nav-icon">
-                ♙
-              </span>
-              <span>Tài khoản</span>
-            </button>
-
-            <button
-              className="nav-item"
-              onClick={() =>
-                router.push(
-                  "/settings"
-                )
-              }
-            >
-              <span className="nav-icon">
-                ⚙
-              </span>
-              <span>Cài đặt</span>
+              Đơn hàng
             </button>
           </nav>
 
-          <div className="header-right">
-            <button className="theme-button">
-              ☼
-            </button>
-
+          <div className="account-area">
             <button
-              className="wallet-pill"
-              onClick={deposit}
+              className="wallet"
+              onClick={() => router.push("/deposit")}
             >
-              <span>▣</span>
-              <b>
-                {formatPrice(wallet)}
-              </b>
+              💰 {formatPrice(wallet)}
             </button>
 
-            <button
-              className="user-button"
-              onClick={() =>
-                router.push(
-                  user
-                    ? "/account"
-                    : "/login"
-                )
-              }
-            >
-              <span className="user-circle">
-                {user
-                  ? String(
-                      user.email ||
-                        "U"
-                    )
-                      .charAt(0)
-                      .toUpperCase()
-                  : "U"}
-              </span>
-
-              <span className="user-arrow">
-                ⌄
-              </span>
-            </button>
+            {user ? (
+              <button
+                className="account"
+                onClick={() => router.push("/account")}
+              >
+                👤 Tài khoản
+              </button>
+            ) : (
+              <button
+                className="account"
+                onClick={() => router.push("/login")}
+              >
+                Đăng nhập
+              </button>
+            )}
           </div>
         </div>
       </header>
 
-      <div className="page-container">
-        <section className="hero-banner">
-          <div className="hero-left">
-            <div className="hero-badge">
-              XENOVA
-              <span>
-                SHOP GAME - KEY GIÁ TỐT
-              </span>
-            </div>
-
-            <h1>
-              MUA KEY NGAY
-              <br />
-              <strong>
-                NHẬN QUÀ LIỀN TAY
-              </strong>
-            </h1>
-
-            <p>
-              Nhanh chóng - Uy tín -
-              Giá tốt nhất
-            </p>
-
-            <button
-              onClick={() =>
-                document
-                  .getElementById(
-                    "shop-products"
-                  )
-                  ?.scrollIntoView({
-                    behavior:
-                      "smooth",
-                  })
-              }
-            >
-              MUA NGAY →
-            </button>
+      {/* HERO */}
+      <section className="hero">
+        <div>
+          <div className="hero-badge">
+            XENOVA PLAY
           </div>
 
-          <div className="hero-art">
-            <div className="art-glow" />
+          <h1>
+            CỬA HÀNG
+          </h1>
 
-            <div className="art-hair">
-              <div className="art-face">
-                <span className="eye eye-left" />
-                <span className="eye eye-right" />
-                <span className="mouth">
-                  ♡
-                </span>
-              </div>
-            </div>
+          <p>
+            Kho sản phẩm XENOVA PLAY
+          </p>
+        </div>
+      </section>
 
-            <div className="art-body">
-              <div className="art-bow" />
-            </div>
-          </div>
+      <div className="container">
 
-          <div className="hero-services">
-            <div>
-              <b>♢</b>
-              <span>
-                KEY CHÍNH HÃNG
-              </span>
-            </div>
+        {/* BREADCRUMB */}
+        <div className="breadcrumb">
+          <button onClick={selectAll}>
+            Cửa hàng
+          </button>
 
-            <div>
-              <b>◉</b>
-              <span>
-                GIAO TỰ ĐỘNG
-              </span>
-            </div>
-
-            <div>
-              <b>☎</b>
-              <span>
-                HỖ TRỢ 24/7
-              </span>
-            </div>
-          </div>
-
-          <div className="banner-dots">
-            <i />
-            <i className="active" />
-            <i />
-          </div>
-        </section>
-
-        <section className="shop-layout">
-          <aside className="sidebar">
-            <div className="side-card category-card">
-              <div className="side-title">
-                <span>▦</span>
-                <b>Danh mục</b>
-              </div>
-
-              <div className="category-list">
-                {NAV_ITEMS.map(
-                  (item) => (
-                    <button
-                      key={item.key}
-                      className={
-                        selectedCategory ===
-                        item.key
-                          ? "category-item active"
-                          : "category-item"
-                      }
-                      onClick={() =>
-                        setSelectedCategory(
-                          item.key
-                        )
-                      }
-                    >
-                      <span className="category-icon">
-                        {item.icon}
-                      </span>
-
-                      <span className="category-name">
-                        {item.label}
-                      </span>
-
-                      <span className="category-count">
-                        {categoryCounts[
-                          item.key
-                        ] || 0}
-                      </span>
-                    </button>
-                  )
-                )}
-              </div>
-            </div>
-
-            <div className="vip-card">
-              <div className="vip-crown">
-                ♛
-              </div>
-
-              <div className="vip-text">
-                <strong>
-                  THÀNH VIÊN VIP
-                </strong>
-
-                <span>
-                  Nhận thêm ưu đãi
-                </span>
-              </div>
+          {selectedParent && (
+            <>
+              <span>/</span>
 
               <button
-                onClick={deposit}
-              >
-                Nâng cấp ngay →
-              </button>
-            </div>
-
-            <div className="side-card support-card">
-              <div className="side-title">
-                <b>Hỗ trợ</b>
-              </div>
-
-              <button
-                onClick={() =>
-                  window.open(
-                    ZALO_ADMIN,
-                    "_blank"
-                  )
-                }
-              >
-                <span className="support-icon">
-                  ●
-                </span>
-
-                <span>
-                  <b>Chat Admin</b>
-                  <small>
-                    Hỗ trợ 24/7
-                  </small>
-                </span>
-              </button>
-
-              <button
-                onClick={() =>
-                  window.open(
-                    ZALO_ADMIN,
-                    "_blank"
-                  )
-                }
-              >
-                <span className="support-icon">
-                  ➤
-                </span>
-
-                <span>
-                  <b>Nhắn Telegram</b>
-                  <small>
-                    Giải đáp nhanh nhất
-                  </small>
-                </span>
-              </button>
-
-              <button
-                onClick={() =>
-                  window.open(
-                    ZALO_ADMIN,
-                    "_blank"
-                  )
-                }
-              >
-                <span className="support-icon">
-                  f
-                </span>
-
-                <span>
-                  <b>
-                    Fanpage Facebook
-                  </b>
-                  <small>
-                    Like để nhận ưu đãi
-                  </small>
-                </span>
-              </button>
-            </div>
-          </aside>
-
-          <section
-            className="products-area"
-            id="shop-products"
-          >
-            <div className="section-heading">
-              <h2>
-                <span>♨</span>
-                Sản phẩm nổi bật
-              </h2>
-
-              <button
-                className="view-all"
                 onClick={() => {
-                  setSelectedCategory(
-                    "all"
-                  );
-                  setSearch("");
+                  setSelectedChild(null);
                 }}
               >
-                Xem tất cả →
+                {getCategoryName(
+                  selectedParent,
+                  categories
+                )}
               </button>
+            </>
+          )}
+
+          {selectedChild && (
+            <>
+              <span>/</span>
+
+              <strong>
+                {getCategoryName(
+                  selectedChild,
+                  categories
+                )}
+              </strong>
+            </>
+          )}
+        </div>
+
+        <div className="layout">
+
+          {/* SIDEBAR */}
+          <aside className="sidebar">
+
+            <div className="sidebar-title">
+              <span>☰</span>
+              DANH MỤC
             </div>
 
-            <div className="shop-toolbar">
-              <div className="search-box">
-                <span>⌕</span>
+            <button
+              className={
+                !selectedParent
+                  ? "category-all selected"
+                  : "category-all"
+              }
+              onClick={selectAll}
+            >
+              <span>🏠</span>
+              Tất cả sản phẩm
+            </button>
 
-                <input
-                  value={search}
-                  onChange={(e) =>
-                    setSearch(
-                      e.target.value
-                    )
-                  }
-                  placeholder="Tìm kiếm sản phẩm..."
-                />
+            <div className="category-tree">
+
+              {parentCategories.map((parent) => {
+                const children =
+                  getChildren(parent.id);
+
+                const isOpen =
+                  !!openParents[parent.id];
+
+                const isSelected =
+                  Number(selectedParent) ===
+                  Number(parent.id);
+
+                return (
+                  <div
+                    className="category-group"
+                    key={parent.id}
+                  >
+
+                    <button
+                      className={
+                        isSelected
+                          ? "parent-category selected"
+                          : "parent-category"
+                      }
+                      onClick={() =>
+                        selectParent(parent.id)
+                      }
+                    >
+                      <span className="category-left">
+                        <span className="folder">
+                          📁
+                        </span>
+
+                        <span>
+                          {parent.name}
+                        </span>
+                      </span>
+
+                      {children.length > 0 && (
+                        <span
+                          className={
+                            isOpen
+                              ? "arrow rotate"
+                              : "arrow"
+                          }
+                        >
+                          ›
+                        </span>
+                      )}
+                    </button>
+
+                    {isOpen &&
+                      children.length > 0 && (
+                        <div className="children">
+
+                          {children.map((child) => (
+                            <button
+                              key={child.id}
+                              className={
+                                Number(
+                                  selectedChild
+                                ) ===
+                                Number(child.id)
+                                  ? "child-category selected"
+                                  : "child-category"
+                              }
+                              onClick={() =>
+                                selectChild(
+                                  parent.id,
+                                  child.id
+                                )
+                              }
+                            >
+                              <span>
+                                └─
+                              </span>
+
+                              <span>
+                                {child.name}
+                              </span>
+                            </button>
+                          ))}
+
+                        </div>
+                      )}
+
+                  </div>
+                );
+              })}
+
+            </div>
+
+            <div className="sidebar-support">
+              <div className="support-icon">
+                💬
               </div>
 
-              <select
-                value={sort}
-                onChange={(e) =>
-                  setSort(
-                    e.target.value
-                  )
-                }
+              <strong>
+                Cần hỗ trợ?
+              </strong>
+
+              <p>
+                Liên hệ Admin để được hỗ trợ.
+              </p>
+
+              <a
+                href={ZALO_ADMIN}
+                target="_blank"
+                rel="noreferrer"
               >
-                <option value="default">
-                  Sắp xếp
-                </option>
+                CHAT ADMIN
+              </a>
+            </div>
 
-                <option value="price-low">
-                  Giá thấp → cao
-                </option>
+          </aside>
 
-                <option value="price-high">
-                  Giá cao → thấp
-                </option>
-              </select>
+          {/* CONTENT */}
+          <section className="shop-content">
+
+            <div className="toolbar">
+
+              <div>
+                <h2>
+                  {selectedChild
+                    ? getCategoryName(
+                        selectedChild,
+                        categories
+                      )
+                    : selectedParent
+                    ? getCategoryName(
+                        selectedParent,
+                        categories
+                      )
+                    : "Tất cả sản phẩm"}
+                </h2>
+
+                <span>
+                  {filteredProducts.length} sản phẩm
+                </span>
+              </div>
+
+              <div className="tools">
+
+                <div className="search">
+                  🔎
+
+                  <input
+                    value={search}
+                    onChange={(e) =>
+                      setSearch(e.target.value)
+                    }
+                    placeholder="Tìm sản phẩm..."
+                  />
+                </div>
+
+                <select
+                  value={sort}
+                  onChange={(e) =>
+                    setSort(e.target.value)
+                  }
+                >
+                  <option value="default">
+                    Mặc định
+                  </option>
+
+                  <option value="price-asc">
+                    Giá thấp → cao
+                  </option>
+
+                  <option value="price-desc">
+                    Giá cao → thấp
+                  </option>
+
+                  <option value="name">
+                    Tên A → Z
+                  </option>
+                </select>
+
+              </div>
             </div>
 
             {error && (
               <div className="error-box">
-                <span>{error}</span>
+                ⚠️ {error}
+              </div>
+            )}
+
+            {message && (
+              <div className="message-box">
+                {message}
 
                 <button
-                  onClick={loadShop}
+                  onClick={() =>
+                    setMessage("")
+                  }
                 >
-                  Thử lại
+                  ×
                 </button>
               </div>
             )}
 
-            <div className="product-grid">
-              {loading ? (
-                Array.from({
-                  length: 10,
-                }).map(
-                  (_, index) => (
-                    <ProductSkeleton
-                      key={index}
-                    />
-                  )
-                )
-              ) : visibleProducts.length ? (
-                visibleProducts.map(
-                  (product) => (
-                    <ProductCard
-                      key={
-                        product.id
-                      }
-                      product={
-                        product
-                      }
-                      stock={getProductStock(
-                        product,
-                        stockMap
-                      )}
-                      onBuy={
-                        handleBuyClick
-                      }
-                    />
-                  )
-                )
-              ) : (
-                <div className="empty-products">
-                  <div>♡</div>
-                  <h3>
-                    Không có sản phẩm
-                  </h3>
-                  <p>
-                    Thử đổi danh mục
-                    hoặc từ khóa tìm
-                    kiếm.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className="feature-strip">
-              <div>
-                <span>ϟ</span>
+            {/* PRODUCTS */}
+            {filteredProducts.length === 0 ? (
+              <div className="empty">
                 <div>
-                  <b>
-                    Giao dịch siêu nhanh
-                  </b>
-                  <small>
-                    Chỉ vài giây có KEY
-                  </small>
+                  🛒
                 </div>
-              </div>
 
-              <div>
-                <span>♢</span>
-                <div>
-                  <b>
-                    Bảo mật tuyệt đối
-                  </b>
-                  <small>
-                    An toàn thông tin
-                  </small>
-                </div>
-              </div>
+                <h3>
+                  Chưa có sản phẩm
+                </h3>
 
-              <div>
-                <span>♧</span>
-                <div>
-                  <b>
-                    Hỗ trợ 24/7
-                  </b>
-                  <small>
-                    Luôn luôn bạn
-                  </small>
-                </div>
+                <p>
+                  Danh mục này hiện chưa có sản phẩm.
+                </p>
               </div>
+            ) : (
+              <div className="product-grid">
 
-              <div>
-                <span>♧</span>
-                <div>
-                  <b>
-                    Nhiều ưu đãi
-                  </b>
-                  <small>
-                    Dành riêng cho
-                    thành viên
-                  </small>
-                </div>
+                {filteredProducts.map(
+                  (product) => {
+                    const stock =
+                      getStock(product.id);
+
+                    const chain =
+                      getCategoryChain(
+                        product.category_id,
+                        categories
+                      );
+
+                    return (
+                      <article
+                        className="product-card"
+                        key={product.id}
+                      >
+
+                        <div className="cover">
+                          <ProductMedia
+                            product={product}
+                          />
+
+                          {stock > 0 ? (
+                            <span className="stock available">
+                              Còn {stock}
+                            </span>
+                          ) : (
+                            <span className="stock soldout">
+                              Hết hàng
+                            </span>
+                          )}
+
+                          {product.media_type ===
+                            "video" && (
+                            <span className="media-tag">
+                              VIDEO
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="product-body">
+
+                          <div className="product-category">
+                            {chain.length > 0
+                              ? chain
+                                  .map(
+                                    (item) =>
+                                      item.name
+                                  )
+                                  .join(" / ")
+                              : "Sản phẩm"}
+                          </div>
+
+                          <h3>
+                            {product.name}
+                          </h3>
+
+                          {product.description && (
+                            <p className="description">
+                              {product.description}
+                            </p>
+                          )}
+
+                          {product.duration_days && (
+                            <div className="duration">
+                              ⏱ HSD{" "}
+                              {product.duration_days}{" "}
+                              ngày
+                            </div>
+                          )}
+
+                          <div className="product-bottom">
+
+                            <strong className="price">
+                              {formatPrice(
+                                product.price
+                              )}
+                            </strong>
+
+                            <button
+                              disabled={stock <= 0}
+                              className="buy-button"
+                              onClick={() =>
+                                setBuyModal(product)
+                              }
+                            >
+                              {stock > 0
+                                ? "MUA NGAY"
+                                : "HẾT HÀNG"}
+                            </button>
+
+                          </div>
+
+                        </div>
+
+                      </article>
+                    );
+                  }
+                )}
+
               </div>
-            </div>
+            )}
+
           </section>
-        </section>
+        </div>
       </div>
 
-      {message && (
-        <div className="toast">
-          <span>{message}</span>
-
-          <button
-            onClick={() =>
-              setMessage("")
-            }
-          >
-            ×
-          </button>
-        </div>
-      )}
-
-      <button
-        className="chat-admin"
-        onClick={() =>
-          window.open(
-            ZALO_ADMIN,
-            "_blank"
-          )
-        }
+      {/* FLOATING ADMIN */}
+      <a
+        href={ZALO_ADMIN}
+        target="_blank"
+        rel="noreferrer"
+        className="floating-admin"
       >
-        <span className="chat-label">
+        💬
+        <span>
           Chat Admin
         </span>
+      </a>
 
-        <span className="chat-circle">
-          ●
-        </span>
-      </button>
-
+      {/* BUY MODAL */}
       {buyModal && (
         <div
-          className="modal-backdrop"
-          onMouseDown={() => {
-            if (!buying) {
-              setBuyModal(null);
-            }
-          }}
+          className="modal-overlay"
+          onClick={() =>
+            !buying && setBuyModal(null)
+          }
         >
           <div
-            className="buy-modal"
-            onMouseDown={(e) =>
+            className="modal"
+            onClick={(e) =>
               e.stopPropagation()
             }
           >
             <button
-              className="modal-close"
+              className="close"
               onClick={() =>
                 !buying &&
                 setBuyModal(null)
@@ -1511,49 +998,45 @@ export default function ShopPage() {
             </button>
 
             <div className="modal-icon">
-              <ProductIcon
-                product={buyModal}
-              />
+              🛒
             </div>
 
-            <h3>
-              Xác nhận mua sản phẩm
-            </h3>
+            <h2>
+              Xác nhận mua hàng
+            </h2>
 
-            <p>
-              {getProductName(
-                buyModal
-              )}
+            <p className="modal-product">
+              {buyModal.name}
             </p>
 
-            <div className="modal-price">
-              {formatPrice(
-                getProductPrice(
-                  buyModal
-                )
-              )}
-            </div>
+            <div className="confirm-row">
+              <span>
+                Giá
+              </span>
 
-            <div className="modal-balance">
-              Số dư:
-              <b>
+              <strong>
                 {formatPrice(
-                  wallet
+                  buyModal.price
                 )}
-              </b>
+              </strong>
             </div>
 
-            {message && (
-              <div className="modal-error">
-                {message}
-              </div>
-            )}
+            <div className="confirm-row">
+              <span>
+                Số dư
+              </span>
+
+              <strong>
+                {formatPrice(wallet)}
+              </strong>
+            </div>
 
             <div className="modal-actions">
+
               <button
-                className="cancel-btn"
+                className="cancel-button"
+                disabled={buying}
                 onClick={() =>
-                  !buying &&
                   setBuyModal(null)
                 }
               >
@@ -1561,1932 +1044,979 @@ export default function ShopPage() {
               </button>
 
               <button
-                className="confirm-btn"
-                onClick={confirmBuy}
+                className="confirm-button"
                 disabled={buying}
+                onClick={handleBuy}
               >
                 {buying
-                  ? "Đang xử lý..."
-                  : "Xác nhận mua"}
+                  ? "ĐANG XỬ LÝ..."
+                  : "XÁC NHẬN MUA"}
               </button>
+
             </div>
           </div>
         </div>
       )}
 
+      {/* SUCCESS MODAL */}
       {successModal && (
-        <div className="modal-backdrop">
-          <div className="success-modal">
-            <div className="success-check">
+        <div className="modal-overlay">
+          <div className="modal success-modal">
+
+            <div className="success-icon">
               ✓
             </div>
 
-            <h3>
-              Mua KEY thành công!
-            </h3>
+            <h2>
+              Mua hàng thành công
+            </h2>
 
             <p>
-              {
-                successModal.product
-              }
+              {successModal.product?.name}
             </p>
 
-            {successModal.key ? (
+            {successModal.key && (
               <div className="key-box">
                 <span>
-                  {
-                    successModal.key
-                  }
+                  KEY CỦA BẠN
                 </span>
 
+                <strong>
+                  {successModal.key}
+                </strong>
+
                 <button
-                  onClick={copyKey}
+                  onClick={() =>
+                    navigator.clipboard.writeText(
+                      successModal.key
+                    )
+                  }
                 >
-                  Sao chép
+                  📋 Sao chép
                 </button>
-              </div>
-            ) : (
-              <div className="key-box empty-key">
-                Đơn hàng đã được tạo
-                thành công.
               </div>
             )}
 
             <button
-              className="success-close"
+              className="confirm-button full"
               onClick={() =>
                 setSuccessModal(null)
               }
             >
-              Đóng
+              ĐÓNG
             </button>
+
           </div>
         </div>
       )}
 
-      <style jsx global>{`
-        * {
-          box-sizing: border-box;
-        }
-
-        html {
-          scroll-behavior: smooth;
-        }
-
-        body {
-          margin: 0;
-          background: #fff7fc;
-          color: #252638;
-          font-family:
-            Inter,
-            ui-sans-serif,
-            system-ui,
-            -apple-system,
-            BlinkMacSystemFont,
-            "Segoe UI",
-            sans-serif;
-        }
-
-        button,
-        input,
-        select {
-          font: inherit;
-        }
-
-        button {
-          border: 0;
-          cursor: pointer;
-        }
-
-        .shop-page {
-          min-height: 100vh;
-          overflow-x: hidden;
-          position: relative;
-          background:
-            radial-gradient(
-              circle at 8% 18%,
-              rgba(255, 115, 179, 0.16),
-              transparent 17%
-            ),
-            radial-gradient(
-              circle at 94% 70%,
-              rgba(255, 144, 202, 0.18),
-              transparent 18%
-            ),
-            linear-gradient(
-              180deg,
-              #fff 0%,
-              #fffafd 55%,
-              #fff1fa 100%
-            );
-        }
-
-        .petal {
-          position: fixed;
-          z-index: 1;
-          pointer-events: none;
-          color: #f26fa8;
-          opacity: 0.65;
-          animation: petalFloat 7s ease-in-out infinite;
-        }
-
-        .petal-1 {
-          top: 70px;
-          left: 5px;
-          font-size: 25px;
-        }
-
-        .petal-2 {
-          top: 150px;
-          right: 18px;
-          font-size: 20px;
-          animation-delay: -2s;
-        }
-
-        .petal-3 {
-          top: 400px;
-          left: 7px;
-          font-size: 19px;
-          animation-delay: -4s;
-        }
-
-        .petal-4 {
-          bottom: 160px;
-          right: 10px;
-          font-size: 26px;
-          animation-delay: -1s;
-        }
-
-        .petal-5 {
-          bottom: 35px;
-          left: 28px;
-          font-size: 20px;
-          animation-delay: -5s;
-        }
-
-        @keyframes petalFloat {
-          0%,
-          100% {
-            transform:
-              translateY(0)
-              rotate(0deg);
-          }
-
-          50% {
-            transform:
-              translateY(18px)
-              rotate(14deg);
-          }
-        }
-
-        .topbar {
-          position: sticky;
-          top: 0;
-          z-index: 50;
-          height: 54px;
-          background: rgba(
-            255,
-            255,
-            255,
-            0.97
-          );
-          backdrop-filter: blur(18px);
-          border-bottom: 1px solid
-            #eee8ee;
-        }
-
-        .topbar-inner {
-          width: min(
-            1220px,
-            calc(100% - 28px)
-          );
-          height: 100%;
-          margin: auto;
-          display: flex;
-          align-items: center;
-          gap: 18px;
-        }
-
-        .mobile-menu {
-          display: none;
-          background: transparent;
-          color: #303244;
-          font-size: 20px;
-        }
-
-        .logo {
-          width: 115px;
-          flex: 0 0 115px;
-          background: transparent;
-          cursor: pointer;
-          text-align: left;
-          line-height: 0.9;
-        }
-
-        .logo span {
-          display: block;
-          color: #171a31;
-          font-size: 16px;
-          font-weight: 1000;
-          letter-spacing: -0.7px;
-        }
-
-        .logo small {
-          display: block;
-          margin-left: 38px;
-          color: #ff3d8c;
-          font-size: 10px;
-          font-weight: 1000;
-          letter-spacing: 0.5px;
-        }
-
-        .main-nav {
-          height: 100%;
-          flex: 1;
-          display: flex;
-          align-items: stretch;
-          gap: 3px;
-        }
-
-        .nav-item {
-          min-width: 72px;
-          padding: 5px 7px 4px;
-          position: relative;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          gap: 1px;
-          background: transparent;
-          color: #555666;
-          font-size: 8.5px;
-          font-weight: 700;
-          white-space: nowrap;
-        }
-
-        .nav-icon {
-          font-size: 15px;
-          line-height: 15px;
-        }
-
-        .nav-item.active {
-          color: #ec287d;
-          background: #fff1f8;
-        }
-
-        .nav-item.active::after {
-          content: "";
-          position: absolute;
-          bottom: 0;
-          left: 12px;
-          right: 12px;
-          height: 2px;
-          border-radius: 10px 10px 0 0;
-          background: #ff3c91;
-        }
-
-        .header-right {
-          display: flex;
-          align-items: center;
-          gap: 9px;
-        }
-
-        .theme-button {
-          width: 28px;
-          height: 28px;
-          border-radius: 50%;
-          background: #f7f7f9;
-          color: #252638;
-        }
-
-        .wallet-pill {
-          min-width: 94px;
-          height: 29px;
-          padding: 0 10px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 6px;
-          border-radius: 8px;
-          color: #e8327e;
-          background: #fff0f7;
-          font-size: 9px;
-          font-weight: 900;
-        }
-
-        .user-button {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          background: transparent;
-        }
-
-        .user-circle {
-          width: 27px;
-          height: 27px;
-          display: grid;
-          place-items: center;
-          border-radius: 50%;
-          background: #ff4a96;
-          color: #fff;
-          font-size: 11px;
-          font-weight: 900;
-        }
-
-        .user-arrow {
-          font-size: 11px;
-          color: #666;
-        }
-
-        .page-container {
-          position: relative;
-          z-index: 2;
-          width: min(
-            1220px,
-            calc(100% - 28px)
-          );
-          margin: auto;
-          padding: 18px 0 35px;
-        }
-
-        .hero-banner {
-          height: 145px;
-          position: relative;
-          overflow: hidden;
-          border-radius: 14px;
-          background:
-            radial-gradient(
-              circle at 74% 50%,
-              rgba(
-                255,
-                164,
-                214,
-                0.9
-              ),
-              transparent 25%
-            ),
-            radial-gradient(
-              circle at 55% 100%,
-              rgba(
-                255,
-                220,
-                236,
-                0.25
-              ),
-              transparent 22%
-            ),
-            linear-gradient(
-              100deg,
-              #8e105a,
-              #e52a83 48%,
-              #ff9ac3
-            );
-          box-shadow:
-            0 12px 32px
-              rgba(
-                211,
-                45,
-                121,
-                0.15
-              );
-        }
-
-        .hero-banner::before {
-          content: "";
-          position: absolute;
-          inset: 0;
-          background:
-            radial-gradient(
-              circle at 15% 30%,
-              rgba(
-                255,
-                255,
-                255,
-                0.4
-              )
-                0 1px,
-              transparent 2px
-            ),
-            radial-gradient(
-              circle at 40% 75%,
-              rgba(
-                255,
-                255,
-                255,
-                0.32
-              )
-                0 1px,
-              transparent 2px
-            ),
-            radial-gradient(
-              circle at 65% 18%,
-              rgba(
-                255,
-                255,
-                255,
-                0.38
-              )
-                0 1px,
-              transparent 2px
-            );
-          background-size:
-            70px 70px,
-            85px 85px,
-            100px 100px;
-        }
-
-        .hero-left {
-          position: relative;
-          z-index: 5;
-          width: 54%;
-          padding: 19px 0 0 34px;
-          color: #fff;
-        }
-
-        .hero-badge {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          font-size: 10px;
-          font-weight: 1000;
-        }
-
-        .hero-badge span {
-          padding: 5px 10px;
-          border-radius: 30px;
-          background: rgba(
-            255,
-            255,
-            255,
-            0.9
-          );
-          color: #db2b78;
-          font-size: 8px;
-        }
-
-        .hero-left h1 {
-          margin: 9px 0 4px;
-          font-size: 25px;
-          line-height: 0.98;
-          font-weight: 1000;
-          font-style: italic;
-          letter-spacing: -0.8px;
-          text-shadow:
-            0 3px 9px
-              rgba(
-                95,
-                0,
-                50,
-                0.35
-              );
-        }
-
-        .hero-left p {
-          margin: 0 0 8px;
-          font-size: 9px;
-          opacity: 0.92;
-        }
-
-        .hero-left button {
-          height: 24px;
-          padding: 0 15px;
-          border-radius: 20px;
-          background: #fff;
-          color: #e52b7f;
-          font-size: 9px;
-          font-weight: 1000;
-          box-shadow:
-            0 7px 14px
-              rgba(
-                92,
-                0,
-                47,
-                0.18
-              );
-        }
-
-        .hero-art {
-          position: absolute;
-          right: 230px;
-          bottom: -18px;
-          width: 230px;
-          height: 165px;
-          z-index: 3;
-        }
-
-        .art-glow {
-          position: absolute;
-          width: 180px;
-          height: 180px;
-          right: 15px;
-          top: 0;
-          border-radius: 50%;
-          background: rgba(
-            255,
-            255,
-            255,
-            0.18
-          );
-          filter: blur(12px);
-        }
-
-        .art-hair {
-          position: absolute;
-          right: 38px;
-          top: 7px;
-          width: 115px;
-          height: 125px;
-          border-radius:
-            58% 48% 48% 54%;
-          background:
-            radial-gradient(
-              circle at 58% 34%,
-              #fff0fa 0 3px,
-              transparent 4px
-            ),
-            linear-gradient(
-              145deg,
-              #5d173d,
-              #ef65a3 52%,
-              #ffb4d1
-            );
-          transform: rotate(-5deg);
-          box-shadow:
-            -25px 20px 0 -7px
-              #651740;
-        }
-
-        .art-hair::before {
-          content: "";
-          position: absolute;
-          left: -27px;
-          top: 32px;
-          width: 55px;
-          height: 100px;
-          border-radius: 50%;
-          background: #61153d;
-          transform: rotate(20deg);
-        }
-
-        .art-hair::after {
-          content: "";
-          position: absolute;
-          right: -15px;
-          top: 8px;
-          width: 50px;
-          height: 75px;
-          border-radius: 50%;
-          background: #ff8fbc;
-          transform: rotate(-24deg);
-        }
-
-        .art-face {
-          position: absolute;
-          z-index: 3;
-          left: 20px;
-          top: 28px;
-          width: 72px;
-          height: 82px;
-          border-radius:
-            48% 48% 45% 45%;
-          background:
-            linear-gradient(
-              145deg,
-              #ffe9f2,
-              #ffb7d2
-            );
-          border: 2px solid
-            rgba(255, 255, 255, 0.55);
-        }
-
-        .eye {
-          position: absolute;
-          top: 37px;
-          width: 8px;
-          height: 12px;
-          border-radius: 50%;
-          background: #72264c;
-        }
-
-        .eye-left {
-          left: 20px;
-        }
-
-        .eye-right {
-          right: 20px;
-        }
-
-        .mouth {
-          position: absolute;
-          left: 31px;
-          bottom: 17px;
-          color: #e94f8f;
-          font-size: 13px;
-        }
-
-        .art-body {
-          position: absolute;
-          left: 67px;
-          bottom: -25px;
-          width: 105px;
-          height: 83px;
-          border-radius:
-            45px 45px 8px 8px;
-          background:
-            linear-gradient(
-              135deg,
-              #24172d,
-              #6e2451
-            );
-        }
-
-        .art-bow {
-          position: absolute;
-          top: 7px;
-          left: 40px;
-          width: 28px;
-          height: 20px;
-          border-radius: 50%;
-          background: #ff4f9c;
-        }
-
-        .hero-services {
-          position: absolute;
-          z-index: 6;
-          right: 18px;
-          top: 28px;
-          width: 105px;
-          padding: 7px 8px;
-          border-radius: 10px;
-          background: rgba(
-            69,
-            10,
-            50,
-            0.78
-          );
-          box-shadow:
-            0 10px 22px
-              rgba(
-                75,
-                0,
-                42,
-                0.2
-              );
-        }
-
-        .hero-services div {
-          height: 30px;
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          border-bottom:
-            1px solid
-            rgba(
-              255,
-              255,
-              255,
-              0.12
-            );
-          color: #fff;
-          font-size: 7px;
-          font-weight: 800;
-        }
-
-        .hero-services div:last-child {
-          border-bottom: 0;
-        }
-
-        .hero-services b {
-          width: 17px;
-          height: 17px;
-          display: grid;
-          place-items: center;
-          border-radius: 50%;
-          background: #f13c8c;
-          font-size: 9px;
-        }
-
-        .banner-dots {
-          position: absolute;
-          z-index: 8;
-          bottom: 8px;
-          left: 50%;
-          transform:
-            translateX(-50%);
-          display: flex;
-          gap: 5px;
-        }
-
-        .banner-dots i {
-          width: 5px;
-          height: 5px;
-          border-radius: 50%;
-          background: rgba(
-            255,
-            255,
-            255,
-            0.6
-          );
-        }
-
-        .banner-dots i.active {
-          width: 15px;
-          border-radius: 10px;
-          background: #fff;
-        }
-
-        .shop-layout {
-          margin-top: 15px;
-          display: grid;
-          grid-template-columns: 128px 1fr;
-          gap: 14px;
-        }
-
-        .sidebar {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-        }
-
-        .side-card {
-          border: 1px solid
-            #f0e9ef;
-          border-radius: 11px;
-          background: #fff;
-          box-shadow:
-            0 4px 16px
-              rgba(
-                74,
-                35,
-                60,
-                0.05
-              );
-        }
-
-        .category-card {
-          padding: 10px 7px;
-        }
-
-        .side-title {
-          display: flex;
-          align-items: center;
-          gap: 7px;
-          padding: 3px 5px 8px;
-          color: #252739;
-          font-size: 9px;
-        }
-
-        .side-title span {
-          color: #ef3181;
-          font-size: 13px;
-        }
-
-        .category-list {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-        }
-
-        .category-item {
-          min-height: 25px;
-          width: 100%;
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          padding: 0 6px;
-          border-radius: 6px;
-          background: transparent;
-          color: #555769;
-          text-align: left;
-          font-size: 7.5px;
-        }
-
-        .category-item.active {
-          color: #e92d7d;
-          background: #fff0f7;
-          font-weight: 900;
-        }
-
-        .category-icon {
-          width: 13px;
-          text-align: center;
-          font-size: 10px;
-          font-weight: 1000;
-        }
-
-        .category-name {
-          flex: 1;
-        }
-
-        .category-count {
-          font-size: 7px;
-          color: #9a9baa;
-        }
-
-        .vip-card {
-          min-height: 82px;
-          position: relative;
-          overflow: hidden;
-          padding: 11px 8px;
-          border-radius: 11px;
-          background:
-            radial-gradient(
-              circle at 15% 50%,
-              rgba(
-                255,
-                255,
-                255,
-                0.2
-              ),
-              transparent 28%
-            ),
-            linear-gradient(
-              135deg,
-              #5e1749,
-              #bd2b78
-            );
-          color: #fff;
-          box-shadow:
-            0 9px 20px
-              rgba(
-                183,
-                36,
-                111,
-                0.2
-              );
-        }
-
-        .vip-crown {
-          position: absolute;
-          right: 6px;
-          top: 5px;
-          color: #ffd96a;
-          font-size: 27px;
-        }
-
-        .vip-text {
-          position: relative;
-          z-index: 1;
-          display: flex;
-          flex-direction: column;
-          margin-bottom: 10px;
-        }
-
-        .vip-text strong {
-          font-size: 8px;
-        }
-
-        .vip-text span {
-          margin-top: 2px;
-          font-size: 6.5px;
-          opacity: 0.8;
-        }
-
-        .vip-card button {
-          position: relative;
-          z-index: 2;
-          height: 19px;
-          padding: 0 8px;
-          border-radius: 20px;
-          background: #ff4d9a;
-          color: #fff;
-          font-size: 6.5px;
-          font-weight: 900;
-        }
-
-        .support-card {
-          padding: 9px 7px;
-        }
-
-        .support-card button {
-          width: 100%;
-          display: flex;
-          align-items: center;
-          gap: 7px;
-          padding: 6px 3px;
-          background: transparent;
-          text-align: left;
-          color: #454657;
-        }
-
-        .support-icon {
-          width: 21px;
-          height: 21px;
-          display: grid;
-          place-items: center;
-          flex: 0 0 21px;
-          border-radius: 50%;
-          background: #eef2f7;
-          color: #3976a9;
-          font-size: 9px;
-          font-weight: 1000;
-        }
-
-        .support-card button span:last-child {
-          display: flex;
-          flex-direction: column;
-          min-width: 0;
-        }
-
-        .support-card b {
-          font-size: 6.5px;
-        }
-
-        .support-card small {
-          margin-top: 2px;
-          color: #999aaa;
-          font-size: 5.5px;
-        }
-
-        .products-area {
-          min-width: 0;
-        }
-
-        .section-heading {
-          height: 34px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-        }
-
-        .section-heading h2 {
-          margin: 0;
-          display: flex;
-          align-items: center;
-          gap: 7px;
-          color: #252739;
-          font-size: 14px;
-          font-weight: 1000;
-        }
-
-        .section-heading h2 span {
-          color: #ff3e8e;
-          font-size: 18px;
-        }
-
-        .view-all {
-          background: transparent;
-          color: #dc2c76;
-          font-size: 7px;
-          font-weight: 900;
-        }
-
-        .shop-toolbar {
-          display: none;
-          margin-bottom: 10px;
-          gap: 7px;
-        }
-
-        .search-box {
-          height: 34px;
-          flex: 1;
-          display: flex;
-          align-items: center;
-          gap: 7px;
-          padding: 0 10px;
-          border: 1px solid
-            #eee6ec;
-          border-radius: 8px;
-          background: #fff;
-        }
-
-        .search-box input {
-          width: 100%;
-          border: 0;
-          outline: 0;
-          background: transparent;
-          font-size: 11px;
-        }
-
-        .shop-toolbar select {
-          border: 1px solid
-            #eee6ec;
-          border-radius: 8px;
-          background: #fff;
-          padding: 0 8px;
-          font-size: 10px;
-        }
-
-        .product-grid {
-          display: grid;
-          grid-template-columns:
-            repeat(5, minmax(0, 1fr));
-          gap: 8px;
-        }
-
-        .product-card {
-          min-width: 0;
-          overflow: hidden;
-          border: 1px solid
-            #eee8ee;
-          border-radius: 9px;
-          background: #fff;
-          box-shadow:
-            0 4px 13px
-              rgba(
-                70,
-                34,
-                56,
-                0.055
-              );
-          transition:
-            transform 0.2s ease,
-            box-shadow 0.2s ease;
-        }
-
-        .product-card:hover {
-          transform:
-            translateY(-3px);
-          box-shadow:
-            0 11px 24px
-              rgba(
-                213,
-                43,
-                119,
-                0.12
-              );
-        }
-
-        .product-cover {
-          height: 102px;
-          position: relative;
-          overflow: hidden;
-          display: grid;
-          place-items: center;
-          background:
-            linear-gradient(
-              135deg,
-              #17213a,
-              #42678b
-            );
-        }
-
-        .product-cover-windows {
-          background:
-            linear-gradient(
-              135deg,
-              #071f49,
-              #168ae7
-            );
-        }
-
-        .product-cover-office {
-          background:
-            linear-gradient(
-              135deg,
-              #a8270d,
-              #fa4b18
-            );
-        }
-
-        .product-cover-photoshop {
-          background:
-            linear-gradient(
-              135deg,
-              #071b35,
-              #124b77
-            );
-        }
-
-        .product-cover-premiere {
-          background:
-            linear-gradient(
-              135deg,
-              #211039,
-              #642b8c
-            );
-        }
-
-        .product-cover-genshin {
-          background:
-            linear-gradient(
-              135deg,
-              #4b6e99,
-              #9fc6e9
-            );
-        }
-
-        .product-cover-valorant {
-          background:
-            linear-gradient(
-              135deg,
-              #17151e,
-              #731e35
-            );
-        }
-
-        .product-cover-roblox {
-          background:
-            linear-gradient(
-              135deg,
-              #17191f,
-              #3c4048
-            );
-        }
-
-        .cover-glow {
-          position: absolute;
-          width: 100px;
-          height: 100px;
-          border-radius: 50%;
-          background: rgba(
-            255,
-            255,
-            255,
-            0.16
-          );
-          filter: blur(9px);
-        }
-
-        .product-icon {
-          position: relative;
-          z-index: 2;
-          width: 67px;
-          height: 67px;
-          display: grid;
-          place-items: center;
-          filter:
-            drop-shadow(
-              0 7px 10px
-                rgba(
-                  0,
-                  0,
-                  0,
-                  0.22
-                )
-            );
-          transition:
-            transform 0.2s ease;
-        }
-
-        .product-icon svg {
-          width: 58px;
-          height: 58px;
-          display: block;
-        }
-
-        .product-card:hover
-          .product-icon {
-          transform:
-            scale(1.06)
-            translateY(-2px);
-        }
-
-        .product-icon-generic {
-          color: #ff3d8f;
-        }
-
-        .cover-corner {
-          position: absolute;
-          top: 6px;
-          left: 6px;
-          z-index: 4;
-          padding: 3px 6px;
-          border-radius: 5px;
-          background: rgba(
-            255,
-            255,
-            255,
-            0.9
-          );
-          color: #e8307e;
-          font-size: 5.5px;
-          font-weight: 1000;
-        }
-
-        .product-body {
-          padding: 7px;
-        }
-
-        .product-name {
-          height: 17px;
-          overflow: hidden;
-          white-space: nowrap;
-          text-overflow: ellipsis;
-          color: #3c3d4d;
-          font-size: 7px;
-          font-weight: 900;
-        }
-
-        .product-tags {
-          min-height: 16px;
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          margin-top: 2px;
-        }
-
-        .product-tags span {
-          padding: 2px 4px;
-          border-radius: 4px;
-          font-size: 5px;
-          font-weight: 800;
-        }
-
-        .tag-hot {
-          color: #ee315e;
-          background: #ffe9ed;
-        }
-
-        .tag-new {
-          color: #3877db;
-          background: #edf4ff;
-        }
-
-        .tag-auto {
-          color: #858795;
-          background: #f3f3f5;
-        }
-
-        .product-price {
-          margin-top: 5px;
-          color: #ed267c;
-          font-size: 9px;
-          font-weight: 1000;
-        }
-
-        .buy-button {
-          width: 100%;
-          height: 21px;
-          margin-top: 6px;
-          border-radius: 6px;
-          background:
-            linear-gradient(
-              90deg,
-              #ff3b91,
-              #ed2e80
-            );
-          color: #fff;
-          font-size: 6px;
-          font-weight: 1000;
-          box-shadow:
-            0 4px 9px
-              rgba(
-                236,
-                44,
-                126,
-                0.18
-              );
-        }
-
-        .buy-button:disabled {
-          background: #d8d8de;
-          box-shadow: none;
-          cursor: not-allowed;
-        }
-
-        .feature-strip {
-          margin-top: 10px;
-          min-height: 48px;
-          display: grid;
-          grid-template-columns:
-            repeat(4, 1fr);
-          border-radius: 10px;
-          background:
-            linear-gradient(
-              90deg,
-              #fff0f8,
-              #ffe8f4
-            );
-          border: 1px solid
-            #f5dce9;
-        }
-
-        .feature-strip > div {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-          border-right:
-            1px solid
-            rgba(
-              220,
-              60,
-              130,
-              0.08
-            );
-        }
-
-        .feature-strip > div:last-child {
-          border-right: 0;
-        }
-
-        .feature-strip
-          > div
-          > span {
-          width: 24px;
-          height: 24px;
-          display: grid;
-          place-items: center;
-          border-radius: 7px;
-          color: #f02d81;
-          font-size: 17px;
-        }
-
-        .feature-strip div div {
-          display: flex;
-          flex-direction: column;
-        }
-
-        .feature-strip b {
-          color: #d42b75;
-          font-size: 6px;
-        }
-
-        .feature-strip small {
-          margin-top: 2px;
-          color: #a3a0a9;
-          font-size: 5px;
-        }
-
-        .error-box {
-          margin-bottom: 10px;
-          padding: 10px;
-          border-radius: 8px;
-          background: #fff0f1;
-          color: #c82c43;
-          font-size: 9px;
-          display: flex;
-          justify-content: space-between;
-          gap: 10px;
-        }
-
-        .error-box button {
-          padding: 4px 9px;
-          border-radius: 5px;
-          background: #ef3c58;
-          color: #fff;
-          font-size: 8px;
-        }
-
-        .empty-products {
-          grid-column: 1 / -1;
-          min-height: 180px;
-          display: grid;
-          place-items: center;
-          align-content: center;
-          border: 1px dashed
-            #efcadf;
-          border-radius: 10px;
-          background: rgba(
-            255,
-            255,
-            255,
-            0.75
-          );
-          text-align: center;
-        }
-
-        .empty-products > div {
-          color: #ef3986;
-          font-size: 30px;
-        }
-
-        .empty-products h3 {
-          margin: 4px 0;
-          font-size: 13px;
-        }
-
-        .empty-products p {
-          margin: 0;
-          color: #999;
-          font-size: 9px;
-        }
-
-        .skeleton-card {
-          padding-bottom: 8px;
-        }
-
-        .skeleton {
-          position: relative;
-          overflow: hidden;
-          background: #f4edf2;
-        }
-
-        .skeleton::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          transform:
-            translateX(-100%);
-          background:
-            linear-gradient(
-              90deg,
-              transparent,
-              rgba(
-                255,
-                255,
-                255,
-                0.8
-              ),
-              transparent
-            );
-          animation:
-            shimmer 1.2s infinite;
-        }
-
-        @keyframes shimmer {
-          100% {
-            transform:
-              translateX(100%);
-          }
-        }
-
-        .cover-skeleton {
-          height: 102px;
-        }
-
-        .skeleton-line {
-          height: 7px;
-          margin: 8px 8px 0;
-          border-radius: 4px;
-        }
-
-        .skeleton-line.large {
-          width: 65%;
-        }
-
-        .skeleton-line.small {
-          width: 42%;
-        }
-
-        .skeleton-line.price {
-          width: 30%;
-          margin-top: 9px;
-        }
-
-        .skeleton-button {
-          height: 21px;
-          margin: 6px 8px 0;
-          border-radius: 6px;
-        }
-
-        .chat-admin {
-          position: fixed;
-          right: 22px;
-          bottom: 17px;
-          z-index: 60;
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          background: transparent;
-        }
-
-        .chat-label {
-          padding: 7px 9px;
-          border-radius: 8px;
-          background: #fff;
-          color: #444556;
-          font-size: 7px;
-          font-weight: 900;
-          box-shadow:
-            0 5px 18px
-              rgba(
-                60,
-                30,
-                50,
-                0.13
-              );
-        }
-
-        .chat-circle {
-          width: 39px;
-          height: 39px;
-          display: grid;
-          place-items: center;
-          border-radius: 50%;
-          background:
-            linear-gradient(
-              135deg,
-              #ff4b99,
-              #e9287e
-            );
-          color: #fff;
-          font-size: 14px;
-          border: 4px solid #fff;
-          box-shadow:
-            0 6px 18px
-              rgba(
-                225,
-                39,
-                119,
-                0.25
-              );
-        }
-
-        .toast {
-          position: fixed;
-          z-index: 100;
-          left: 50%;
-          bottom: 20px;
-          transform:
-            translateX(-50%);
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 10px 13px;
-          border-radius: 9px;
-          background: #242536;
-          color: #fff;
-          box-shadow:
-            0 10px 30px
-              rgba(0, 0, 0, 0.2);
-          font-size: 9px;
-        }
-
-        .toast button {
-          color: #fff;
-          background: transparent;
-          font-size: 16px;
-        }
-
-        .modal-backdrop {
-          position: fixed;
-          inset: 0;
-          z-index: 200;
-          display: grid;
-          place-items: center;
-          padding: 18px;
-          background:
-            rgba(
-              28,
-              16,
-              26,
-              0.55
-            );
-          backdrop-filter: blur(5px);
-        }
-
-        .buy-modal,
-        .success-modal {
-          width: min(
-            390px,
-            100%
-          );
-          position: relative;
-          padding: 25px;
-          border-radius: 17px;
-          background: #fff;
-          box-shadow:
-            0 25px 70px
-              rgba(
-                38,
-                15,
-                31,
-                0.3
-              );
-          text-align: center;
-        }
-
-        .modal-close {
-          position: absolute;
-          top: 9px;
-          right: 12px;
-          width: 27px;
-          height: 27px;
-          border-radius: 50%;
-          background: #f7f2f5;
-          color: #777;
-          font-size: 18px;
-        }
-
-        .modal-icon {
-          display: grid;
-          place-items: center;
-          margin-bottom: 8px;
-        }
-
-        .modal-icon
-          .product-icon {
-          width: 80px;
-          height: 80px;
-        }
-
-        .modal-icon
-          .product-icon
-          svg {
-          width: 70px;
-          height: 70px;
-        }
-
-        .buy-modal h3,
-        .success-modal h3 {
-          margin: 5px 0;
-          color: #282a3c;
-          font-size: 18px;
-        }
-
-        .buy-modal p,
-        .success-modal p {
-          margin: 5px 0;
-          color: #77798a;
-          font-size: 11px;
-        }
-
-        .modal-price {
-          margin: 12px 0;
-          color: #ed2e7f;
-          font-size: 22px;
-          font-weight: 1000;
-        }
-
-        .modal-balance {
-          display: flex;
-          justify-content: center;
-          gap: 6px;
-          color: #777;
-          font-size: 10px;
-        }
-
-        .modal-balance b {
-          color: #282a3c;
-        }
-
-        .modal-error {
-          margin-top: 10px;
-          padding: 8px;
-          border-radius: 7px;
-          background: #fff0f1;
-          color: #d43148;
-          font-size: 9px;
-        }
-
-        .modal-actions {
-          display: grid;
-          grid-template-columns:
-            1fr 1fr;
-          gap: 8px;
-          margin-top: 18px;
-        }
-
-        .cancel-btn,
-        .confirm-btn,
-        .success-close {
-          height: 38px;
-          border-radius: 8px;
-          font-size: 10px;
-          font-weight: 900;
-        }
-
-        .cancel-btn {
-          background: #f2f1f4;
-          color: #5f6070;
-        }
-
-        .confirm-btn,
-        .success-close {
-          background:
-            linear-gradient(
-              90deg,
-              #ff3b91,
-              #eb2b7f
-            );
-          color: #fff;
-        }
-
-        .confirm-btn:disabled {
-          opacity: 0.6;
-        }
-
-        .success-check {
-          width: 60px;
-          height: 60px;
-          margin: 0 auto 8px;
-          display: grid;
-          place-items: center;
-          border-radius: 50%;
-          background: #e8fff2;
-          color: #21b86b;
-          font-size: 28px;
-          font-weight: 1000;
-        }
-
-        .key-box {
-          margin-top: 14px;
-          padding: 10px;
-          display: flex;
-          align-items: center;
-          gap: 7px;
-          border: 1px dashed
-            #f1b3d1;
-          border-radius: 9px;
-          background: #fff7fb;
-        }
-
-        .key-box span {
-          flex: 1;
-          overflow: hidden;
-          word-break: break-all;
-          color: #d52676;
-          font-size: 10px;
-          font-weight: 900;
-        }
-
-        .key-box button {
-          flex: 0 0 auto;
-          padding: 7px 9px;
-          border-radius: 6px;
-          background: #ef3282;
-          color: #fff;
-          font-size: 8px;
-          font-weight: 900;
-        }
-
-        .empty-key {
-          justify-content: center;
-          color: #777;
-          font-size: 10px;
-        }
-
-        .success-close {
-          width: 100%;
-          margin-top: 13px;
-        }
-
-        @media (max-width: 1000px) {
-          .main-nav {
-            gap: 0;
-          }
-
-          .nav-item {
-            min-width: 59px;
-            font-size: 7px;
-          }
-
-          .hero-art {
-            right: 180px;
-          }
-
-          .product-grid {
-            grid-template-columns:
-              repeat(
-                4,
-                minmax(0, 1fr)
-              );
-          }
-        }
-
-        @media (max-width: 760px) {
-          .topbar {
-            height: 52px;
-          }
-
-          .topbar-inner {
-            width: calc(100% - 18px);
-            gap: 7px;
-          }
-
-          .mobile-menu {
-            display: block;
-          }
-
-          .logo {
-            width: 85px;
-            flex-basis: 85px;
-          }
-
-          .logo span {
-            font-size: 14px;
-          }
-
-          .logo small {
-            margin-left: 29px;
-            font-size: 8px;
-          }
-
-          .main-nav {
-            display: none;
-          }
-
-          .header-right {
-            margin-left: auto;
-          }
-
-          .wallet-pill {
-            min-width: 70px;
-          }
-
-          .wallet-pill b {
-            font-size: 8px;
-          }
-
-          .theme-button {
-            display: none;
-          }
-
-          .page-container {
-            width: calc(100% - 18px);
-            padding-top: 10px;
-          }
-
-          .hero-banner {
-            height: 175px;
-          }
-
-          .hero-left {
-            width: 70%;
-            padding:
-              19px 0 0 20px;
-          }
-
-          .hero-left h1 {
-            font-size: 23px;
-          }
-
-          .hero-art {
-            right: 30px;
-            transform: scale(0.75);
-            transform-origin:
-              bottom right;
-          }
-
-          .hero-services {
-            right: 8px;
-            top: 19px;
-            transform: scale(0.8);
-            transform-origin:
-              top right;
-          }
-
-          .shop-layout {
-            grid-template-columns: 1fr;
-          }
-
-          .sidebar {
-            display: none;
-          }
-
-          .shop-toolbar {
-            display: flex;
-          }
-
-          .product-grid {
-            grid-template-columns:
-              repeat(
-                2,
-                minmax(0, 1fr)
-              );
-            gap: 8px;
-          }
-
-          .product-cover {
-            height: 125px;
-          }
-
-          .feature-strip {
-            grid-template-columns:
-              repeat(2, 1fr);
-          }
-
-          .feature-strip > div {
-            min-height: 48px;
-          }
-
-          .chat-label {
-            display: none;
-          }
-
-          .chat-admin {
-            right: 12px;
-            bottom: 12px;
-          }
-        }
-
-        @media (max-width: 420px) {
-          .hero-art {
-            right: 5px;
-            transform: scale(0.62);
-            transform-origin:
-              bottom right;
-          }
-
-          .hero-services {
-            display: none;
-          }
-
-          .hero-left {
-            width: 100%;
-          }
-
-          .product-cover {
-            height: 115px;
-          }
-
-          .product-icon {
-            width: 60px;
-            height: 60px;
-          }
-
-          .product-icon svg {
-            width: 52px;
-            height: 52px;
-          }
-
-          .section-heading h2 {
-            font-size: 13px;
-          }
-        }
-      `}</style>
+      <style jsx>{styles}</style>
     </main>
   );
 }
+
+const styles = `
+* {
+  box-sizing: border-box;
+}
+
+.page {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 10% 10%, rgba(255, 120, 190, .10), transparent 28%),
+    radial-gradient(circle at 90% 20%, rgba(150, 120, 255, .08), transparent 28%),
+    #f7f8fc;
+  color: #222;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* HEADER */
+
+.topbar {
+  height: 64px;
+  background: rgba(255,255,255,.96);
+  border-bottom: 1px solid #eee;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  backdrop-filter: blur(14px);
+}
+
+.topbar-inner {
+  max-width: 1220px;
+  height: 100%;
+  margin: auto;
+  padding: 0 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.logo {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 18px;
+  font-weight: 900;
+  color: #151515;
+}
+
+.logo small {
+  color: #e83d94;
+  font-size: 12px;
+}
+
+.logo-x {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg,#ff4ba6,#8d54ff);
+  color: white;
+  font-weight: 900;
+  box-shadow: 0 8px 20px rgba(232,61,148,.25);
+}
+
+.top-nav {
+  display: flex;
+  gap: 4px;
+}
+
+.top-nav button {
+  border: 0;
+  background: transparent;
+  padding: 10px 14px;
+  border-radius: 9px;
+  cursor: pointer;
+  color: #666;
+  font-weight: 700;
+}
+
+.top-nav button:hover,
+.top-nav button.active {
+  color: #e83d94;
+  background: #fff0f7;
+}
+
+.account-area {
+  display: flex;
+  gap: 8px;
+}
+
+.wallet,
+.account {
+  border: 0;
+  border-radius: 9px;
+  padding: 9px 12px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.wallet {
+  color: #d72882;
+  background: #fff0f7;
+}
+
+.account {
+  background: #222;
+  color: white;
+}
+
+/* HERO */
+
+.hero {
+  min-height: 155px;
+  display: flex;
+  align-items: center;
+  background:
+    linear-gradient(
+      110deg,
+      #ffd9ec 0%,
+      #ffeef8 48%,
+      #eee4ff 100%
+    );
+  border-bottom: 1px solid #f1dbe8;
+}
+
+.hero > div {
+  width: 1220px;
+  margin: auto;
+  padding: 28px 18px;
+}
+
+.hero-badge {
+  display: inline-block;
+  background: white;
+  color: #e23a91;
+  padding: 6px 11px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 900;
+  margin-bottom: 8px;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 900;
+}
+
+.hero p {
+  margin: 7px 0 0;
+  color: #777;
+}
+
+/* CONTAINER */
+
+.container {
+  max-width: 1220px;
+  margin: auto;
+  padding: 18px;
+}
+
+.breadcrumb {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+  color: #999;
+  margin-bottom: 16px;
+}
+
+.breadcrumb button {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: #777;
+}
+
+.breadcrumb strong {
+  color: #e83d94;
+}
+
+/* LAYOUT */
+
+.layout {
+  display: grid;
+  grid-template-columns: 225px minmax(0,1fr);
+  gap: 20px;
+}
+
+/* SIDEBAR */
+
+.sidebar {
+  background: white;
+  border: 1px solid #eee;
+  border-radius: 15px;
+  padding: 14px;
+  height: fit-content;
+  box-shadow: 0 8px 30px rgba(30,20,50,.04);
+}
+
+.sidebar-title {
+  font-size: 12px;
+  font-weight: 900;
+  color: #999;
+  padding: 4px 6px 13px;
+  letter-spacing: .4px;
+}
+
+.category-all,
+.parent-category,
+.child-category {
+  width: 100%;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.category-all,
+.parent-category {
+  min-height: 42px;
+  border-radius: 9px;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  font-weight: 700;
+  color: #555;
+}
+
+.category-all:hover,
+.parent-category:hover,
+.category-all.selected,
+.parent-category.selected {
+  background: #fff0f7;
+  color: #e43791;
+}
+
+.category-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.folder {
+  font-size: 15px;
+}
+
+.arrow {
+  font-size: 22px;
+  transition: transform .2s;
+}
+
+.arrow.rotate {
+  transform: rotate(90deg);
+}
+
+.children {
+  padding: 2px 0 5px 13px;
+}
+
+.child-category {
+  min-height: 36px;
+  border-radius: 8px;
+  background: transparent;
+  color: #777;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 9px;
+  font-size: 13px;
+}
+
+.child-category:hover,
+.child-category.selected {
+  color: #e43791;
+  background: #fff7fb;
+}
+
+.sidebar-support {
+  margin-top: 16px;
+  border-radius: 12px;
+  padding: 14px;
+  background: linear-gradient(135deg,#fff0f7,#f4edff);
+  text-align: center;
+}
+
+.support-icon {
+  font-size: 25px;
+}
+
+.sidebar-support strong {
+  display: block;
+  margin-top: 5px;
+}
+
+.sidebar-support p {
+  font-size: 11px;
+  color: #888;
+  line-height: 1.5;
+}
+
+.sidebar-support a {
+  display: block;
+  text-decoration: none;
+  background: #e83d94;
+  color: white;
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+/* CONTENT */
+
+.shop-content {
+  min-width: 0;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 15px;
+}
+
+.toolbar h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.toolbar > div:first-child span {
+  display: block;
+  margin-top: 4px;
+  color: #999;
+  font-size: 12px;
+}
+
+.tools {
+  display: flex;
+  gap: 8px;
+}
+
+.search {
+  width: 210px;
+  background: white;
+  border: 1px solid #eee;
+  border-radius: 9px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  gap: 6px;
+}
+
+.search input {
+  border: 0;
+  outline: 0;
+  width: 100%;
+  font-size: 12px;
+}
+
+.tools select {
+  border: 1px solid #eee;
+  background: white;
+  border-radius: 9px;
+  padding: 0 10px;
+  outline: 0;
+}
+
+/* PRODUCTS */
+
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(4,minmax(0,1fr));
+  gap: 14px;
+}
+
+.product-card {
+  background: white;
+  border: 1px solid #eee;
+  border-radius: 13px;
+  overflow: hidden;
+  transition: transform .18s, box-shadow .18s;
+}
+
+.product-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 15px 35px rgba(40,20,60,.10);
+}
+
+.cover {
+  height: 150px;
+  background: #f0f1f6;
+  position: relative;
+  overflow: hidden;
+}
+
+.product-media {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.media-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.video-badge,
+.media-tag {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: rgba(0,0,0,.65);
+  color: white;
+  padding: 4px 7px;
+  border-radius: 6px;
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.stock {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.stock.available {
+  background: rgba(255,255,255,.94);
+  color: #22a05a;
+}
+
+.stock.soldout {
+  background: #222;
+  color: white;
+}
+
+.product-body {
+  padding: 11px;
+}
+
+.product-category {
+  color: #e83d94;
+  font-size: 9px;
+  font-weight: 900;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.product-body h3 {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.description {
+  margin: 6px 0;
+  color: #888;
+  font-size: 10px;
+  line-height: 1.45;
+  min-height: 28px;
+}
+
+.duration {
+  color: #888;
+  font-size: 10px;
+  margin-top: 5px;
+}
+
+.product-bottom {
+  margin-top: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+}
+
+.price {
+  color: #e52f8d;
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+.buy-button {
+  border: 0;
+  border-radius: 7px;
+  padding: 8px 9px;
+  background: #e83d94;
+  color: white;
+  font-size: 9px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.buy-button:hover {
+  background: #d92f85;
+}
+
+.buy-button:disabled {
+  background: #bbb;
+  cursor: not-allowed;
+}
+
+/* EMPTY */
+
+.empty {
+  min-height: 300px;
+  background: white;
+  border: 1px solid #eee;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #999;
+  text-align: center;
+}
+
+.empty > div {
+  font-size: 42px;
+}
+
+.empty h3 {
+  color: #555;
+  margin: 10px 0 4px;
+}
+
+.empty p {
+  margin: 0;
+  font-size: 12px;
+}
+
+/* MESSAGE */
+
+.error-box,
+.message-box {
+  padding: 12px 14px;
+  border-radius: 10px;
+  margin-bottom: 13px;
+  font-size: 12px;
+}
+
+.error-box {
+  background: #fff0f0;
+  color: #c33;
+}
+
+.message-box {
+  background: #fff4d9;
+  color: #8a6200;
+  display: flex;
+  justify-content: space-between;
+}
+
+.message-box button {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* FLOAT */
+
+.floating-admin {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 50;
+  background: #e83d94;
+  color: white;
+  text-decoration: none;
+  border-radius: 999px;
+  padding: 11px 15px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 900;
+  box-shadow: 0 8px 25px rgba(232,61,148,.3);
+}
+
+/* MODAL */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: rgba(20,15,25,.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  backdrop-filter: blur(4px);
+}
+
+.modal {
+  position: relative;
+  width: min(420px,100%);
+  background: white;
+  border-radius: 18px;
+  padding: 25px;
+  box-shadow: 0 30px 80px rgba(0,0,0,.25);
+}
+
+.close {
+  position: absolute;
+  right: 15px;
+  top: 13px;
+  border: 0;
+  background: #f4f4f4;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.modal-icon,
+.success-icon {
+  width: 55px;
+  height: 55px;
+  margin: auto;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  font-size: 25px;
+  background: #fff0f7;
+}
+
+.success-icon {
+  background: #e9fff1;
+  color: #19a758;
+  font-weight: 900;
+}
+
+.modal h2 {
+  text-align: center;
+  margin: 13px 0 5px;
+}
+
+.modal-product {
+  text-align: center;
+  color: #e83d94;
+  font-weight: 800;
+}
+
+.confirm-row {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid #eee;
+  padding: 11px 0;
+  font-size: 13px;
+}
+
+.confirm-row strong {
+  color: #e83d94;
+}
+
+.modal-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.cancel-button,
+.confirm-button {
+  border: 0;
+  border-radius: 9px;
+  padding: 11px;
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.cancel-button {
+  background: #eee;
+}
+
+.confirm-button {
+  background: #e83d94;
+  color: white;
+}
+
+.confirm-button:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+}
+
+.confirm-button.full {
+  width: 100%;
+  margin-top: 15px;
+}
+
+.key-box {
+  margin-top: 15px;
+  padding: 14px;
+  background: #f7f7fa;
+  border-radius: 10px;
+  text-align: center;
+}
+
+.key-box span {
+  display: block;
+  color: #999;
+  font-size: 10px;
+  margin-bottom: 7px;
+}
+
+.key-box strong {
+  display: block;
+  word-break: break-all;
+  font-size: 15px;
+  color: #e83d94;
+}
+
+.key-box button {
+  margin-top: 10px;
+  border: 0;
+  background: white;
+  border: 1px solid #eee;
+  border-radius: 7px;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+
+/* LOADING */
+
+.loading-screen {
+  min-height: 100vh;
+  background: #f7f8fc;
+  display: grid;
+  place-items: center;
+}
+
+.loading-box {
+  text-align: center;
+  color: #888;
+}
+
+.loader {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #eee;
+  border-top-color: #e83d94;
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+  margin: auto;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* TABLET */
+
+@media (max-width: 1050px) {
+  .product-grid {
+    grid-template-columns: repeat(3,minmax(0,1fr));
+  }
+
+  .top-nav {
+    display: none;
+  }
+}
+
+/* MOBILE */
+
+@media (max-width: 760px) {
+  .topbar {
+    height: 58px;
+  }
+
+  .topbar-inner {
+    padding: 0 11px;
+  }
+
+  .account {
+    display: none;
+  }
+
+  .wallet {
+    font-size: 11px;
+  }
+
+  .hero {
+    min-height: 125px;
+  }
+
+  .hero > div {
+    padding: 22px 14px;
+  }
+
+  .hero h1 {
+    font-size: 25px;
+  }
+
+  .container {
+    padding: 12px;
+  }
+
+  .layout {
+    display: block;
+  }
+
+  .sidebar {
+    margin-bottom: 14px;
+  }
+
+  .sidebar-support {
+    display: none;
+  }
+
+  .category-tree {
+    max-height: 240px;
+    overflow-y: auto;
+  }
+
+  .toolbar {
+    display: block;
+  }
+
+  .toolbar h2 {
+    margin-bottom: 3px;
+  }
+
+  .tools {
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: 1fr 125px;
+  }
+
+  .search {
+    width: 100%;
+  }
+
+  .product-grid {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+    gap: 9px;
+  }
+
+  .cover {
+    height: 125px;
+  }
+
+  .product-body {
+    padding: 9px;
+  }
+
+  .product-body h3 {
+    font-size: 12px;
+  }
+
+  .price {
+    font-size: 13px;
+  }
+
+  .buy-button {
+    padding: 7px;
+    font-size: 8px;
+  }
+
+  .floating-admin {
+    right: 12px;
+    bottom: 12px;
+    padding: 10px 12px;
+  }
+
+  .floating-admin span {
+    display: none;
+  }
+}
+
+@media (max-width: 390px) {
+  .product-grid {
+    gap: 7px;
+  }
+
+  .cover {
+    height: 110px;
+  }
+
+  .price {
+    font-size: 12px;
+  }
+
+  .buy-button {
+    padding: 6px;
+  }
+}
+`;
