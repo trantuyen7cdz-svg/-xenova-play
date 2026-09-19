@@ -85,8 +85,7 @@ export default function Menu() {
     const savedTheme =
       localStorage.getItem("xenova-theme");
 
-    const isDark =
-      savedTheme === "dark";
+    const isDark = savedTheme === "dark";
 
     setDark(isDark);
 
@@ -106,10 +105,7 @@ export default function Menu() {
     };
 
     const visibilityHandler = () => {
-      if (
-        document.visibilityState ===
-        "visible"
-      ) {
+      if (document.visibilityState === "visible") {
         loadUser();
       }
     };
@@ -244,9 +240,7 @@ export default function Menu() {
               <button
                 type="button"
                 className="drawer-close"
-                onClick={() =>
-                  setOpen(false)
-                }
+                onClick={() => setOpen(false)}
                 aria-label="Đóng menu"
               >
                 ×
@@ -260,15 +254,11 @@ export default function Menu() {
             {user ? (
               <div className="drawer-user">
                 <div className="drawer-avatar">
-                  {user.email
-                    ?.charAt(0)
-                    .toUpperCase() || "U"}
+                  🐰
                 </div>
 
                 <div className="drawer-user-info">
-                  <small>
-                    TÀI KHOẢN
-                  </small>
+                  <small>TÀI KHOẢN</small>
 
                   <strong>
                     {user.email}
@@ -279,18 +269,14 @@ export default function Menu() {
               <Link
                 href="/login"
                 className="drawer-login-card"
-                onClick={() =>
-                  setOpen(false)
-                }
+                onClick={() => setOpen(false)}
               >
                 <span className="drawer-login-icon">
                   🔐
                 </span>
 
                 <span>
-                  <small>
-                    XIN CHÀO
-                  </small>
+                  <small>XIN CHÀO</small>
 
                   <strong>
                     Đăng nhập tài khoản
@@ -315,9 +301,7 @@ export default function Menu() {
                 icon="⌂"
                 text="Trang chủ"
                 active={isActive("/")}
-                close={() =>
-                  setOpen(false)
-                }
+                close={() => setOpen(false)}
               />
 
               <MenuLink
@@ -325,21 +309,15 @@ export default function Menu() {
                 icon="🛒"
                 text="Cửa hàng"
                 active={isActive("/shop")}
-                close={() =>
-                  setOpen(false)
-                }
+                close={() => setOpen(false)}
               />
 
               <MenuLink
                 href="/deposit"
                 icon="💳"
                 text="Nạp tiền"
-                active={isActive(
-                  "/deposit"
-                )}
-                close={() =>
-                  setOpen(false)
-                }
+                active={isActive("/deposit")}
+                close={() => setOpen(false)}
               />
 
               <MenuLink
@@ -347,67 +325,35 @@ export default function Menu() {
                 icon="🔑"
                 text="KEY của tôi"
                 active={isActive("/keys")}
-                close={() =>
-                  setOpen(false)
-                }
+                close={() => setOpen(false)}
               />
 
               <MenuLink
                 href="/orders"
                 icon="🧾"
                 text="Đơn hàng"
-                active={isActive(
-                  "/orders"
-                )}
-                close={() =>
-                  setOpen(false)
-                }
+                active={isActive("/orders")}
+                close={() => setOpen(false)}
               />
 
               <MenuLink
                 href="/dashboard"
                 icon="👤"
                 text="Tài khoản"
-                active={isActive(
-                  "/dashboard"
-                )}
-                close={() =>
-                  setOpen(false)
-                }
+                active={isActive("/dashboard")}
+                close={() => setOpen(false)}
               />
 
               <MenuLink
                 href="/settings"
                 icon="⚙️"
                 text="Cài đặt"
-                active={isActive(
-                  "/settings"
-                )}
-                close={() =>
-                  setOpen(false)
-                }
+                active={isActive("/settings")}
+                close={() => setOpen(false)}
               />
             </nav>
 
-            {/* BALANCE */}
-
-            {user && (
-              <div className="drawer-balance">
-                <span className="drawer-balance-icon">
-                  💰
-                </span>
-
-                <div>
-                  <small>
-                    SỐ DƯ VÍ
-                  </small>
-
-                  <strong>
-                    {formatPrice(balance)}
-                  </strong>
-                </div>
-              </div>
-            )}
+            {/* KHÔNG CÒN KHỐI SỐ DƯ Ở ĐÂY */}
 
             {/* THEME */}
 
@@ -432,9 +378,7 @@ export default function Menu() {
                 </span>
 
                 <span className="drawer-theme-state">
-                  {dark
-                    ? "DARK"
-                    : "LIGHT"}
+                  {dark ? "DARK" : "LIGHT"}
                 </span>
               </button>
             </div>
@@ -458,9 +402,7 @@ export default function Menu() {
                 <Link
                   href="/login"
                   className="drawer-login"
-                  onClick={() =>
-                    setOpen(false)
-                  }
+                  onClick={() => setOpen(false)}
                 >
                   <span>🔐</span>
 
@@ -508,11 +450,7 @@ export default function Menu() {
         {/* CENTER - ACCOUNT */}
 
         <Link
-          href={
-            user
-              ? "/dashboard"
-              : "/login"
-          }
+          href={user ? "/dashboard" : "/login"}
           className={
             user
               ? isActive("/dashboard")
@@ -523,14 +461,29 @@ export default function Menu() {
               : "bottom-nav-link"
           }
         >
-          <span className="bottom-nav-icon">
-            👤
+          <span
+            className="bottom-account-avatar"
+            style={{
+              width: "38px",
+              height: "38px",
+              borderRadius: "50%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background:
+                "linear-gradient(135deg, #fff0f7, #ffd6ea)",
+              border: "2px solid rgba(255, 105, 180, 0.25)",
+              boxShadow:
+                "0 4px 12px rgba(255, 105, 180, 0.18)",
+              fontSize: "22px",
+              lineHeight: 1,
+            }}
+          >
+            🐰
           </span>
 
           <small>
-            {user
-              ? "Tài khoản"
-              : "Đăng nhập"}
+            {user ? "Tài khoản" : "Đăng nhập"}
           </small>
         </Link>
 
