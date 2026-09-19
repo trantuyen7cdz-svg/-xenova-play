@@ -18,6 +18,28 @@ const NAV_ITEMS = [
   ["⚙", "Cài đặt", "/settings"],
 ];
 
+const QUICK_AMOUNTS = [
+  10000,
+  20000,
+  50000,
+  100000,
+  200000,
+  500000,
+];
+
+function formatMoney(value) {
+  return Number(value || 0).toLocaleString("vi-VN") + "đ";
+}
+
+function formatDate(value) {
+  if (!value) return "";
+  return new Date(value).toLocaleString("vi-VN");
+}
+
+function cleanAmount(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
 export default function DepositPage() {
   const router = useRouter();
 
@@ -29,16 +51,48 @@ export default function DepositPage() {
   const [requests, setRequests] = useState([]);
   const [depositInfo, setDepositInfo] = useState(null);
 
+  async function loadData() {
+    try {
+      setLoading(true);
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.user) {
+        router.replace("/login");
+        return;
+      }
+
+      setUser(session.user);
+
+      const { data, error } = await supabase
+        .from("deposit_requests")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .order("created_at", { ascending: false });
+
+      if (!error) {
+        setRequests(data || []);
+      }
+    } catch (error) {
+      console.error(error);
+      setMessage("Không thể tải dữ liệu.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => {
     loadData();
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user || null);
-
       if (!session?.user) {
-        router.push("/login");
+        router.replace("/login");
+      } else {
+        setUser(session.user);
       }
     });
 
@@ -47,56 +101,15 @@ export default function DepositPage() {
     };
   }, [router]);
 
-  async function loadData() {
-    try {
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession();
-
-      if (sessionError) {
-        console.error("SESSION ERROR:", sessionError);
-      }
-
-      const currentUser = session?.user;
-
-      if (!currentUser) {
-        setUser(null);
-        router.push("/login");
-        return;
-      }
-
-      setUser(currentUser);
-
-      const { data, error } = await supabase
-        .from("deposit_requests")
-        .select("*")
-        .eq("user_id", currentUser.id)
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        console.error("LOAD DEPOSITS ERROR:", error);
-      } else {
-        setRequests(data || []);
-      }
-    } catch (error) {
-      console.error("LOAD DATA ERROR:", error);
-    } finally {
-      setLoading(false);
-    }
+  function handleAmountChange(event) {
+    const value = cleanAmount(event.target.value);
+    setAmount(value);
+    setMessage("");
   }
 
-  function formatMoney(value) {
-    return Number(value || 0).toLocaleString("vi-VN") + "đ";
-  }
-
-  function formatDate(value) {
-    if (!value) return "";
-    return new Date(value).toLocaleString("vi-VN");
-  }
-
-  function cleanAmount(value) {
-    return value.replace(/\D/g, "");
+  function selectQuickAmount(value) {
+    setAmount(String(value));
+    setMessage("");
   }
 
   async function createDeposit() {
@@ -105,37 +118,32 @@ export default function DepositPage() {
 
     const money = Number(amount);
 
-    if (!money || money < 10000) {
+    if (!money) {
+      setMessage("Vui lòng nhập số tiền cần nạp.");
+      return;
+    }
+
+    if (money < 10000) {
       setMessage("Số tiền nạp tối thiểu là 10.000đ.");
       return;
     }
 
     if (money > 100000000) {
-      setMessage("Số tiền nạp quá lớn.");
+      setMessage("Số tiền nạp tối đa là 100.000.000đ.");
       return;
     }
 
-    setSubmitting(true);
-
     try {
+      setSubmitting(true);
+
       const {
         data: { session },
-        error: sessionError,
       } = await supabase.auth.getSession();
 
-      if (sessionError) {
-        console.error("GET SESSION ERROR:", sessionError);
-      }
-
-      if (!session?.user || !session?.access_token) {
-        setUser(null);
-        setMessage(
-          "Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại."
-        );
+      if (!session?.access_token) {
+        router.replace("/login");
         return;
       }
-
-      setUser(session.user);
 
       const response = await fetch("/api/deposit/create", {
         method: "POST",
@@ -150,9 +158,9 @@ export default function DepositPage() {
 
       const result = await response.json();
 
-      if (!response.ok || !result.success) {
+      if (!response.ok || !result?.success) {
         throw new Error(
-          result.message || "Không thể tạo yêu cầu nạp tiền."
+          result?.message || "Không thể tạo yêu cầu nạp tiền."
         );
       }
 
@@ -162,31 +170,12 @@ export default function DepositPage() {
         transferContent: result.transferContent,
       });
 
-      setMessage(
-        `Đã tạo yêu cầu nạp ${formatMoney(
-          result.amount
-        )}. Vui lòng chuyển khoản đúng nội dung bên dưới.`
-      );
+      setMessage("Đã tạo yêu cầu nạp tiền. Hãy chuyển khoản đúng nội dung.");
 
-      setAmount("");
-
-      const { data, error } = await supabase
-        .from("deposit_requests")
-        .select("*")
-        .eq("user_id", session.user.id)
-        .order("created_at", { ascending: false });
-
-      if (!error) {
-        setRequests(data || []);
-      } else {
-        console.error("RELOAD DEPOSITS ERROR:", error);
-      }
+      await loadData();
     } catch (error) {
-      console.error("CREATE DEPOSIT ERROR:", error);
-
-      setMessage(
-        error.message || "Có lỗi xảy ra khi tạo yêu cầu nạp tiền."
-      );
+      console.error(error);
+      setMessage(error.message || "Có lỗi xảy ra khi tạo yêu cầu nạp tiền.");
     } finally {
       setSubmitting(false);
     }
@@ -204,61 +193,51 @@ export default function DepositPage() {
     return `https://img.vietqr.io/image/VCB-${ACCOUNT_NUMBER}-compact2.png?${params.toString()}`;
   }
 
+  async function copyText(text, successMessage) {
+    try {
+      await navigator.clipboard.writeText(String(text));
+      setMessage(successMessage);
+    } catch {
+      setMessage("Không thể sao chép. Vui lòng giữ và sao chép thủ công.");
+    }
+  }
+
   if (loading) {
     return (
       <main className="loading-page">
-        <div className="loading-logo">
-          XENOVA
-          <span>PLAY</span>
+        <div className="loader-card">
+          <div className="loader">✦</div>
+          <div>Đang tải XENOVA PLAY...</div>
         </div>
-
-        <div className="loading-spinner" />
-
-        <p>Đang tải...</p>
 
         <style jsx>{`
           .loading-page {
             min-height: 100vh;
-            background: #fff7fb;
             display: flex;
             align-items: center;
             justify-content: center;
-            flex-direction: column;
-            color: #25202a;
+            background: #fff7fb;
+            color: #333;
+            font-family: Arial, sans-serif;
           }
 
-          .loading-logo {
-            font-size: 27px;
-            line-height: 0.8;
-            font-weight: 950;
-            letter-spacing: 1px;
-            color: #171925;
+          .loader-card {
+            text-align: center;
+            padding: 30px;
           }
 
-          .loading-logo span {
-            display: block;
-            color: #f22f82;
-            margin-left: 38px;
-            margin-top: 5px;
-            font-size: 15px;
-          }
-
-          .loading-spinner {
-            width: 30px;
-            height: 30px;
-            margin-top: 20px;
-            border: 3px solid #ffd7e8;
-            border-top-color: #f22f82;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-          }
-
-          p {
-            color: #999;
-            font-size: 12px;
+          .loader {
+            font-size: 42px;
+            color: #ff4f91;
+            margin-bottom: 12px;
+            animation: spin 1.2s linear infinite;
           }
 
           @keyframes spin {
+            from {
+              transform: rotate(0deg);
+            }
+
             to {
               transform: rotate(360deg);
             }
@@ -269,1451 +248,1007 @@ export default function DepositPage() {
   }
 
   return (
-    <>
+    <main className="page">
+      <div className="petals">✿　❀　✿　❀　✿</div>
+
+      <header className="header">
+        <div className="header-inner">
+          <button
+            className="logo"
+            onClick={() => router.push("/")}
+            type="button"
+          >
+            XENOVA <span>PLAY</span>
+          </button>
+
+          <nav className="desktop-nav">
+            {NAV_ITEMS.map(([icon, label, href]) => (
+              <button
+                key={href}
+                type="button"
+                className={href === "/deposit" ? "nav-item active" : "nav-item"}
+                onClick={() => router.push(href)}
+              >
+                <span>{icon}</span>
+                {label}
+              </button>
+            ))}
+          </nav>
+
+          <div className="user-area">
+            <div className="wallet">
+              <span>💰</span>
+              <span>Nạp tiền</span>
+            </div>
+
+            <button
+              type="button"
+              className="avatar"
+              onClick={() => router.push("/dashboard")}
+            >
+              {user?.email?.charAt(0)?.toUpperCase() || "U"}
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <section className="content">
+        <div className="breadcrumb">
+          <button type="button" onClick={() => router.push("/")}>
+            Trang chủ
+          </button>
+          <span>/</span>
+          <strong>Nạp tiền</strong>
+        </div>
+
+        <div className="title-area">
+          <div>
+            <div className="small-title">XENOVA PLAY</div>
+            <h1>Nạp tiền</h1>
+            <p>
+              Nạp tiền vào ví để mua KEY và sử dụng các dịch vụ trên hệ thống.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid">
+          <section className="card deposit-card">
+            <div className="card-title">
+              <div className="icon-box">💳</div>
+
+              <div>
+                <h2>Số tiền muốn nạp</h2>
+                <p>Nhập số tiền bạn muốn nạp vào tài khoản.</p>
+              </div>
+            </div>
+
+            <label className="label">Số tiền</label>
+
+            <div className="amount-input">
+              <input
+                value={amount ? Number(amount).toLocaleString("vi-VN") : ""}
+                onChange={(event) =>
+                  handleAmountChange({
+                    target: {
+                      value: event.target.value.replace(/\./g, ""),
+                    },
+                  })
+                }
+                inputMode="numeric"
+                placeholder="Nhập số tiền..."
+              />
+
+              <span>VNĐ</span>
+            </div>
+
+            <div className="quick-title">Chọn nhanh</div>
+
+            <div className="quick-grid">
+              {QUICK_AMOUNTS.map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={
+                    amount === String(value)
+                      ? "quick-button selected"
+                      : "quick-button"
+                  }
+                  onClick={() => selectQuickAmount(value)}
+                >
+                  {formatMoney(value)}
+                </button>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              className="deposit-button"
+              onClick={createDeposit}
+              disabled={submitting}
+            >
+              {submitting ? "Đang tạo yêu cầu..." : "TẠO YÊU CẦU NẠP TIỀN"}
+            </button>
+
+            {message && <div className="message">{message}</div>}
+          </section>
+
+          <aside className="card guide-card">
+            <div className="card-title">
+              <div className="icon-box">💡</div>
+
+              <div>
+                <h2>Hướng dẫn</h2>
+                <p>Thực hiện theo các bước bên dưới.</p>
+              </div>
+            </div>
+
+            <div className="steps">
+              <div className="step">
+                <b>1</b>
+                <div>
+                  <strong>Nhập số tiền</strong>
+                  <span>Nhập số tiền bạn muốn nạp.</span>
+                </div>
+              </div>
+
+              <div className="step">
+                <b>2</b>
+                <div>
+                  <strong>Tạo yêu cầu</strong>
+                  <span>Bấm nút tạo yêu cầu nạp tiền.</span>
+                </div>
+              </div>
+
+              <div className="step">
+                <b>3</b>
+                <div>
+                  <strong>Chuyển khoản</strong>
+                  <span>Chuyển đúng số tiền và nội dung.</span>
+                </div>
+              </div>
+
+              <div className="step">
+                <b>4</b>
+                <div>
+                  <strong>Chờ hệ thống xử lý</strong>
+                  <span>Kiểm tra lịch sử nạp tiền bên dưới.</span>
+                </div>
+              </div>
+            </div>
+
+            <a
+              className="support-button"
+              href="https://zalo.me/84365717262"
+              target="_blank"
+              rel="noreferrer"
+            >
+              💬 Chat Admin
+            </a>
+          </aside>
+        </div>
+
+        {depositInfo && (
+          <section className="card payment-card">
+            <div className="payment-header">
+              <div>
+                <div className="small-title">PAYMENT</div>
+                <h2>Thông tin chuyển khoản</h2>
+                <p>
+                  Vui lòng chuyển đúng số tiền và đúng nội dung chuyển khoản.
+                </p>
+              </div>
+
+              <div className="payment-status">CHỜ THANH TOÁN</div>
+            </div>
+
+            <div className="payment-layout">
+              <div className="qr-area">
+                <div className="qr-box">
+                  <img
+                    src={getQrUrl()}
+                    alt="QR thanh toán Vietcombank"
+                  />
+                </div>
+
+                <div className="qr-note">
+                  Quét mã QR bằng ứng dụng ngân hàng
+                </div>
+              </div>
+
+              <div className="bank-info">
+                <InfoRow
+                  label="Ngân hàng"
+                  value={BANK_NAME}
+                  onCopy={() => copyText(BANK_NAME, "Đã sao chép tên ngân hàng.")}
+                />
+
+                <InfoRow
+                  label="Chủ tài khoản"
+                  value={ACCOUNT_NAME}
+                  onCopy={() =>
+                    copyText(ACCOUNT_NAME, "Đã sao chép tên tài khoản.")
+                  }
+                />
+
+                <InfoRow
+                  label="Số tài khoản"
+                  value={ACCOUNT_NUMBER}
+                  onCopy={() =>
+                    copyText(ACCOUNT_NUMBER, "Đã sao chép số tài khoản.")
+                  }
+                />
+
+                <InfoRow
+                  label="Số tiền"
+                  value={formatMoney(depositInfo.amount)}
+                  onCopy={() =>
+                    copyText(
+                      String(depositInfo.amount),
+                      "Đã sao chép số tiền."
+                    )
+                  }
+                />
+
+                <div className="transfer-row">
+                  <div>
+                    <small>Nội dung chuyển khoản</small>
+                    <strong>{depositInfo.transferContent}</strong>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      copyText(
+                        depositInfo.transferContent,
+                        "Đã sao chép nội dung chuyển khoản."
+                      )
+                    }
+                  >
+                    Sao chép
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        <section className="card history-card">
+          <div className="history-header">
+            <div>
+              <div className="small-title">HISTORY</div>
+              <h2>Lịch sử nạp tiền</h2>
+            </div>
+
+            <span>{requests.length} giao dịch</span>
+          </div>
+
+          {requests.length === 0 ? (
+            <div className="empty">
+              <div>♡</div>
+              <strong>Chưa có giao dịch</strong>
+              <span>Lịch sử nạp tiền của bạn sẽ xuất hiện ở đây.</span>
+            </div>
+          ) : (
+            <div className="history-list">
+              {requests.map((item) => {
+                const status = String(item.status || "").toLowerCase();
+
+                let statusText = "Đang xử lý";
+
+                if (
+                  status === "approved" ||
+                  status === "success" ||
+                  status === "completed"
+                ) {
+                  statusText = "Thành công";
+                } else if (
+                  status === "rejected" ||
+                  status === "failed" ||
+                  status === "cancelled"
+                ) {
+                  statusText = "Từ chối";
+                }
+
+                return (
+                  <div className="history-item" key={item.id}>
+                    <div className="history-icon">₫</div>
+
+                    <div className="history-main">
+                      <strong>{formatMoney(item.amount)}</strong>
+                      <span>{formatDate(item.created_at)}</span>
+                    </div>
+
+                    <div className="history-right">
+                      <span
+                        className={
+                          status === "approved" ||
+                          status === "success" ||
+                          status === "completed"
+                            ? "status success"
+                            : status === "rejected" ||
+                              status === "failed" ||
+                              status === "cancelled"
+                            ? "status failed"
+                            : "status pending"
+                        }
+                      >
+                        {statusText}
+                      </span>
+
+                      {item.transfer_content && (
+                        <small>{item.transfer_content}</small>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      </section>
+
+      <a
+        className="floating-chat"
+        href="https://zalo.me/84365717262"
+        target="_blank"
+        rel="noreferrer"
+      >
+        <span>💬</span>
+        <strong>Chat Admin</strong>
+      </a>
+
+      <nav className="mobile-nav">
+        {NAV_ITEMS.slice(0, 5).map(([icon, label, href]) => (
+          <button
+            type="button"
+            key={href}
+            className={href === "/deposit" ? "mobile-active" : ""}
+            onClick={() => router.push(href)}
+          >
+            <span>{icon}</span>
+            <small>{label}</small>
+          </button>
+        ))}
+      </nav>
+
       <style jsx global>{`
         * {
           box-sizing: border-box;
         }
 
-        html,
         body {
           margin: 0;
-          padding: 0;
           background: #fff7fb;
+          color: #26232a;
           font-family:
             Inter,
-            -apple-system,
-            BlinkMacSystemFont,
-            "Segoe UI",
+            Arial,
+            Helvetica,
             sans-serif;
-        }
-
-        body {
-          color: #292631;
         }
 
         button,
         input {
-          font-family: inherit;
+          font: inherit;
         }
-      `}</style>
 
-      <div className="xenova-page">
-        <header className="topbar">
-          <div className="topbar-inner">
-            <button
-              className="brand"
-              onClick={() => router.push("/")}
-            >
-              <span className="brand-main">XENOVA</span>
-              <span className="brand-play">PLAY</span>
-            </button>
+        button {
+          cursor: pointer;
+        }
 
-            <nav className="desktop-nav">
-              {NAV_ITEMS.map(([icon, label, href]) => (
-                <button
-                  key={label}
-                  className={`nav-item ${
-                    label === "Nạp tiền" ? "active" : ""
-                  }`}
-                  onClick={() => router.push(href)}
-                >
-                  <span className="nav-icon">{icon}</span>
-                  <span>{label}</span>
-                </button>
-              ))}
-            </nav>
-
-            <div className="header-right">
-              <button
-                className="wallet-button"
-                onClick={() => router.push("/deposit")}
-              >
-                <span>💳</span>
-                <span>Ví của tôi</span>
-              </button>
-
-              <button
-                className="avatar-button"
-                onClick={() => router.push("/dashboard")}
-              >
-                {user?.email?.charAt(0)?.toUpperCase() || "U"}
-              </button>
-            </div>
-          </div>
-        </header>
-
-        <main className="main">
-          <div className="petal petal-one">✿</div>
-          <div className="petal petal-two">❀</div>
-          <div className="petal petal-three">✿</div>
-
-          <div className="breadcrumb">
-            <button onClick={() => router.push("/")}>
-              Trang chủ
-            </button>
-
-            <span>/</span>
-
-            <strong>Nạp tiền</strong>
-          </div>
-
-          <section className="page-title">
-            <div className="title-icon">₫</div>
-
-            <div>
-              <h1>Nạp tiền</h1>
-
-              <p>
-                Nạp tiền vào ví XENOVA PLAY để mua sản phẩm
-              </p>
-            </div>
-          </section>
-
-          <section className="deposit-grid">
-            <div className="deposit-card">
-              <div className="card-heading">
-                <div className="heading-icon">₫</div>
-
-                <div>
-                  <h2>Nạp tiền vào ví</h2>
-                  <p>Nhập số tiền bạn muốn nạp</p>
-                </div>
-              </div>
-
-              <label className="input-label">
-                Số tiền nạp
-              </label>
-
-              <div className="amount-input">
-                <input
-                  value={
-                    amount
-                      ? Number(amount).toLocaleString("vi-VN")
-                      : ""
-                  }
-                  onChange={(e) => {
-                    setAmount(cleanAmount(e.target.value));
-                    setDepositInfo(null);
-                    setMessage("");
-                  }}
-                  placeholder="Nhập số tiền..."
-                  inputMode="numeric"
-                />
-
-                <span>VNĐ</span>
-              </div>
-
-              <div className="quick-label">
-                Chọn nhanh
-              </div>
-
-              <div className="quick-grid">
-                {[10000, 20000, 50000, 100000, 200000].map(
-                  (money) => (
-                    <button
-                      key={money}
-                      onClick={() => {
-                        setAmount(String(money));
-                        setDepositInfo(null);
-                        setMessage("");
-                      }}
-                    >
-                      {formatMoney(money)}
-                    </button>
-                  )
-                )}
-              </div>
-
-              <div className="minimum">
-                <span>ⓘ</span>
-                Số tiền nạp tối thiểu:
-                <b>10.000đ</b>
-              </div>
-
-              <button
-                className="submit-button"
-                disabled={submitting}
-                onClick={createDeposit}
-              >
-                {submitting ? (
-                  <>
-                    <span className="spinner" />
-                    ĐANG TẠO...
-                  </>
-                ) : (
-                  <>
-                    Tiếp tục
-                    <span>→</span>
-                  </>
-                )}
-              </button>
-
-              {message && (
-                <div className="message-box">
-                  <span className="message-icon">
-                    ✓
-                  </span>
-
-                  <div>{message}</div>
-                </div>
-              )}
-            </div>
-
-            <aside className="side-column">
-              <div className="guide-card">
-                <div className="guide-heading">
-                  <div className="guide-icon">♡</div>
-
-                  <div>
-                    <h3>Hướng dẫn nạp tiền</h3>
-                    <p>Thực hiện theo các bước</p>
-                  </div>
-                </div>
-
-                <div className="steps">
-                  {[
-                    [
-                      "1",
-                      "Nhập số tiền",
-                      "Chọn hoặc nhập số tiền muốn nạp.",
-                    ],
-                    [
-                      "2",
-                      "Tạo yêu cầu",
-                      "Nhấn tiếp tục để tạo đơn nạp.",
-                    ],
-                    [
-                      "3",
-                      "Chuyển khoản",
-                      "Quét QR và chuyển đúng số tiền, nội dung.",
-                    ],
-                    [
-                      "4",
-                      "Nhận tiền",
-                      "Hệ thống xử lý sau khi xác nhận.",
-                    ],
-                  ].map(([number, title, text]) => (
-                    <div className="step" key={number}>
-                      <div className="step-number">
-                        {number}
-                      </div>
-
-                      <div>
-                        <strong>{title}</strong>
-                        <p>{text}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="support-card">
-                <div className="support-top">
-                  <div className="support-icon">
-                    💬
-                  </div>
-
-                  <div>
-                    <strong>Cần hỗ trợ?</strong>
-                    <p>Liên hệ Admin nếu gặp vấn đề</p>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() =>
-                    window.open(
-                      "https://zalo.me/84365717262",
-                      "_blank"
-                    )
-                  }
-                >
-                  Chat Admin
-                </button>
-              </div>
-            </aside>
-          </section>
-
-          {depositInfo && (
-            <section className="section-card qr-section">
-              <div className="section-heading">
-                <div className="section-icon">QR</div>
-
-                <div>
-                  <h2>Thanh toán</h2>
-
-                  <p>
-                    Quét mã QR để chuyển khoản nhanh chóng
-                  </p>
-                </div>
-              </div>
-
-              <div className="qr-layout">
-                <div className="qr-side">
-                  <div className="qr-box">
-                    <img
-                      src={getQrUrl()}
-                      alt="QR chuyển khoản XENOVA PLAY"
-                      className="qr-image"
-                    />
-                  </div>
-
-                  <div className="qr-note">
-                    Quét mã QR bằng ứng dụng ngân hàng
-                  </div>
-                </div>
-
-                <div className="payment-card">
-                  <div className="payment-header">
-                    <span>Thông tin chuyển khoản</span>
-
-                    <b>
-                      ĐƠN #{depositInfo.depositId}
-                    </b>
-                  </div>
-
-                  <div className="detail-row">
-                    <span>Ngân hàng</span>
-                    <strong>{BANK_NAME}</strong>
-                  </div>
-
-                  <div className="detail-row">
-                    <span>Chủ tài khoản</span>
-                    <strong>{ACCOUNT_NAME}</strong>
-                  </div>
-
-                  <div className="detail-row">
-                    <span>Số tài khoản</span>
-                    <strong>{ACCOUNT_NUMBER}</strong>
-                  </div>
-
-                  <div className="detail-row">
-                    <span>Số tiền</span>
-
-                    <strong className="pink-value">
-                      {formatMoney(depositInfo.amount)}
-                    </strong>
-                  </div>
-
-                  <div className="transfer-box">
-                    <span>Nội dung chuyển khoản</span>
-
-                    <strong>
-                      {depositInfo.transferContent}
-                    </strong>
-                  </div>
-
-                  <div className="warning-box">
-                    <span>⚠️</span>
-
-                    <div>
-                      Vui lòng chuyển khoản{" "}
-                      <b>đúng số tiền</b> và{" "}
-                      <b>đúng nội dung</b>.
-                      <br />
-                      Mỗi đơn có một mã chuyển khoản riêng.
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </section>
-          )}
-
-          <section className="section-card bank-section">
-            <div className="section-heading">
-              <div className="section-icon">🏦</div>
-
-              <div>
-                <h2>Thông tin chuyển khoản</h2>
-                <p>Thông tin tài khoản nhận tiền</p>
-              </div>
-            </div>
-
-            <div className="bank-box">
-              <div className="bank-main">
-                <div className="bank-logo">
-                  VCB
-                </div>
-
-                <div>
-                  <div className="bank-name">
-                    {BANK_NAME}
-                  </div>
-
-                  <div className="bank-sub">
-                    Tài khoản ngân hàng XENOVA PLAY
-                  </div>
-                </div>
-              </div>
-
-              <div className="bank-info">
-                <div>
-                  <span>Chủ tài khoản</span>
-                  <strong>{ACCOUNT_NAME}</strong>
-                </div>
-
-                <div>
-                  <span>Số tài khoản</span>
-                  <strong>{ACCOUNT_NUMBER}</strong>
-                </div>
-
-                <div>
-                  <span>Nội dung</span>
-                  <strong>Mã đơn riêng</strong>
-                </div>
-              </div>
-            </div>
-
-            <div className="bank-warning">
-              <span>⚠️</span>
-
-              <div>
-                Chỉ chuyển khoản sau khi đã tạo yêu cầu
-                nạp tiền. Nội dung chuyển khoản phải đúng
-                theo đơn được tạo.
-              </div>
-            </div>
-          </section>
-
-          <section className="section-card history-section">
-            <div className="section-heading">
-              <div className="section-icon">↕</div>
-
-              <div>
-                <h2>Lịch sử nạp tiền</h2>
-
-                <p>
-                  Theo dõi các yêu cầu nạp tiền của bạn
-                </p>
-              </div>
-            </div>
-
-            {requests.length === 0 ? (
-              <div className="empty-history">
-                <div className="empty-icon">₫</div>
-
-                <strong>
-                  Chưa có yêu cầu nạp tiền
-                </strong>
-
-                <p>
-                  Các giao dịch nạp tiền của bạn sẽ xuất hiện
-                  tại đây.
-                </p>
-              </div>
-            ) : (
-              <div className="history-list">
-                {requests.map((item) => (
-                  <div
-                    className="history-item"
-                    key={item.id}
-                  >
-                    <div className="history-left">
-                      <div className="history-id">
-                        #{item.id}
-                      </div>
-
-                      <div className="history-date">
-                        {formatDate(item.created_at)}
-                      </div>
-
-                      {item.transfer_content && (
-                        <div className="history-content">
-                          {item.transfer_content}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="history-right">
-                      <strong>
-                        {formatMoney(item.amount)}
-                      </strong>
-
-                      <span
-                        className={`status ${item.status}`}
-                      >
-                        {item.status === "pending"
-                          ? "ĐANG CHỜ"
-                          : item.status === "completed"
-                          ? "HOÀN THÀNH"
-                          : item.status === "failed"
-                          ? "THẤT BẠI"
-                          : item.status}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <footer className="footer">
-            © {new Date().getFullYear()} XENOVA PLAY
-            — All rights reserved.
-          </footer>
-        </main>
-
-        <button
-          className="chat-admin"
-          onClick={() =>
-            window.open(
-              "https://zalo.me/84365717262",
-              "_blank"
-            )
-          }
-        >
-          Chat Admin 💬
-        </button>
-
-        <div className="mobile-bottom-nav">
-          {[
-            ["⌂", "Trang chủ", "/"],
-            ["🛒", "Cửa hàng", "/shop"],
-            ["▣", "Nạp tiền", "/deposit"],
-            ["♢", "KEY", "/keys"],
-            ["♙", "Tài khoản", "/dashboard"],
-          ].map(([icon, label, href]) => (
-            <button
-              key={label}
-              className={
-                label === "Nạp tiền"
-                  ? "mobile-active"
-                  : ""
-              }
-              onClick={() => router.push(href)}
-            >
-              <span>{icon}</span>
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <style jsx>{`
-        .xenova-page {
+        .page {
           min-height: 100vh;
           background:
             radial-gradient(
-              circle at 8% 18%,
-              rgba(255, 78, 153, 0.08),
-              transparent 19%
+              circle at 10% 15%,
+              rgba(255, 160, 199, 0.12),
+              transparent 25%
             ),
             radial-gradient(
-              circle at 94% 48%,
-              rgba(255, 120, 190, 0.08),
-              transparent 20%
+              circle at 90% 10%,
+              rgba(255, 120, 175, 0.1),
+              transparent 25%
             ),
             #fff7fb;
-          position: relative;
-          overflow-x: hidden;
+          padding-bottom: 80px;
         }
 
-        .topbar {
+        .petals {
+          position: fixed;
+          top: 95px;
+          left: 0;
+          right: 0;
+          pointer-events: none;
+          text-align: center;
+          color: rgba(255, 94, 155, 0.16);
+          font-size: 22px;
+          letter-spacing: 20px;
+          z-index: 0;
+        }
+
+        .header {
           position: sticky;
           top: 0;
-          z-index: 100;
-          height: 62px;
-          background: rgba(255, 255, 255, 0.97);
-          border-bottom: 1px solid #eee7ed;
-          box-shadow: 0 2px 15px rgba(40, 20, 35, 0.04);
-          backdrop-filter: blur(12px);
+          z-index: 50;
+          background: rgba(255, 255, 255, 0.9);
+          backdrop-filter: blur(16px);
+          border-bottom: 1px solid #f3dce7;
         }
 
-        .topbar-inner {
-          max-width: 1220px;
-          height: 100%;
-          margin: auto;
-          padding: 0 18px;
+        .header-inner {
+          max-width: 1400px;
+          min-height: 72px;
+          margin: 0 auto;
+          padding: 0 24px;
           display: flex;
           align-items: center;
-          gap: 18px;
+          gap: 24px;
         }
 
-        .brand {
-          width: 105px;
+        .logo {
           border: 0;
           background: transparent;
-          text-align: left;
-          cursor: pointer;
-          padding: 0;
-          line-height: 0.82;
-          flex-shrink: 0;
-        }
-
-        .brand-main {
-          display: block;
-          color: #111523;
-          font-size: 19px;
-          font-weight: 950;
-          letter-spacing: -0.8px;
-        }
-
-        .brand-play {
-          display: block;
-          color: #f22f82;
-          margin-left: 36px;
-          margin-top: 5px;
-          font-size: 12px;
+          color: #f13c82;
+          font-size: 21px;
           font-weight: 900;
+          letter-spacing: -0.7px;
+          white-space: nowrap;
+        }
+
+        .logo span {
+          color: #27232a;
         }
 
         .desktop-nav {
-          flex: 1;
-          height: 100%;
           display: flex;
-          justify-content: center;
           align-items: center;
+          gap: 4px;
+          flex: 1;
         }
 
         .nav-item {
-          height: 42px;
-          min-width: 67px;
           border: 0;
           background: transparent;
-          border-radius: 10px;
-          color: #555865;
-          cursor: pointer;
-          font-size: 9px;
-          padding: 4px 7px;
-          position: relative;
+          color: #77717a;
+          padding: 10px 11px;
+          border-radius: 12px;
+          font-size: 13px;
+          font-weight: 700;
+          transition: 0.2s;
         }
 
-        .nav-icon {
-          display: block;
-          font-size: 15px;
-          line-height: 16px;
-          margin-bottom: 2px;
+        .nav-item span {
+          margin-right: 5px;
         }
 
         .nav-item:hover,
         .nav-item.active {
-          color: #f12e81;
-          background: #fff0f7;
+          color: #ef3f84;
+          background: #fff0f6;
         }
 
-        .nav-item.active::after {
-          content: "";
-          position: absolute;
-          left: 17px;
-          right: 17px;
-          bottom: 1px;
-          height: 2px;
-          border-radius: 10px;
-          background: #ff3486;
-        }
-
-        .header-right {
+        .user-area {
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 10px;
         }
 
-        .wallet-button {
-          height: 34px;
-          border: 1px solid #eee2e9;
-          background: white;
-          border-radius: 18px;
-          padding: 0 12px;
+        .wallet {
           display: flex;
           align-items: center;
-          gap: 6px;
-          color: #e82e7e;
-          font-size: 9px;
+          gap: 7px;
+          padding: 9px 12px;
+          border-radius: 999px;
+          background: #fff0f6;
+          color: #dc3975;
+          font-size: 12px;
           font-weight: 800;
-          cursor: pointer;
         }
 
-        .avatar-button {
-          width: 34px;
-          height: 34px;
+        .avatar {
+          width: 38px;
+          height: 38px;
           border: 0;
           border-radius: 50%;
+          background: linear-gradient(135deg, #ff77ac, #ef3f83);
           color: white;
-          background: linear-gradient(
-            135deg,
-            #ff72aa,
-            #ed2d7e
-          );
-          font-size: 12px;
           font-weight: 900;
-          cursor: pointer;
         }
 
-        .main {
-          width: min(1160px, calc(100% - 30px));
-          margin: auto;
-          padding: 18px 0 80px;
+        .content {
           position: relative;
           z-index: 1;
-        }
-
-        .petal {
-          position: absolute;
-          color: #f0a1c3;
-          opacity: 0.42;
-          pointer-events: none;
-          font-size: 25px;
-        }
-
-        .petal-one {
-          right: 3%;
-          top: 35px;
-          transform: rotate(25deg);
-        }
-
-        .petal-two {
-          left: -20px;
-          top: 300px;
-          transform: rotate(-25deg);
-        }
-
-        .petal-three {
-          right: 5%;
-          top: 650px;
-          transform: rotate(50deg);
+          max-width: 1120px;
+          margin: 0 auto;
+          padding: 30px 20px 60px;
         }
 
         .breadcrumb {
           display: flex;
           align-items: center;
-          gap: 7px;
-          color: #aaa1a9;
-          font-size: 9px;
-          margin-bottom: 14px;
+          gap: 8px;
+          color: #99929a;
+          font-size: 13px;
+          margin-bottom: 22px;
         }
 
         .breadcrumb button {
           border: 0;
-          background: transparent;
           padding: 0;
-          color: #99909a;
-          font-size: 9px;
-          cursor: pointer;
+          background: transparent;
+          color: #99929a;
         }
 
         .breadcrumb button:hover {
-          color: #ed2f81;
+          color: #ef3f84;
         }
 
         .breadcrumb strong {
-          color: #ed2f81;
+          color: #ef3f84;
         }
 
-        .page-title {
-          display: flex;
-          align-items: center;
-          gap: 11px;
-          margin-bottom: 15px;
+        .title-area {
+          margin-bottom: 25px;
         }
 
-        .title-icon,
-        .section-icon,
-        .heading-icon {
-          display: grid;
-          place-items: center;
-          color: #ed347f;
-          background: #ffe8f2;
+        .small-title {
+          color: #ef3f84;
+          font-size: 11px;
           font-weight: 900;
+          letter-spacing: 2px;
+          text-transform: uppercase;
         }
 
-        .title-icon {
-          width: 42px;
-          height: 42px;
-          border-radius: 12px;
-          font-size: 16px;
+        h1 {
+          margin: 4px 0 7px;
+          font-size: clamp(30px, 5vw, 44px);
+          letter-spacing: -1.8px;
         }
 
-        .page-title h1 {
+        .title-area p {
           margin: 0;
-          color: #20232f;
-          font-size: 22px;
-          font-weight: 950;
+          color: #88818a;
+          font-size: 14px;
         }
 
-        .page-title p {
-          margin: 3px 0 0;
-          color: #a49aa2;
-          font-size: 10px;
-        }
-
-        .deposit-grid {
+        .grid {
           display: grid;
-          grid-template-columns: minmax(0, 1.65fr) minmax(280px, 0.8fr);
-          gap: 12px;
-          align-items: start;
+          grid-template-columns: minmax(0, 1.5fr) minmax(300px, 0.9fr);
+          gap: 18px;
+        }
+
+        .card {
+          background: rgba(255, 255, 255, 0.94);
+          border: 1px solid #f0dce6;
+          border-radius: 22px;
+          box-shadow: 0 12px 40px rgba(219, 76, 133, 0.07);
         }
 
         .deposit-card,
-        .guide-card,
-        .support-card,
-        .section-card {
-          background: rgba(255, 255, 255, 0.97);
-          border: 1px solid #eee5eb;
-          border-radius: 13px;
-          box-shadow: 0 5px 18px rgba(35, 20, 30, 0.045);
+        .guide-card {
+          padding: 25px;
         }
 
-        .deposit-card {
-          padding: 18px;
-        }
-
-        .card-heading,
-        .guide-heading,
-        .section-heading {
+        .card-title {
           display: flex;
+          gap: 13px;
           align-items: center;
-          gap: 9px;
+          margin-bottom: 25px;
         }
 
-        .heading-icon {
-          width: 35px;
-          height: 35px;
-          border-radius: 10px;
-          font-size: 13px;
-          flex-shrink: 0;
+        .icon-box {
+          width: 45px;
+          height: 45px;
+          flex: 0 0 45px;
+          border-radius: 14px;
+          display: grid;
+          place-items: center;
+          background: #fff0f6;
+          font-size: 20px;
         }
 
-        .card-heading h2,
-        .guide-heading h3,
-        .section-heading h2 {
+        .card-title h2,
+        .payment-header h2,
+        .history-header h2 {
+          margin: 0 0 4px;
+          font-size: 20px;
+        }
+
+        .card-title p,
+        .payment-header p {
           margin: 0;
-          color: #292631;
-          font-size: 14px;
-          font-weight: 900;
+          color: #958e96;
+          font-size: 13px;
         }
 
-        .card-heading p,
-        .guide-heading p,
-        .section-heading p {
-          margin: 3px 0 0;
-          color: #aaa0a8;
-          font-size: 9px;
-        }
-
-        .input-label,
-        .quick-label {
+        .label {
           display: block;
-          color: #625963;
-          font-size: 10px;
+          margin-bottom: 8px;
+          color: #57515a;
+          font-size: 13px;
           font-weight: 800;
         }
 
-        .input-label {
-          margin-top: 21px;
-          margin-bottom: 7px;
+        .amount-input {
+          display: flex;
+          align-items: center;
+          border: 1px solid #ead5e0;
+          border-radius: 15px;
+          background: #fff;
+          overflow: hidden;
+          transition: 0.2s;
         }
 
-        .amount-input {
-          height: 52px;
-          position: relative;
+        .amount-input:focus-within {
+          border-color: #f25b96;
+          box-shadow: 0 0 0 4px rgba(242, 91, 150, 0.09);
         }
 
         .amount-input input {
           width: 100%;
-          height: 100%;
-          border: 1px solid #e8dce4;
-          border-radius: 10px;
-          outline: none;
-          background: white;
-          color: #302a32;
-          padding: 0 65px 0 14px;
-          font-size: 17px;
-          font-weight: 850;
-        }
-
-        .amount-input input:focus {
-          border-color: #ef76a9;
-          box-shadow: 0 0 0 3px rgba(239, 118, 169, 0.1);
-        }
-
-        .amount-input input::placeholder {
-          color: #c4bac2;
-          font-weight: 500;
+          min-width: 0;
+          border: 0;
+          outline: 0;
+          padding: 17px;
+          background: transparent;
+          color: #28242a;
+          font-size: 20px;
+          font-weight: 800;
         }
 
         .amount-input span {
-          position: absolute;
-          right: 14px;
-          top: 50%;
-          transform: translateY(-50%);
-          color: #aaa0a8;
-          font-size: 9px;
+          padding: 0 17px;
+          color: #ef3f84;
+          font-size: 12px;
           font-weight: 900;
         }
 
-        .quick-label {
-          margin-top: 13px;
-          margin-bottom: 6px;
+        .quick-title {
+          margin: 20px 0 10px;
+          color: #6f6871;
+          font-size: 12px;
+          font-weight: 800;
         }
 
         .quick-grid {
-          display: grid;
-          grid-template-columns: repeat(5, 1fr);
-          gap: 6px;
-        }
-
-        .quick-grid button {
-          border: 1px solid #eadfe6;
-          background: #fffafd;
-          border-radius: 8px;
-          padding: 8px 2px;
-          color: #716771;
-          font-size: 9px;
-          font-weight: 800;
-          cursor: pointer;
-        }
-
-        .quick-grid button:hover {
-          color: #ed347f;
-          border-color: #f0a1c3;
-          background: #fff0f6;
-        }
-
-        .minimum {
-          margin-top: 9px;
-          display: flex;
-          align-items: center;
-          gap: 5px;
-          color: #aaa0a8;
-          font-size: 9px;
-        }
-
-        .minimum span {
-          color: #ed4386;
-          font-size: 12px;
-        }
-
-        .minimum b {
-          color: #716770;
-        }
-
-        .submit-button {
-          width: 100%;
-          height: 45px;
-          margin-top: 14px;
-          border: 0;
-          border-radius: 9px;
-          background: linear-gradient(
-            135deg,
-            #ff5796,
-            #ed2e7f
-          );
-          color: white;
-          font-size: 10px;
-          font-weight: 900;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-          box-shadow: 0 7px 18px rgba(238, 45, 126, 0.2);
-        }
-
-        .submit-button:hover:not(:disabled) {
-          transform: translateY(-1px);
-        }
-
-        .submit-button:disabled {
-          opacity: 0.55;
-          cursor: not-allowed;
-        }
-
-        .spinner {
-          width: 13px;
-          height: 13px;
-          border: 2px solid rgba(255, 255, 255, 0.4);
-          border-top-color: white;
-          border-radius: 50%;
-          animation: spin 0.7s linear infinite;
-        }
-
-        .message-box {
-          margin-top: 10px;
-          padding: 10px;
-          display: flex;
-          gap: 7px;
-          border: 1px solid #f2d7e4;
-          border-radius: 8px;
-          background: #fff5f9;
-          color: #766a72;
-          font-size: 9px;
-          line-height: 1.5;
-        }
-
-        .message-icon {
-          color: #e43c82;
-          font-weight: 900;
-        }
-
-        .side-column {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-        }
-
-        .guide-card {
-          padding: 15px;
-        }
-
-        .guide-icon {
-          width: 34px;
-          height: 34px;
-          display: grid;
-          place-items: center;
-          border-radius: 10px;
-          background: #ffe7f1;
-          color: #e73580;
-          font-size: 14px;
-        }
-
-        .steps {
-          margin-top: 15px;
-        }
-
-        .step {
-          display: grid;
-          grid-template-columns: 24px 1fr;
-          gap: 8px;
-          position: relative;
-          padding-bottom: 13px;
-        }
-
-        .step:last-child {
-          padding-bottom: 0;
-        }
-
-        .step:not(:last-child)::after {
-          content: "";
-          position: absolute;
-          left: 11px;
-          top: 24px;
-          bottom: 0;
-          width: 1px;
-          background: #f0dce6;
-        }
-
-        .step-number {
-          width: 24px;
-          height: 24px;
-          border-radius: 50%;
-          display: grid;
-          place-items: center;
-          background: #fff0f6;
-          color: #e9337f;
-          font-size: 9px;
-          font-weight: 900;
-          position: relative;
-          z-index: 2;
-        }
-
-        .step strong {
-          color: #554b53;
-          font-size: 9px;
-        }
-
-        .step p {
-          margin: 3px 0 0;
-          color: #aaa0a8;
-          font-size: 8px;
-          line-height: 1.45;
-        }
-
-        .support-card {
-          padding: 12px;
-        }
-
-        .support-top {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
-
-        .support-icon {
-          width: 34px;
-          height: 34px;
-          border-radius: 10px;
-          display: grid;
-          place-items: center;
-          background: #ffe7f1;
-          font-size: 14px;
-        }
-
-        .support-card strong {
-          color: #554b53;
-          font-size: 9px;
-        }
-
-        .support-card p {
-          margin: 2px 0 0;
-          color: #aaa0a8;
-          font-size: 8px;
-        }
-
-        .support-card button {
-          width: 100%;
-          height: 32px;
-          margin-top: 9px;
-          border: 1px solid #f1b3cd;
-          border-radius: 8px;
-          background: white;
-          color: #df327d;
-          font-size: 9px;
-          font-weight: 900;
-          cursor: pointer;
-        }
-
-        .section-card {
-          margin-top: 12px;
-          padding: 17px;
-        }
-
-        .section-heading {
-          margin-bottom: 14px;
-        }
-
-        .section-icon {
-          width: 36px;
-          height: 36px;
-          border-radius: 10px;
-          font-size: 10px;
-        }
-
-        .qr-layout {
-          display: grid;
-          grid-template-columns: 300px minmax(0, 1fr);
-          gap: 22px;
-          align-items: center;
-        }
-
-        .qr-side {
-          display: flex;
-          align-items: center;
-          flex-direction: column;
-        }
-
-        .qr-box {
-          padding: 9px;
-          border: 1px solid #eee1e9;
-          border-radius: 12px;
-          background: white;
-          box-shadow: 0 7px 20px rgba(40, 20, 35, 0.06);
-        }
-
-        .qr-image {
-          display: block;
-          width: 245px;
-          height: 245px;
-          object-fit: contain;
-        }
-
-        .qr-note {
-          margin-top: 7px;
-          color: #aaa0a8;
-          font-size: 8px;
-        }
-
-        .payment-card {
-          overflow: hidden;
-          border: 1px solid #eee2e9;
-          border-radius: 10px;
-        }
-
-        .payment-header {
-          padding: 11px 13px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 8px;
-          background: #fff5fa;
-          border-bottom: 1px solid #f1e2e9;
-          color: #5e555d;
-          font-size: 9px;
-          font-weight: 800;
-        }
-
-        .payment-header b {
-          color: #e43380;
-          font-size: 8px;
-        }
-
-        .detail-row {
-          min-height: 39px;
-          padding: 9px 13px;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 10px;
-          border-bottom: 1px solid #f1e8ec;
-          font-size: 9px;
-        }
-
-        .detail-row span {
-          color: #aaa0a8;
-        }
-
-        .detail-row strong {
-          color: #4f4750;
-          text-align: right;
-          word-break: break-word;
-        }
-
-        .pink-value {
-          color: #e5317e !important;
-          font-size: 11px;
-        }
-
-        .transfer-box {
-          margin: 10px;
-          padding: 10px;
-          border: 1px solid #f1d8e5;
-          border-radius: 8px;
-          background: #fff4f9;
-        }
-
-        .transfer-box span {
-          display: block;
-          margin-bottom: 5px;
-          color: #9e949b;
-          font-size: 8px;
-        }
-
-        .transfer-box strong {
-          color: #dc2e79;
-          font-size: 11px;
-          word-break: break-all;
-        }
-
-        .warning-box,
-        .bank-warning {
-          display: flex;
-          gap: 7px;
-          padding: 10px;
-          border: 1px solid #f0e0bf;
-          border-radius: 8px;
-          background: #fffaf0;
-          color: #917641;
-          font-size: 8px;
-          line-height: 1.5;
-        }
-
-        .warning-box {
-          margin: 10px;
-        }
-
-        .bank-box {
-          display: grid;
-          grid-template-columns: 0.9fr 1.7fr;
-          gap: 15px;
-          padding: 13px;
-          border: 1px solid #eee2e9;
-          border-radius: 10px;
-        }
-
-        .bank-main {
-          display: flex;
-          align-items: center;
-          gap: 9px;
-        }
-
-        .bank-logo {
-          width: 43px;
-          height: 43px;
-          display: grid;
-          place-items: center;
-          border-radius: 11px;
-          background: #fff0f5;
-          color: #df347e;
-          font-size: 11px;
-          font-weight: 950;
-        }
-
-        .bank-name {
-          color: #4e464e;
-          font-size: 12px;
-          font-weight: 900;
-        }
-
-        .bank-sub {
-          margin-top: 2px;
-          color: #aaa0a8;
-          font-size: 8px;
-        }
-
-        .bank-info {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
           gap: 8px;
         }
 
-        .bank-info > div {
-          padding-left: 9px;
-          border-left: 1px solid #eee3e8;
+        .quick-button {
+          border: 1px solid #efdbe5;
+          border-radius: 11px;
+          background: #fff;
+          color: #5f5961;
+          padding: 11px 7px;
+          font-size: 12px;
+          font-weight: 800;
         }
 
-        .bank-info span {
-          display: block;
-          color: #aaa0a8;
-          font-size: 8px;
-          margin-bottom: 4px;
+        .quick-button:hover,
+        .quick-button.selected {
+          border-color: #f25b96;
+          color: #ed3d82;
+          background: #fff1f7;
         }
 
-        .bank-info strong {
-          display: block;
-          color: #514950;
-          font-size: 9px;
-          word-break: break-word;
+        .deposit-button {
+          width: 100%;
+          margin-top: 18px;
+          border: 0;
+          border-radius: 14px;
+          padding: 15px;
+          background: linear-gradient(135deg, #f65c98, #ed3b80);
+          color: white;
+          font-weight: 900;
+          box-shadow: 0 9px 22px rgba(237, 59, 128, 0.2);
         }
 
-        .bank-warning {
-          margin-top: 9px;
+        .deposit-button:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
         }
 
-        .history-list {
-          overflow: hidden;
-          border: 1px solid #eee2e9;
-          border-radius: 10px;
+        .message {
+          margin-top: 12px;
+          padding: 11px 13px;
+          border-radius: 11px;
+          background: #fff3f7;
+          color: #dc3975;
+          font-size: 12px;
+          line-height: 1.5;
         }
 
-        .history-item {
-          min-height: 61px;
-          padding: 10px 12px;
+        .steps {
+          display: grid;
+          gap: 16px;
+        }
+
+        .step {
           display: flex;
-          justify-content: space-between;
-          align-items: center;
           gap: 12px;
-          background: white;
-          border-bottom: 1px solid #f0e7eb;
         }
 
-        .history-item:last-child {
-          border-bottom: 0;
+        .step > b {
+          width: 30px;
+          height: 30px;
+          flex: 0 0 30px;
+          display: grid;
+          place-items: center;
+          border-radius: 50%;
+          background: #fff0f6;
+          color: #ef3f84;
+          font-size: 12px;
         }
 
-        .history-item:hover {
-          background: #fffafd;
+        .step div {
+          display: grid;
+          gap: 3px;
         }
 
-        .history-id {
-          color: #514850;
-          font-size: 9px;
+        .step strong {
+          font-size: 13px;
+        }
+
+        .step span {
+          color: #99929a;
+          font-size: 12px;
+          line-height: 1.5;
+        }
+
+        .support-button {
+          display: block;
+          margin-top: 22px;
+          padding: 12px;
+          text-align: center;
+          border-radius: 12px;
+          background: #fff0f6;
+          color: #e43b7c;
+          text-decoration: none;
+          font-size: 13px;
           font-weight: 900;
         }
 
-        .history-date {
-          margin-top: 2px;
-          color: #aaa0a8;
-          font-size: 7px;
+        .payment-card,
+        .history-card {
+          margin-top: 18px;
+          padding: 25px;
         }
 
-        .history-content {
-          display: inline-block;
-          margin-top: 4px;
-          padding: 2px 5px;
-          border: 1px solid #f1d9e5;
-          border-radius: 4px;
-          background: #fff4f8;
-          color: #dd3c80;
-          font-size: 7px;
-          word-break: break-all;
+        .payment-header,
+        .history-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 20px;
+          margin-bottom: 20px;
         }
 
-        .history-right {
-          text-align: right;
-          flex-shrink: 0;
+        .payment-status {
+          padding: 8px 11px;
+          border-radius: 999px;
+          background: #fff5dc;
+          color: #b77b16;
+          font-size: 10px;
+          font-weight: 900;
+          white-space: nowrap;
         }
 
-        .history-right strong {
+        .payment-layout {
+          display: grid;
+          grid-template-columns: 290px 1fr;
+          gap: 30px;
+          align-items: center;
+        }
+
+        .qr-area {
+          text-align: center;
+        }
+
+        .qr-box {
+          width: 250px;
+          height: 250px;
+          margin: 0 auto;
+          padding: 10px;
+          background: white;
+          border: 1px solid #eadbe3;
+          border-radius: 18px;
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+        }
+
+        .qr-box img {
+          width: 100%;
+          height: 100%;
           display: block;
-          color: #e3337f;
+          object-fit: contain;
+        }
+
+        .qr-note {
+          margin-top: 10px;
+          color: #99929a;
+          font-size: 11px;
+        }
+
+        .bank-info {
+          display: grid;
+          gap: 9px;
+        }
+
+        .info-row,
+        .transfer-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 15px;
+          padding: 14px;
+          border: 1px solid #f0e1e8;
+          border-radius: 13px;
+          background: #fffafd;
+        }
+
+        .info-row div,
+        .transfer-row div {
+          min-width: 0;
+          display: grid;
+          gap: 4px;
+        }
+
+        .info-row small,
+        .transfer-row small {
+          color: #99929a;
           font-size: 10px;
         }
 
-        .status {
-          display: inline-block;
-          margin-top: 4px;
-          padding: 3px 6px;
+        .info-row strong,
+        .transfer-row strong {
+          color: #302b31;
+          font-size: 13px;
+          overflow-wrap: anywhere;
+        }
+
+        .info-row button,
+        .transfer-row button {
+          border: 1px solid #f0d5e2;
+          background: #fff;
+          color: #e43b7c;
+          border-radius: 9px;
+          padding: 7px 10px;
+          font-size: 10px;
+          font-weight: 900;
+          white-space: nowrap;
+        }
+
+        .history-header > span {
+          padding: 7px 10px;
           border-radius: 999px;
-          font-size: 7px;
+          background: #fff0f6;
+          color: #e43b7c;
+          font-size: 11px;
+          font-weight: 900;
+        }
+
+        .empty {
+          padding: 45px 20px;
+          display: grid;
+          place-items: center;
+          gap: 5px;
+          text-align: center;
+          color: #99929a;
+        }
+
+        .empty div {
+          font-size: 35px;
+          color: #ef6b9e;
+          margin-bottom: 5px;
+        }
+
+        .empty strong {
+          color: #5e5860;
+          font-size: 14px;
+        }
+
+        .empty span {
+          font-size: 12px;
+        }
+
+        .history-list {
+          display: grid;
+          gap: 8px;
+        }
+
+        .history-item {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 13px;
+          border: 1px solid #f1e3e9;
+          border-radius: 13px;
+        }
+
+        .history-icon {
+          width: 38px;
+          height: 38px;
+          flex: 0 0 38px;
+          display: grid;
+          place-items: center;
+          border-radius: 11px;
+          background: #fff0f6;
+          color: #e83e7f;
+          font-weight: 900;
+        }
+
+        .history-main {
+          flex: 1;
+          min-width: 0;
+          display: grid;
+          gap: 3px;
+        }
+
+        .history-main strong {
+          font-size: 13px;
+        }
+
+        .history-main span {
+          color: #99929a;
+          font-size: 10px;
+        }
+
+        .history-right {
+          display: grid;
+          justify-items: end;
+          gap: 3px;
+        }
+
+        .history-right small {
+          max-width: 190px;
+          color: #aaa2aa;
+          font-size: 9px;
+          overflow-wrap: anywhere;
+          text-align: right;
+        }
+
+        .status {
+          padding: 5px 9px;
+          border-radius: 999px;
+          font-size: 9px;
           font-weight: 900;
         }
 
         .status.pending {
-          color: #a77a13;
-          background: #fff5d7;
+          background: #fff5dc;
+          color: #b77b16;
         }
 
-        .status.completed {
-          color: #25864e;
-          background: #e9faef;
+        .status.success {
+          background: #eafaf0;
+          color: #239450;
         }
 
         .status.failed {
-          color: #c33e4a;
-          background: #fff0f1;
+          background: #fff0f0;
+          color: #d34848;
         }
 
-        .empty-history {
-          padding: 35px 15px;
-          border: 1px dashed #eadfe5;
-          border-radius: 10px;
-          text-align: center;
-        }
-
-        .empty-icon {
-          width: 43px;
-          height: 43px;
-          margin: auto auto 8px;
-          display: grid;
-          place-items: center;
-          border-radius: 12px;
-          background: #fff0f6;
-          color: #e63680;
-          font-weight: 900;
-        }
-
-        .empty-history strong {
-          display: block;
-          color: #665c64;
-          font-size: 10px;
-        }
-
-        .empty-history p {
-          margin: 4px 0 0;
-          color: #aaa0a8;
-          font-size: 8px;
-        }
-
-        .footer {
-          padding: 18px 0 5px;
-          text-align: center;
-          color: #aaa1a8;
-          font-size: 8px;
-        }
-
-        .chat-admin {
+        .floating-chat {
           position: fixed;
-          right: 18px;
-          bottom: 18px;
-          z-index: 120;
-          border: 0;
-          border-radius: 18px;
-          padding: 8px 12px;
-          background: #ff3987;
+          right: 22px;
+          bottom: 24px;
+          z-index: 40;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 12px 16px;
+          border-radius: 999px;
+          background: #ed3d80;
           color: white;
-          font-size: 9px;
-          font-weight: 900;
-          cursor: pointer;
-          box-shadow: 0 8px 22px rgba(255, 40, 125, 0.28);
+          text-decoration: none;
+          box-shadow: 0 12px 30px rgba(237, 61, 128, 0.3);
+          font-size: 12px;
         }
 
-        .mobile-bottom-nav {
+        .mobile-nav {
           display: none;
-        }
-
-        @keyframes spin {
-          to {
-            transform: rotate(360deg);
-          }
         }
 
         @media (max-width: 900px) {
@@ -1721,175 +1256,131 @@ export default function DepositPage() {
             display: none;
           }
 
-          .topbar-inner {
+          .header-inner {
             justify-content: space-between;
           }
 
-          .deposit-grid {
+          .grid {
             grid-template-columns: 1fr;
           }
 
-          .qr-layout {
-            grid-template-columns: 1fr;
-          }
-
-          .qr-side {
-            order: 1;
-          }
-
-          .payment-card {
-            order: 2;
-          }
-
-          .bank-box {
+          .payment-layout {
             grid-template-columns: 1fr;
           }
         }
 
-        @media (max-width: 620px) {
-          .topbar {
-            height: 57px;
+        @media (max-width: 600px) {
+          .header-inner {
+            min-height: 62px;
+            padding: 0 15px;
           }
 
-          .topbar-inner {
-            padding: 0 13px;
+          .logo {
+            font-size: 18px;
           }
 
-          .brand-main {
-            font-size: 17px;
-          }
-
-          .brand-play {
-            font-size: 10px;
-            margin-left: 32px;
-          }
-
-          .wallet-button {
+          .wallet {
             display: none;
           }
 
-          .main {
-            width: calc(100% - 20px);
-            padding: 14px 0 76px;
-          }
-
-          .petal {
-            display: none;
-          }
-
-          .page-title {
-            margin-bottom: 12px;
-          }
-
-          .page-title h1 {
-            font-size: 20px;
-          }
-
-          .page-title p {
-            font-size: 9px;
+          .content {
+            padding: 22px 13px 95px;
           }
 
           .deposit-card,
-          .section-card {
-            padding: 14px;
-            border-radius: 12px;
+          .guide-card,
+          .payment-card,
+          .history-card {
+            padding: 18px;
+            border-radius: 18px;
           }
 
           .quick-grid {
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(2, 1fr);
           }
 
-          .qr-image {
-            width: 220px;
-            height: 220px;
-          }
-
-          .detail-row {
-            flex-direction: column;
+          .payment-header,
+          .history-header {
             align-items: flex-start;
           }
 
-          .detail-row strong {
-            text-align: left;
+          .payment-status {
+            font-size: 8px;
           }
 
-          .bank-info {
-            grid-template-columns: 1fr;
-          }
-
-          .bank-info > div {
-            padding: 7px 0 0;
-            border-left: 0;
-            border-top: 1px solid #eee3e8;
-          }
-
-          .bank-info > div:first-child {
-            border-top: 0;
+          .qr-box {
+            width: 230px;
+            height: 230px;
           }
 
           .history-item {
             align-items: flex-start;
           }
 
-          .support-card {
-            display: none;
+          .history-right {
+            text-align: right;
           }
 
-          .chat-admin {
-            bottom: 72px;
-            right: 12px;
+          .floating-chat {
+            right: 13px;
+            bottom: 74px;
           }
 
-          .mobile-bottom-nav {
+          .mobile-nav {
             position: fixed;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            height: 59px;
-            z-index: 110;
+            left: 10px;
+            right: 10px;
+            bottom: 9px;
+            z-index: 60;
             display: grid;
             grid-template-columns: repeat(5, 1fr);
-            background: rgba(255, 255, 255, 0.97);
-            border-top: 1px solid #eee5eb;
-            box-shadow: 0 -5px 20px rgba(30, 20, 30, 0.07);
-            backdrop-filter: blur(12px);
+            padding: 7px;
+            border: 1px solid #efdce5;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.94);
+            backdrop-filter: blur(15px);
+            box-shadow: 0 10px 35px rgba(210, 70, 125, 0.14);
           }
 
-          .mobile-bottom-nav button {
+          .mobile-nav button {
             border: 0;
             background: transparent;
-            color: #85818a;
-            font-size: 7px;
-            font-weight: 800;
-            cursor: pointer;
+            color: #969099;
+            padding: 6px 2px;
+            display: grid;
+            justify-items: center;
+            gap: 3px;
           }
 
-          .mobile-bottom-nav span {
-            display: block;
-            margin-bottom: 2px;
+          .mobile-nav button span {
             font-size: 16px;
           }
 
-          .mobile-bottom-nav button.mobile-active {
-            color: #ed2f80;
-          }
-
-          .mobile-bottom-nav button.mobile-active span {
-            color: #ed2f80;
-          }
-        }
-
-        @media (max-width: 390px) {
-          .quick-grid button {
+          .mobile-nav button small {
             font-size: 8px;
+            font-weight: 800;
           }
 
-          .qr-image {
-            width: 205px;
-            height: 205px;
+          .mobile-nav button.mobile-active {
+            color: #ed3d80;
           }
         }
       `}</style>
-    </>
+    </main>
+  );
+}
+
+function InfoRow({ label, value, onCopy }) {
+  return (
+    <div className="info-row">
+      <div>
+        <small>{label}</small>
+        <strong>{value}</strong>
+      </div>
+
+      <button type="button" onClick={onCopy}>
+        Sao chép
+      </button>
+    </div>
   );
 }
