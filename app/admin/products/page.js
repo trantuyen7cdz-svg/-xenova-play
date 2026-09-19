@@ -1,682 +1,632 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../../lib/supabase";
 
+const BUCKET = "product-media";
+
 export default function AdminProductsPage() {
-  const router = useRouter();
-
-  const [checkingAdmin, setCheckingAdmin] = useState(true);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [keys, setKeys] = useState([]);
 
-  const [editingId, setEditingId] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
   const [name, setName] = useState("");
-  const [categoryId, setCategoryId] = useState("");
+  const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [duration, setDuration] = useState("");
-  const [description, setDescription] = useState("");
+  const [parentId, setParentId] = useState("");
+  const [categoryId, setCategoryId] = useState("");
 
-  const [saving, setSaving] = useState(false);
+  const [mediaType, setMediaType] = useState("image");
+  const [imageFile, setImageFile] = useState(null);
+  const [videoFile, setVideoFile] = useState(null);
 
-  const [uploadingId, setUploadingId] = useState(null);
-  const [deletingImageId, setDeletingImageId] = useState(null);
+  const [keyText, setKeyText] = useState("");
 
-  const [togglingId, setTogglingId] = useState(null);
-  const [deletingId, setDeletingId] = useState(null);
-
-  const [message, setMessage] = useState("");
-
-  useEffect(() => {
-    checkAdmin();
-  }, []);
-
-  async function checkAdmin() {
-    try {
-      setCheckingAdmin(true);
-      setError("");
-
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError) {
-        console.error("AUTH ERROR:", userError);
-        router.replace("/login");
-        return;
-      }
-
-      if (!user) {
-        router.replace("/login");
-        return;
-      }
-
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("id,email,role")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (profileError) {
-        console.error("PROFILE ERROR:", profileError);
-
-        setError(
-          "Không thể kiểm tra quyền Admin: " +
-            profileError.message
-        );
-
-        setCheckingAdmin(false);
-        setLoading(false);
-        return;
-      }
-
-      if (!profile || profile.role !== "admin") {
-        router.replace("/dashboard");
-        return;
-      }
-
-      setCheckingAdmin(false);
-
-      await loadData();
-    } catch (err) {
-      console.error("CHECK ADMIN ERROR:", err);
-
-      setError(
-        err?.message ||
-          "Có lỗi xảy ra khi kiểm tra quyền Admin."
-      );
-
-      setCheckingAdmin(false);
-      setLoading(false);
-    }
-  }
+  // =========================
+  // LOAD DATA
+  // =========================
 
   async function loadData() {
-    setLoading(true);
-    setError("");
-    setMessage("");
-
     try {
-      const [productsResult, categoriesResult] =
-        await Promise.all([
-          supabase
-            .from("products")
-            .select(
-              `
-              id,
-              name,
-              description,
-              price,
-              duration_days,
-              active,
-              is_active,
-              demo_image_url,
-              category_id,
-              created_at
-            `
-            )
-            .order("id", { ascending: true }),
+      setLoading(true);
+      setError("");
 
-          supabase
-            .from("product_categories")
-            .select(
-              `
-              id,
-              name,
-              active
-            `
-            )
-            .order("id", { ascending: true }),
-        ]);
+      const [
+        categoriesResult,
+        productsResult,
+        keysResult,
+      ] = await Promise.all([
+        supabase
+          .from("product_categories")
+          .select(
+            "id,name,description,active,parent_id"
+          )
+          .order("id", { ascending: true }),
 
-      if (productsResult.error) {
-        console.error(
-          "PRODUCTS ERROR:",
-          productsResult.error
-        );
+        supabase
+          .from("products")
+          .select(`
+            id,
+            name,
+            description,
+            price,
+            duration_days,
+            active,
+            is_active,
+            demo_image_url,
+            video_url,
+            media_type,
+            category_id
+          `)
+          .order("id", { ascending: false }),
 
-        throw new Error(
-          "Lỗi tải sản phẩm: " +
-            productsResult.error.message
-        );
-      }
+        supabase
+          .from("keys")
+          .select(
+            "id,key_code,product_id,status"
+          )
+          .order("id", { ascending: false }),
+      ]);
 
       if (categoriesResult.error) {
-        console.error(
-          "CATEGORIES ERROR:",
-          categoriesResult.error
-        );
-
-        throw new Error(
-          "Lỗi tải thư mục: " +
-            categoriesResult.error.message
-        );
+        throw categoriesResult.error;
       }
 
-      setProducts(productsResult.data || []);
-      setCategories(categoriesResult.data || []);
+      if (productsResult.error) {
+        throw productsResult.error;
+      }
+
+      if (keysResult.error) {
+        throw keysResult.error;
+      }
+
+      setCategories(
+        categoriesResult.data || []
+      );
+
+      setProducts(
+        productsResult.data || []
+      );
+
+      setKeys(
+        keysResult.data || []
+      );
     } catch (err) {
-      console.error("LOAD DATA ERROR:", err);
+      console.error(err);
 
       setError(
-        err?.message ||
-          "Không thể tải dữ liệu sản phẩm."
+        err.message ||
+          "Không thể tải dữ liệu Admin"
       );
     } finally {
       setLoading(false);
     }
   }
 
-  function resetForm() {
-    setEditingId(null);
-    setName("");
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  // =========================
+  // CATEGORY
+  // =========================
+
+  const parents = useMemo(() => {
+    return categories.filter(
+      (item) => !item.parent_id
+    );
+  }, [categories]);
+
+  const children = useMemo(() => {
+    if (!parentId) return [];
+
+    return categories.filter(
+      (item) =>
+        Number(item.parent_id) ===
+        Number(parentId)
+    );
+  }, [categories, parentId]);
+
+  function handleParentChange(value) {
+    setParentId(value);
     setCategoryId("");
-    setPrice("");
-    setDuration("");
-    setDescription("");
   }
 
-  function editProduct(product) {
-    setEditingId(product.id);
-    setName(product.name || "");
-    setCategoryId(
-      product.category_id
-        ? String(product.category_id)
-        : ""
-    );
-    setPrice(
-      product.price !== null &&
-        product.price !== undefined
-        ? String(product.price)
-        : ""
-    );
-    setDuration(
-      product.duration_days !== null &&
-        product.duration_days !== undefined
-        ? String(product.duration_days)
-        : ""
-    );
-    setDescription(product.description || "");
+  // =========================
+  // UPLOAD
+  // =========================
 
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
+  async function uploadFile(file, folder) {
+    if (!file) return null;
+
+    const extension =
+      file.name.split(".").pop()?.toLowerCase() ||
+      "file";
+
+    const fileName =
+      `${folder}/` +
+      `${Date.now()}-${crypto.randomUUID()}` +
+      `.${extension}`;
+
+    const { error: uploadError } =
+      await supabase.storage
+        .from(BUCKET)
+        .upload(fileName, file, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+    if (uploadError) {
+      throw uploadError;
+    }
+
+    const {
+      data: publicData,
+    } = supabase.storage
+      .from(BUCKET)
+      .getPublicUrl(fileName);
+
+    return publicData?.publicUrl || null;
   }
 
-  async function saveProduct() {
-    setMessage("");
-    setError("");
+  // =========================
+  // CREATE PRODUCT
+  // =========================
 
-    const cleanName = name.trim();
-    const cleanPrice = Number(price);
-    const cleanDuration = Number(duration);
-
-    if (!cleanName) {
+  async function createProduct() {
+    if (!name.trim()) {
       setError("Vui lòng nhập tên sản phẩm.");
       return;
     }
 
-    if (!Number.isInteger(cleanPrice) || cleanPrice <= 0) {
-      setError("Giá sản phẩm không hợp lệ.");
+    if (!price || Number(price) < 0) {
+      setError("Vui lòng nhập giá hợp lệ.");
+      return;
+    }
+
+    if (!categoryId) {
+      setError(
+        "Vui lòng chọn danh mục con."
+      );
       return;
     }
 
     if (
-      !Number.isInteger(cleanDuration) ||
-      cleanDuration <= 0
+      mediaType === "image" &&
+      !imageFile
     ) {
-      setError("Số ngày sử dụng không hợp lệ.");
+      setError(
+        "Bạn chưa chọn ảnh sản phẩm."
+      );
       return;
     }
 
-    setSaving(true);
+    if (
+      mediaType === "video" &&
+      !videoFile
+    ) {
+      setError(
+        "Bạn chưa chọn video sản phẩm."
+      );
+      return;
+    }
+
+    if (
+      mediaType === "both" &&
+      (!imageFile || !videoFile)
+    ) {
+      setError(
+        "Chế độ Ảnh + Video cần chọn cả hai file."
+      );
+      return;
+    }
 
     try {
-      const payload = {
-        name: cleanName,
-        description: description.trim(),
-        price: cleanPrice,
-        duration_days: cleanDuration,
-        category_id: categoryId
-          ? Number(categoryId)
-          : null,
-      };
+      setSaving(true);
+      setError("");
+      setMessage("");
 
-      if (editingId) {
-        const { error: updateError } = await supabase
-          .from("products")
-          .update(payload)
-          .eq("id", editingId);
+      let imageUrl = null;
+      let videoUrl = null;
 
-        if (updateError) {
-          throw new Error(
-            "Không thể cập nhật sản phẩm: " +
-              updateError.message
-          );
-        }
-
-        setMessage("Đã cập nhật sản phẩm.");
-      } else {
-        const { error: insertError } = await supabase
-          .from("products")
-          .insert({
-            ...payload,
-            active: true,
-            is_active: true,
-          });
-
-        if (insertError) {
-          throw new Error(
-            "Không thể tạo sản phẩm: " +
-              insertError.message
-          );
-        }
-
-        setMessage("Đã thêm sản phẩm.");
+      // IMAGE
+      if (
+        mediaType === "image" ||
+        mediaType === "both"
+      ) {
+        imageUrl = await uploadFile(
+          imageFile,
+          "products/images"
+        );
       }
 
-      resetForm();
+      // VIDEO
+      if (
+        mediaType === "video" ||
+        mediaType === "both"
+      ) {
+        videoUrl = await uploadFile(
+          videoFile,
+          "products/videos"
+        );
+      }
+
+      // CREATE PRODUCT
+      const {
+        data: product,
+        error: productError,
+      } = await supabase
+        .from("products")
+        .insert({
+          name: name.trim(),
+          description:
+            description.trim() || null,
+          price: Number(price),
+          duration_days:
+            duration
+              ? Number(duration)
+              : null,
+          active: true,
+          is_active: true,
+
+          category_id:
+            Number(categoryId),
+
+          media_type: mediaType,
+
+          demo_image_url:
+            imageUrl,
+
+          video_url:
+            videoUrl,
+        })
+        .select()
+        .single();
+
+      if (productError) {
+        throw productError;
+      }
+
+      // =========================
+      // ADD KEYS
+      // =========================
+
+      const keyLines = keyText
+        .split(/\r?\n/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+      if (
+        keyLines.length > 0
+      ) {
+        const keyRows =
+          keyLines.map((keyCode) => ({
+            key_code: keyCode,
+            product_id:
+              product.id,
+            user_id: null,
+            expires_at: null,
+            status: "available",
+            order_id: null,
+            sold_at: null,
+          }));
+
+        const {
+          error: keyError,
+        } = await supabase
+          .from("keys")
+          .insert(keyRows);
+
+        if (keyError) {
+          console.error(
+            "KEY INSERT ERROR:",
+            keyError
+          );
+
+          setMessage(
+            "Đã tạo sản phẩm nhưng thêm KEY bị lỗi: " +
+              keyError.message
+          );
+        }
+      }
+
+      // RESET
+      setName("");
+      setDescription("");
+      setPrice("");
+      setDuration("");
+      setParentId("");
+      setCategoryId("");
+      setMediaType("image");
+      setImageFile(null);
+      setVideoFile(null);
+      setKeyText("");
+
+      // reset file input
+      const imageInput =
+        document.getElementById(
+          "product-image"
+        );
+
+      const videoInput =
+        document.getElementById(
+          "product-video"
+        );
+
+      if (imageInput) {
+        imageInput.value = "";
+      }
+
+      if (videoInput) {
+        videoInput.value = "";
+      }
+
+      setMessage(
+        `Đã tạo sản phẩm "${product.name}".`
+      );
+
       await loadData();
     } catch (err) {
-      console.error("SAVE PRODUCT ERROR:", err);
+      console.error(err);
 
       setError(
-        err?.message ||
-          "Không thể lưu sản phẩm."
+        err.message ||
+          "Không thể tạo sản phẩm."
       );
     } finally {
       setSaving(false);
     }
   }
 
+  // =========================
+  // TOGGLE PRODUCT
+  // =========================
+
   async function toggleProduct(product) {
-    if (!product) return;
-
-    setError("");
-    setMessage("");
-    setTogglingId(product.id);
-
-    try {
-      const newStatus = !(
-        product.active === true &&
-        product.is_active === true
+    const next =
+      !(
+        product.active &&
+        product.is_active
       );
 
-      const { error: updateError } = await supabase
-        .from("products")
-        .update({
-          active: newStatus,
-          is_active: newStatus,
-        })
-        .eq("id", product.id);
+    const { error } = await supabase
+      .from("products")
+      .update({
+        active: next,
+        is_active: next,
+      })
+      .eq("id", product.id);
 
-      if (updateError) {
-        throw new Error(
-          "Không thể thay đổi trạng thái: " +
-            updateError.message
-        );
-      }
-
-      setMessage(
-        newStatus
-          ? "Đã bật bán sản phẩm."
-          : "Đã tắt bán sản phẩm."
-      );
-
-      await loadData();
-    } catch (err) {
-      console.error(
-        "TOGGLE PRODUCT ERROR:",
-        err
-      );
-
-      setError(
-        err?.message ||
-          "Không thể thay đổi trạng thái sản phẩm."
-      );
-    } finally {
-      setTogglingId(null);
+    if (error) {
+      setError(error.message);
+      return;
     }
+
+    await loadData();
   }
 
-  async function deleteProduct(product) {
-    if (!product) return;
+  // =========================
+  // HELPERS
+  // =========================
 
-    const ok = window.confirm(
-      `Bạn có chắc muốn xóa sản phẩm "${product.name}" không?`
-    );
-
-    if (!ok) return;
-
-    setError("");
-    setMessage("");
-    setDeletingId(product.id);
-
-    try {
-      /*
-       * Không cho xóa nếu sản phẩm đã có KEY
-       * để tránh phá dữ liệu mua bán.
-       */
-      const { count, error: keysError } =
-        await supabase
-          .from("keys")
-          .select("id", {
-            count: "exact",
-            head: true,
-          })
-          .eq("product_id", product.id);
-
-      if (keysError) {
-        throw new Error(
-          "Không thể kiểm tra KEY của sản phẩm: " +
-            keysError.message
-        );
-      }
-
-      if ((count || 0) > 0) {
-        throw new Error(
-          "Không thể xóa sản phẩm này vì đã có KEY liên kết. Hãy tắt bán sản phẩm thay vì xóa."
-        );
-      }
-
-      const { error: deleteError } =
-        await supabase
-          .from("products")
-          .delete()
-          .eq("id", product.id);
-
-      if (deleteError) {
-        throw new Error(
-          "Không thể xóa sản phẩm: " +
-            deleteError.message
-        );
-      }
-
-      setMessage("Đã xóa sản phẩm.");
-
-      if (editingId === product.id) {
-        resetForm();
-      }
-
-      await loadData();
-    } catch (err) {
-      console.error(
-        "DELETE PRODUCT ERROR:",
-        err
-      );
-
-      setError(
-        err?.message ||
-          "Không thể xóa sản phẩm."
-      );
-    } finally {
-      setDeletingId(null);
-    }
-  }
-
-  async function uploadDemoImage(product, file) {
-    if (!file || !product) return;
-
-    setError("");
-    setMessage("");
-    setUploadingId(product.id);
-
-    try {
-      const extension =
-        file.name.split(".").pop()?.toLowerCase() ||
-        "jpg";
-
-      const fileName =
-        `${product.id}-${Date.now()}.${extension}`;
-
-      const filePath =
-        `products/${fileName}`;
-
-      const { error: uploadError } =
-        await supabase.storage
-          .from("product-demo")
-          .upload(filePath, file, {
-            cacheControl: "3600",
-            upsert: true,
-          });
-
-      if (uploadError) {
-        throw new Error(
-          "Upload ảnh thất bại: " +
-            uploadError.message
-        );
-      }
-
-      const {
-        data: publicUrlData,
-      } = supabase.storage
-        .from("product-demo")
-        .getPublicUrl(filePath);
-
-      const imageUrl =
-        publicUrlData?.publicUrl;
-
-      if (!imageUrl) {
-        throw new Error(
-          "Không lấy được URL ảnh."
-        );
-      }
-
-      /*
-       * Chỉ cập nhật demo_image_url.
-       * Không đụng tới giá, KEY, ví hay trạng thái.
-       */
-      const { error: updateError } =
-        await supabase
-          .from("products")
-          .update({
-            demo_image_url: imageUrl,
-          })
-          .eq("id", product.id);
-
-      if (updateError) {
-        throw new Error(
-          "Upload thành công nhưng không lưu được ảnh: " +
-            updateError.message
-        );
-      }
-
-      setMessage(
-        "Đã thêm ảnh demo cho sản phẩm."
-      );
-
-      await loadData();
-    } catch (err) {
-      console.error(
-        "UPLOAD DEMO IMAGE ERROR:",
-        err
-      );
-
-      setError(
-        err?.message ||
-          "Không thể upload ảnh demo."
-      );
-    } finally {
-      setUploadingId(null);
-    }
-  }
-
-  async function deleteDemoImage(product) {
-    if (!product?.demo_image_url) return;
-
-    const ok = window.confirm(
-      "Bạn có chắc muốn xóa ảnh demo này?"
-    );
-
-    if (!ok) return;
-
-    setError("");
-    setMessage("");
-    setDeletingImageId(product.id);
-
-    try {
-      /*
-       * Xóa URL khỏi database trước.
-       * Không ảnh hưởng sản phẩm.
-       */
-      const { error: updateError } =
-        await supabase
-          .from("products")
-          .update({
-            demo_image_url: null,
-          })
-          .eq("id", product.id);
-
-      if (updateError) {
-        throw new Error(
-          "Không thể xóa ảnh demo: " +
-            updateError.message
-        );
-      }
-
-      setMessage("Đã xóa ảnh demo.");
-
-      await loadData();
-    } catch (err) {
-      console.error(
-        "DELETE DEMO IMAGE ERROR:",
-        err
-      );
-
-      setError(
-        err?.message ||
-          "Không thể xóa ảnh demo."
-      );
-    } finally {
-      setDeletingImageId(null);
-    }
-  }
-
-  function getCategoryName(categoryId) {
-    if (!categoryId) {
-      return "Chưa phân loại";
-    }
-
-    const category = categories.find(
+  function getCategory(product) {
+    return categories.find(
       (item) =>
-        Number(item.id) === Number(categoryId)
+        Number(item.id) ===
+        Number(product.category_id)
     );
-
-    return category?.name || "Chưa phân loại";
   }
 
-  if (checkingAdmin) {
-    return (
-      <main style={styles.loadingPage}>
-        <div style={styles.spinner} />
-        <div style={styles.loadingTitle}>
-          ĐANG KIỂM TRA QUYỀN ADMIN
-        </div>
-        <div style={styles.loadingText}>
-          Vui lòng chờ...
-        </div>
-      </main>
+  function getParent(product) {
+    const category =
+      getCategory(product);
+
+    if (!category) return null;
+
+    if (!category.parent_id) {
+      return category;
+    }
+
+    return categories.find(
+      (item) =>
+        Number(item.id) ===
+        Number(category.parent_id)
     );
+  }
+
+  function getStock(productId) {
+    return keys.filter(
+      (key) =>
+        Number(key.product_id) ===
+          Number(productId) &&
+        key.status === "available"
+    ).length;
+  }
+
+  function mediaLabel(product) {
+    if (
+      product.media_type === "both"
+    ) {
+      return "ẢNH + VIDEO";
+    }
+
+    if (
+      product.media_type === "video"
+    ) {
+      return "VIDEO";
+    }
+
+    return "ẢNH";
   }
 
   if (loading) {
     return (
-      <main style={styles.loadingPage}>
-        <div style={styles.spinner} />
-
-        <div style={styles.loadingTitle}>
-          ĐANG TẢI SẢN PHẨM
-        </div>
-
-        <div style={styles.loadingText}>
-          Đang tải danh mục và sản phẩm...
-        </div>
-
-        {error && (
-          <div style={styles.errorBox}>
-            <b>LỖI:</b>
-            <div>{error}</div>
-
-            <button
-              onClick={loadData}
-              style={styles.retryButton}
-            >
-              THỬ LẠI
-            </button>
-          </div>
-        )}
-      </main>
+      <div className="loading">
+        Đang tải Admin...
+        <style jsx>{styles}</style>
+      </div>
     );
   }
 
   return (
-    <main style={styles.page}>
-      <div style={styles.container}>
-        <div style={styles.header}>
-          <div>
-            <div style={styles.smallTitle}>
-              XENOVA PLAY
-            </div>
+    <div className="admin-page">
 
-            <h1 style={styles.title}>
-              QUẢN LÝ SẢN PHẨM
-            </h1>
+      {/* =========================
+          SIDEBAR
+      ========================= */}
 
-            <div style={styles.subtitle}>
-              Thêm, sửa, quản lý KEY và ảnh demo
-            </div>
+      <aside className="sidebar">
+
+        <div className="brand">
+          <div className="brand-icon">
+            X
           </div>
 
-          <button
-            onClick={() =>
-              router.push("/admin/categories")
-            }
-            style={styles.secondaryButton}
+          <div>
+            <strong>
+              XENOVA
+            </strong>
+
+            <small>
+              ADMIN
+            </small>
+          </div>
+        </div>
+
+        <nav>
+
+          <a href="/admin">
+            🏠 Tổng quan
+          </a>
+
+          <a href="/admin/categories">
+            📁 Danh mục
+          </a>
+
+          <a
+            href="/admin/products"
+            className="active"
           >
-            📁 QUẢN LÝ THƯ MỤC
-          </button>
+            🛒 Sản phẩm
+          </a>
+
+          <a href="/admin/keys">
+            🔑 Kho KEY
+          </a>
+
+          <a href="/admin/orders">
+            📦 Đơn hàng
+          </a>
+
+          <a href="/admin/users">
+            👥 Người dùng
+          </a>
+
+        </nav>
+
+        <a
+          href="/shop"
+          className="back-shop"
+        >
+          ← Về cửa hàng
+        </a>
+
+      </aside>
+
+      {/* =========================
+          MAIN
+      ========================= */}
+
+      <main className="main">
+
+        <div className="header">
+
+          <div>
+            <h1>
+              Quản lý sản phẩm
+            </h1>
+
+            <p>
+              Tạo sản phẩm, phân loại và
+              quản lý kho KEY.
+            </p>
+          </div>
+
+          <div className="stats">
+
+            <div>
+              <strong>
+                {products.length}
+              </strong>
+
+              <span>
+                Sản phẩm
+              </span>
+            </div>
+
+            <div>
+              <strong>
+                {keys.filter(
+                  (key) =>
+                    key.status ===
+                    "available"
+                ).length}
+              </strong>
+
+              <span>
+                KEY còn
+              </span>
+            </div>
+
+          </div>
+
         </div>
 
         {error && (
-          <div style={styles.errorBox}>
-            <b>ĐÃ XẢY RA LỖI</b>
-            <div style={{ marginTop: 6 }}>
-              {error}
-            </div>
-
-            <button
-              onClick={loadData}
-              style={styles.retryButton}
-            >
-              🔄 THỬ LẠI
-            </button>
+          <div className="alert error">
+            ⚠️ {error}
           </div>
         )}
 
         {message && (
-          <div style={styles.successBox}>
-            ✅ {message}
+          <div className="alert success">
+            ✓ {message}
           </div>
         )}
 
-        <section style={styles.formCard}>
-          <div style={styles.cardTitle}>
-            {editingId
-              ? "✏️ CHỈNH SỬA SẢN PHẨM"
-              : "➕ THÊM SẢN PHẨM"}
+        {/* =========================
+            CREATE FORM
+        ========================= */}
+
+        <section className="panel">
+
+          <div className="panel-title">
+            <div>
+              <h2>
+                Thêm sản phẩm
+              </h2>
+
+              <p>
+                Sản phẩm sẽ xuất hiện
+                trong cửa hàng theo
+                danh mục đã chọn.
+              </p>
+            </div>
           </div>
 
-          <div style={styles.formGrid}>
-            <div style={styles.field}>
-              <label style={styles.label}>
-                Tên sản phẩm
+          <div className="form-grid">
+
+            {/* NAME */}
+
+            <div className="field full">
+              <label>
+                Tên sản phẩm *
               </label>
 
               <input
@@ -685,258 +635,427 @@ export default function AdminProductsPage() {
                   setName(e.target.value)
                 }
                 placeholder="VD: KEY 1 NGÀY"
-                style={styles.input}
               />
             </div>
 
-            <div style={styles.field}>
-              <label style={styles.label}>
-                Thư mục
+            {/* PARENT */}
+
+            <div className="field">
+              <label>
+                Danh mục mẹ *
               </label>
 
               <select
-                value={categoryId}
+                value={parentId}
                 onChange={(e) =>
-                  setCategoryId(e.target.value)
+                  handleParentChange(
+                    e.target.value
+                  )
                 }
-                style={styles.input}
               >
                 <option value="">
-                  — Chưa chọn thư mục —
+                  -- Chọn danh mục mẹ --
                 </option>
 
-                {categories.map((category) => (
+                {parents.map((parent) => (
                   <option
-                    key={category.id}
-                    value={category.id}
+                    key={parent.id}
+                    value={parent.id}
                   >
-                    {category.name}
+                    {parent.name}
                   </option>
                 ))}
               </select>
             </div>
 
-            <div style={styles.field}>
-              <label style={styles.label}>
-                Giá bán
+            {/* CHILD */}
+
+            <div className="field">
+              <label>
+                Danh mục con *
+              </label>
+
+              <select
+                value={categoryId}
+                disabled={!parentId}
+                onChange={(e) =>
+                  setCategoryId(
+                    e.target.value
+                  )
+                }
+              >
+                <option value="">
+                  {!parentId
+                    ? "-- Chọn danh mục mẹ trước --"
+                    : "-- Chọn danh mục con --"}
+                </option>
+
+                {children.map((child) => (
+                  <option
+                    key={child.id}
+                    value={child.id}
+                  >
+                    {child.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* PRICE */}
+
+            <div className="field">
+              <label>
+                Giá *
               </label>
 
               <input
                 type="number"
+                min="0"
                 value={price}
                 onChange={(e) =>
                   setPrice(e.target.value)
                 }
                 placeholder="10000"
-                style={styles.input}
               />
             </div>
 
-            <div style={styles.field}>
-              <label style={styles.label}>
-                Thời hạn (ngày)
+            {/* DURATION */}
+
+            <div className="field">
+              <label>
+                Thời hạn
               </label>
 
               <input
                 type="number"
+                min="0"
                 value={duration}
                 onChange={(e) =>
-                  setDuration(e.target.value)
+                  setDuration(
+                    e.target.value
+                  )
                 }
-                placeholder="1"
-                style={styles.input}
+                placeholder="1 ngày"
               />
             </div>
 
-            <div
-              style={{
-                ...styles.field,
-                gridColumn: "1 / -1",
-              }}
-            >
-              <label style={styles.label}>
+            {/* DESCRIPTION */}
+
+            <div className="field full">
+              <label>
                 Mô tả
               </label>
 
               <textarea
                 value={description}
                 onChange={(e) =>
-                  setDescription(e.target.value)
+                  setDescription(
+                    e.target.value
+                  )
                 }
                 placeholder="Mô tả sản phẩm..."
                 rows={4}
-                style={{
-                  ...styles.input,
-                  resize: "vertical",
-                }}
               />
             </div>
+
           </div>
 
-          <div style={styles.formActions}>
-            <button
-              onClick={saveProduct}
-              disabled={saving}
-              style={{
-                ...styles.primaryButton,
-                opacity: saving ? 0.6 : 1,
-              }}
-            >
-              {saving
-                ? "⏳ ĐANG LƯU..."
-                : editingId
-                ? "💾 LƯU THAY ĐỔI"
-                : "➕ THÊM SẢN PHẨM"}
-            </button>
+          {/* =========================
+              MEDIA
+          ========================= */}
 
-            {editingId && (
+          <div className="media-section">
+
+            <h3>
+              Media sản phẩm
+            </h3>
+
+            <div className="media-options">
+
               <button
-                onClick={resetForm}
-                disabled={saving}
-                style={styles.secondaryButton}
+                type="button"
+                className={
+                  mediaType === "image"
+                    ? "media-option active"
+                    : "media-option"
+                }
+                onClick={() =>
+                  setMediaType("image")
+                }
               >
-                HỦY
+                🖼️ Ảnh
               </button>
-            )}
+
+              <button
+                type="button"
+                className={
+                  mediaType === "video"
+                    ? "media-option active"
+                    : "media-option"
+                }
+                onClick={() =>
+                  setMediaType("video")
+                }
+              >
+                🎬 Video
+              </button>
+
+              <button
+                type="button"
+                className={
+                  mediaType === "both"
+                    ? "media-option active"
+                    : "media-option"
+                }
+                onClick={() =>
+                  setMediaType("both")
+                }
+              >
+                🖼️ + 🎬 Cả hai
+              </button>
+
+            </div>
+
+            <div className="upload-grid">
+
+              {(mediaType === "image" ||
+                mediaType === "both") && (
+                <div className="upload-box">
+
+                  <label>
+                    Ảnh sản phẩm
+                  </label>
+
+                  <input
+                    id="product-image"
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) =>
+                      setImageFile(
+                        e.target.files?.[0] ||
+                          null
+                      )
+                    }
+                  />
+
+                  {imageFile && (
+                    <div className="file-name">
+                      ✓ {imageFile.name}
+                    </div>
+                  )}
+
+                </div>
+              )}
+
+              {(mediaType === "video" ||
+                mediaType === "both") && (
+                <div className="upload-box">
+
+                  <label>
+                    Video sản phẩm
+                  </label>
+
+                  <input
+                    id="product-video"
+                    type="file"
+                    accept="video/*"
+                    onChange={(e) =>
+                      setVideoFile(
+                        e.target.files?.[0] ||
+                          null
+                      )
+                    }
+                  />
+
+                  {videoFile && (
+                    <div className="file-name">
+                      ✓ {videoFile.name}
+                    </div>
+                  )}
+
+                </div>
+              )}
+
+            </div>
+
           </div>
-        </section>
 
-        <div style={styles.sectionHeader}>
-          <div>
-            <div style={styles.cardTitle}>
-              DANH SÁCH SẢN PHẨM
-            </div>
+          {/* =========================
+              KEYS
+          ========================= */}
 
-            <div style={styles.count}>
-              Tổng: {products.length} sản phẩm
-            </div>
+          <div className="key-section">
+
+            <h3>
+              Kho KEY
+            </h3>
+
+            <p>
+              Mỗi dòng là một KEY. Có thể
+              để trống và thêm KEY sau.
+            </p>
+
+            <textarea
+              value={keyText}
+              onChange={(e) =>
+                setKeyText(e.target.value)
+              }
+              placeholder={
+                "KEY001\nKEY002\nKEY003"
+              }
+              rows={6}
+            />
+
           </div>
 
           <button
-            onClick={loadData}
-            disabled={loading}
-            style={styles.refreshButton}
+            className="create-button"
+            disabled={saving}
+            onClick={createProduct}
           >
-            🔄 LÀM MỚI
+            {saving
+              ? "ĐANG TẠO..."
+              : "＋ TẠO SẢN PHẨM"}
           </button>
-        </div>
 
-        {products.length === 0 ? (
-          <div style={styles.empty}>
-            Chưa có sản phẩm nào.
+        </section>
+
+        {/* =========================
+            PRODUCT LIST
+        ========================= */}
+
+        <section className="panel">
+
+          <div className="panel-title">
+            <div>
+              <h2>
+                Danh sách sản phẩm
+              </h2>
+
+              <p>
+                {products.length} sản phẩm
+                trong hệ thống.
+              </p>
+            </div>
           </div>
-        ) : (
-          <div style={styles.list}>
-            {products.map((product) => {
-              const isActive =
-                product.active === true &&
-                product.is_active === true;
 
-              const uploading =
-                uploadingId === product.id;
+          <div className="table-wrap">
 
-              const deletingImage =
-                deletingImageId === product.id;
+            <table>
 
-              const toggling =
-                togglingId === product.id;
+              <thead>
+                <tr>
+                  <th>
+                    Sản phẩm
+                  </th>
 
-              const deleting =
-                deletingId === product.id;
+                  <th>
+                    Danh mục
+                  </th>
 
-              return (
-                <div
-                  key={product.id}
-                  style={styles.productCard}
-                >
-                  <div style={styles.imageBox}>
-                    {product.demo_image_url ? (
-                      <img
-                        src={
-                          product.demo_image_url
-                        }
-                        alt={product.name}
-                        style={styles.image}
-                      />
-                    ) : (
-                      <div
-                        style={
-                          styles.noImage
-                        }
-                      >
-                        <div
-                          style={{
-                            fontSize: 34,
-                          }}
-                        >
-                          🖼️
+                  <th>
+                    Giá
+                  </th>
+
+                  <th>
+                    Media
+                  </th>
+
+                  <th>
+                    Kho
+                  </th>
+
+                  <th>
+                    Trạng thái
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+
+                {products.map((product) => {
+
+                  const category =
+                    getCategory(product);
+
+                  const parent =
+                    getParent(product);
+
+                  const stock =
+                    getStock(product.id);
+
+                  return (
+                    <tr
+                      key={product.id}
+                    >
+
+                      <td>
+
+                        <div className="product-info">
+
+                          <div className="thumb">
+
+                            {product.demo_image_url ? (
+                              <img
+                                src={
+                                  product.demo_image_url
+                                }
+                                alt=""
+                              />
+                            ) : product.video_url ? (
+                              <video
+                                src={
+                                  product.video_url
+                                }
+                                muted
+                              />
+                            ) : (
+                              <span>
+                                🛒
+                              </span>
+                            )}
+
+                          </div>
+
+                          <div>
+                            <strong>
+                              {product.name}
+                            </strong>
+
+                            <small>
+                              ID #{product.id}
+                            </small>
+                          </div>
+
                         </div>
 
-                        <div>
-                          CHƯA CÓ ẢNH DEMO
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                      </td>
 
-                  <div style={styles.productBody}>
-                    <div style={styles.productTop}>
-                      <div>
-                        <div
-                          style={
-                            styles.productName
-                          }
-                        >
-                          {product.name}
-                        </div>
+                      <td>
 
-                        <div
-                          style={
-                            styles.category
-                          }
-                        >
-                          📁{" "}
-                          {getCategoryName(
-                            product.category_id
+                        <div className="category-path">
+
+                          {parent?.name && (
+                            <span>
+                              {parent.name}
+                            </span>
                           )}
+
+                          <b>
+                            →
+                          </b>
+
+                          <span>
+                            {category?.name ||
+                              "Chưa phân loại"}
+                          </span>
+
                         </div>
-                      </div>
 
-                      <div
-                        style={{
-                          ...styles.status,
-                          background: isActive
-                            ? "#092b18"
-                            : "#301010",
-                          color: isActive
-                            ? "#35e27d"
-                            : "#ff6666",
-                          borderColor: isActive
-                            ? "#164f2e"
-                            : "#5a1c1c",
-                        }}
-                      >
-                        {isActive
-                          ? "ĐANG BÁN"
-                          : "ĐÃ TẮT"}
-                      </div>
-                    </div>
+                      </td>
 
-                    <div style={styles.infoGrid}>
-                      <div>
-                        <span
-                          style={
-                            styles.infoLabel
-                          }
-                        >
-                          GIÁ
-                        </span>
-
-                        <strong
-                          style={
-                            styles.price
-                          }
-                        >
+                      <td>
+                        <strong className="price">
                           {Number(
                             product.price || 0
                           ).toLocaleString(
@@ -944,572 +1063,536 @@ export default function AdminProductsPage() {
                           )}
                           đ
                         </strong>
-                      </div>
+                      </td>
 
-                      <div>
-                        <span
-                          style={
-                            styles.infoLabel
-                          }
-                        >
-                          THỜI HẠN
+                      <td>
+                        <span className="media-pill">
+                          {mediaLabel(product)}
                         </span>
+                      </td>
 
+                      <td>
                         <strong>
-                          {product.duration_days}{" "}
-                          ngày
+                          {stock}
                         </strong>
-                      </div>
+                      </td>
 
-                      <div>
-                        <span
-                          style={
-                            styles.infoLabel
-                          }
-                        >
-                          ID
-                        </span>
+                      <td>
 
-                        <strong>
-                          #{product.id}
-                        </strong>
-                      </div>
-                    </div>
-
-                    {product.description && (
-                      <div
-                        style={
-                          styles.description
-                        }
-                      >
-                        {product.description}
-                      </div>
-                    )}
-
-                    <div style={styles.imageActions}>
-                      <label
-                        style={{
-                          ...styles.uploadButton,
-                          opacity:
-                            uploading ? 0.6 : 1,
-                        }}
-                      >
-                        {uploading
-                          ? "⏳ ĐANG UPLOAD..."
-                          : product.demo_image_url
-                          ? "🔄 ĐỔI ẢNH DEMO"
-                          : "📷 THÊM ẢNH DEMO"}
-
-                        <input
-                          type="file"
-                          accept="image/png,image/jpeg,image/webp,image/gif"
-                          disabled={uploading}
-                          onChange={(e) => {
-                            const file =
-                              e.target.files?.[0];
-
-                            if (file) {
-                              uploadDemoImage(
-                                product,
-                                file
-                              );
-                            }
-
-                            e.target.value = "";
-                          }}
-                          style={{
-                            display: "none",
-                          }}
-                        />
-                      </label>
-
-                      {product.demo_image_url && (
                         <button
+                          className={
+                            product.active &&
+                            product.is_active
+                              ? "status on"
+                              : "status off"
+                          }
                           onClick={() =>
-                            deleteDemoImage(
+                            toggleProduct(
                               product
                             )
                           }
-                          disabled={
-                            deletingImage
-                          }
-                          style={{
-                            ...styles.deleteImageButton,
-                            opacity:
-                              deletingImage
-                                ? 0.6
-                                : 1,
-                          }}
                         >
-                          {deletingImage
-                            ? "⏳ ĐANG XỬ LÝ..."
-                            : "🗑️ XÓA ẢNH"}
+                          {product.active &&
+                          product.is_active
+                            ? "Đang bán"
+                            : "Tắt"}
                         </button>
-                      )}
-                    </div>
 
-                    <div style={styles.actions}>
-                      <button
-                        onClick={() =>
-                          editProduct(product)
-                        }
-                        disabled={
-                          saving ||
-                          deleting
-                        }
-                        style={
-                          styles.editButton
-                        }
-                      >
-                        ✏️ SỬA
-                      </button>
+                      </td>
 
-                      <button
-                        onClick={() =>
-                          toggleProduct(
-                            product
-                          )
-                        }
-                        disabled={
-                          toggling ||
-                          deleting
-                        }
-                        style={{
-                          ...styles.toggleButton,
-                          opacity:
-                            toggling
-                              ? 0.6
-                              : 1,
-                        }}
-                      >
-                        {toggling
-                          ? "⏳ ĐANG XỬ LÝ..."
-                          : isActive
-                          ? "⏸️ TẮT BÁN"
-                          : "▶️ BẬT BÁN"}
-                      </button>
+                    </tr>
+                  );
+                })}
 
-                      <button
-                        onClick={() =>
-                          deleteProduct(
-                            product
-                          )
-                        }
-                        disabled={
-                          deleting ||
-                          toggling
-                        }
-                        style={{
-                          ...styles.deleteButton,
-                          opacity:
-                            deleting
-                              ? 0.6
-                              : 1,
-                        }}
-                      >
-                        {deleting
-                          ? "⏳ ĐANG XÓA..."
-                          : "🗑️ XÓA"}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+              </tbody>
+
+            </table>
+
           </div>
-        )}
-      </div>
-    </main>
+
+        </section>
+
+      </main>
+
+      <style jsx>{styles}</style>
+    </div>
   );
 }
 
-const styles = {
-  loadingPage: {
-    minHeight: "100vh",
-    background: "#070707",
-    color: "#fff",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "20px",
-    fontFamily: "Arial, sans-serif",
-  },
+const styles = `
+* {
+  box-sizing: border-box;
+}
 
-  spinner: {
-    width: "48px",
-    height: "48px",
-    borderRadius: "50%",
-    border: "4px solid #222",
-    borderTop: "4px solid #ff3030",
-    animation: "xenovaSpin 0.8s linear infinite",
-    marginBottom: "20px",
-  },
+.admin-page {
+  min-height: 100vh;
+  background: #f5f6fa;
+  color: #202124;
+  font-family: Arial, Helvetica, sans-serif;
+  display: flex;
+}
 
-  loadingTitle: {
-    fontSize: "18px",
-    fontWeight: "900",
-    letterSpacing: "1px",
-  },
+/* SIDEBAR */
 
-  loadingText: {
-    color: "#777",
-    marginTop: "8px",
-    textAlign: "center",
-  },
+.sidebar {
+  width: 235px;
+  min-height: 100vh;
+  background: #17151b;
+  color: white;
+  padding: 20px 13px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
 
-  page: {
-    minHeight: "100vh",
-    background: "#070707",
-    color: "#fff",
-    padding: "90px 16px 50px",
-    fontFamily: "Arial, sans-serif",
-  },
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 9px 25px;
+}
 
-  container: {
-    width: "100%",
-    maxWidth: "1100px",
-    margin: "0 auto",
-  },
+.brand-icon {
+  width: 39px;
+  height: 39px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg,#ff4ca8,#8d55ff);
+  font-weight: 900;
+  font-size: 20px;
+}
 
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: "15px",
-    marginBottom: "25px",
-    flexWrap: "wrap",
-  },
+.brand strong {
+  display: block;
+  font-size: 15px;
+}
 
-  smallTitle: {
-    color: "#ff3333",
-    fontSize: "12px",
-    fontWeight: "900",
-    letterSpacing: "3px",
-  },
+.brand small {
+  color: #999;
+  font-size: 9px;
+  letter-spacing: 1px;
+}
 
-  title: {
-    margin: "7px 0 5px",
-    fontSize: "30px",
-    fontWeight: "900",
-  },
+.sidebar nav {
+  display: grid;
+  gap: 5px;
+}
 
-  subtitle: {
-    color: "#777",
-    fontSize: "14px",
-  },
+.sidebar nav a,
+.back-shop {
+  color: #aaa;
+  text-decoration: none;
+  padding: 11px 12px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 700;
+}
 
-  formCard: {
-    background: "#101010",
-    border: "1px solid #222",
-    borderRadius: "16px",
-    padding: "20px",
-    marginBottom: "30px",
-  },
+.sidebar nav a:hover,
+.sidebar nav a.active {
+  background: #30262e;
+  color: #ff67b4;
+}
 
-  cardTitle: {
-    fontSize: "18px",
-    fontWeight: "900",
-  },
+.back-shop {
+  margin-top: auto;
+  background: #242027;
+}
 
-  formGrid: {
-    display: "grid",
-    gridTemplateColumns:
-      "repeat(auto-fit,minmax(220px,1fr))",
-    gap: "15px",
-    marginTop: "20px",
-  },
+/* MAIN */
 
-  field: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "8px",
-  },
+.main {
+  flex: 1;
+  min-width: 0;
+  padding: 30px;
+  max-width: 1500px;
+}
 
-  label: {
-    color: "#aaa",
-    fontSize: "13px",
-    fontWeight: "700",
-  },
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 22px;
+}
 
-  input: {
-    width: "100%",
-    boxSizing: "border-box",
-    padding: "13px",
-    borderRadius: "10px",
-    border: "1px solid #303030",
-    background: "#080808",
-    color: "#fff",
-    outline: "none",
-    fontSize: "14px",
-  },
+.header h1 {
+  margin: 0;
+  font-size: 25px;
+}
 
-  formActions: {
-    display: "flex",
-    gap: "10px",
-    marginTop: "20px",
-    flexWrap: "wrap",
-  },
+.header p {
+  color: #888;
+  margin: 6px 0 0;
+  font-size: 13px;
+}
 
-  primaryButton: {
-    border: "none",
-    background: "#ff3030",
-    color: "#fff",
-    padding: "13px 18px",
-    borderRadius: "10px",
-    fontWeight: "900",
-    cursor: "pointer",
-  },
+.stats {
+  display: flex;
+  gap: 10px;
+}
 
-  secondaryButton: {
-    border: "1px solid #333",
-    background: "#171717",
-    color: "#fff",
-    padding: "12px 16px",
-    borderRadius: "10px",
-    fontWeight: "800",
-    cursor: "pointer",
-  },
+.stats div {
+  background: white;
+  border: 1px solid #eee;
+  min-width: 100px;
+  border-radius: 12px;
+  padding: 11px 14px;
+}
 
-  refreshButton: {
-    border: "1px solid #333",
-    background: "#121212",
-    color: "#fff",
-    padding: "10px 14px",
-    borderRadius: "9px",
-    cursor: "pointer",
-    fontWeight: "800",
-  },
+.stats strong {
+  display: block;
+  font-size: 19px;
+  color: #e83d94;
+}
 
-  sectionHeader: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: "15px",
-    marginBottom: "15px",
-  },
+.stats span {
+  color: #999;
+  font-size: 10px;
+}
 
-  count: {
-    color: "#666",
-    fontSize: "13px",
-    marginTop: "5px",
-  },
+/* ALERT */
 
-  list: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "15px",
-  },
+.alert {
+  padding: 12px 14px;
+  border-radius: 9px;
+  margin-bottom: 15px;
+  font-size: 12px;
+}
 
-  productCard: {
-    background: "#101010",
-    border: "1px solid #222",
-    borderRadius: "16px",
-    overflow: "hidden",
-  },
+.alert.error {
+  background: #fff0f0;
+  color: #c62828;
+}
 
-  imageBox: {
-    width: "100%",
-    height: "240px",
-    background: "#080808",
-    overflow: "hidden",
-  },
+.alert.success {
+  background: #ebfff3;
+  color: #198754;
+}
 
-  image: {
-    width: "100%",
-    height: "100%",
-    objectFit: "cover",
-    display: "block",
-  },
+/* PANEL */
 
-  noImage: {
-    width: "100%",
-    height: "100%",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "8px",
-    color: "#555",
-    fontSize: "12px",
-    fontWeight: "800",
-  },
+.panel {
+  background: white;
+  border: 1px solid #e9e9ed;
+  border-radius: 15px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
 
-  productBody: {
-    padding: "18px",
-  },
+.panel-title {
+  margin-bottom: 18px;
+}
 
-  productTop: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: "15px",
-  },
+.panel-title h2 {
+  margin: 0;
+  font-size: 18px;
+}
 
-  productName: {
-    fontSize: "20px",
-    fontWeight: "900",
-  },
+.panel-title p {
+  margin: 5px 0 0;
+  color: #999;
+  font-size: 11px;
+}
 
-  category: {
-    color: "#888",
-    fontSize: "13px",
-    marginTop: "6px",
-  },
+/* FORM */
 
-  status: {
-    border: "1px solid",
-    borderRadius: "999px",
-    padding: "6px 10px",
-    fontSize: "11px",
-    fontWeight: "900",
-    whiteSpace: "nowrap",
-  },
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  gap: 14px;
+}
 
-  infoGrid: {
-    display: "grid",
-    gridTemplateColumns:
-      "repeat(3,1fr)",
-    gap: "10px",
-    marginTop: "18px",
-    padding: "14px",
-    background: "#090909",
-    borderRadius: "10px",
-  },
+.field {
+  display: grid;
+  gap: 6px;
+}
 
-  infoLabel: {
-    display: "block",
-    color: "#666",
-    fontSize: "10px",
-    fontWeight: "800",
-    marginBottom: "5px",
-  },
+.field.full {
+  grid-column: 1 / -1;
+}
 
-  price: {
-    color: "#ff4545",
-  },
+.field label,
+.upload-box label {
+  font-size: 11px;
+  font-weight: 800;
+  color: #555;
+}
 
-  description: {
-    marginTop: "15px",
-    padding: "12px",
-    background: "#0a0a0a",
-    borderRadius: "9px",
-    color: "#aaa",
-    fontSize: "13px",
-    lineHeight: "1.5",
-  },
+.field input,
+.field select,
+.field textarea,
+.key-section textarea {
+  width: 100%;
+  border: 1px solid #e1e1e5;
+  border-radius: 8px;
+  padding: 10px 11px;
+  outline: none;
+  font-size: 12px;
+  background: white;
+}
 
-  imageActions: {
-    display: "flex",
-    gap: "8px",
-    flexWrap: "wrap",
-    marginTop: "15px",
-  },
+.field input:focus,
+.field select:focus,
+.field textarea:focus,
+.key-section textarea:focus {
+  border-color: #e83d94;
+  box-shadow: 0 0 0 3px rgba(232,61,148,.08);
+}
 
-  uploadButton: {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "10px 13px",
-    background: "#202020",
-    border: "1px solid #383838",
-    color: "#fff",
-    borderRadius: "9px",
-    cursor: "pointer",
-    fontSize: "12px",
-    fontWeight: "900",
-  },
+/* MEDIA */
 
-  deleteImageButton: {
-    padding: "10px 13px",
-    background: "#301010",
-    border: "1px solid #5a1c1c",
-    color: "#ff7777",
-    borderRadius: "9px",
-    cursor: "pointer",
-    fontSize: "12px",
-    fontWeight: "900",
-  },
+.media-section,
+.key-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #eee;
+}
 
-  actions: {
-    display: "flex",
-    gap: "8px",
-    flexWrap: "wrap",
-    marginTop: "10px",
-  },
+.media-section h3,
+.key-section h3 {
+  margin: 0 0 5px;
+  font-size: 14px;
+}
 
-  editButton: {
-    flex: 1,
-    minWidth: "100px",
-    padding: "11px",
-    border: "1px solid #333",
-    background: "#181818",
-    color: "#fff",
-    borderRadius: "9px",
-    cursor: "pointer",
-    fontWeight: "800",
-  },
+.media-options {
+  display: flex;
+  gap: 7px;
+  margin: 12px 0;
+}
 
-  toggleButton: {
-    flex: 1,
-    minWidth: "100px",
-    padding: "11px",
-    border: "1px solid #333",
-    background: "#181818",
-    color: "#fff",
-    borderRadius: "9px",
-    cursor: "pointer",
-    fontWeight: "800",
-  },
+.media-option {
+  border: 1px solid #ddd;
+  background: white;
+  border-radius: 8px;
+  padding: 9px 13px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 11px;
+}
 
-  deleteButton: {
-    flex: 1,
-    minWidth: "100px",
-    padding: "11px",
-    border: "1px solid #5a1c1c",
-    background: "#241010",
-    color: "#ff7070",
-    borderRadius: "9px",
-    cursor: "pointer",
-    fontWeight: "800",
-  },
+.media-option.active {
+  color: #e83d94;
+  border-color: #e83d94;
+  background: #fff0f7;
+}
 
-  errorBox: {
-    marginBottom: "18px",
-    padding: "15px",
-    background: "#2a0e0e",
-    border: "1px solid #6b2222",
-    borderRadius: "10px",
-    color: "#ff8a8a",
-    lineHeight: "1.5",
-  },
+.upload-grid {
+  display: grid;
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  gap: 12px;
+}
 
-  successBox: {
-    marginBottom: "18px",
-    padding: "14px",
-    background: "#0b2516",
-    border: "1px solid #18572f",
-    borderRadius: "10px",
-    color: "#5ee88d",
-  },
+.upload-box {
+  border: 1px dashed #d8d8de;
+  border-radius: 10px;
+  padding: 14px;
+  display: grid;
+  gap: 9px;
+  background: #fafafd;
+}
 
-  retryButton: {
-    marginTop: "12px",
-    padding: "9px 13px",
-    border: "1px solid #6b3030",
-    background: "#401515",
-    color: "#fff",
-    borderRadius: "8px",
-    cursor: "pointer",
-    fontWeight: "800",
-  },
+.upload-box input {
+  font-size: 11px;
+}
 
-  empty: {
-    padding: "50px 20px",
-    textAlign: "center",
-    background: "#101010",
-    border: "1px solid #222",
-    borderRadius: "15px",
-    color: "#666",
-  },
-};
+.file-name {
+  color: #198754;
+  font-size: 10px;
+  word-break: break-all;
+}
+
+.key-section p {
+  color: #999;
+  font-size: 11px;
+  margin: 0 0 10px;
+}
+
+.key-section textarea {
+  resize: vertical;
+  font-family: monospace;
+}
+
+.create-button {
+  width: 100%;
+  margin-top: 20px;
+  border: 0;
+  background: linear-gradient(135deg,#e83d94,#b94de4);
+  color: white;
+  border-radius: 9px;
+  padding: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.create-button:disabled {
+  opacity: .6;
+  cursor: wait;
+}
+
+/* TABLE */
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 850px;
+}
+
+th {
+  text-align: left;
+  color: #999;
+  font-size: 10px;
+  text-transform: uppercase;
+  padding: 11px 9px;
+  border-bottom: 1px solid #eee;
+}
+
+td {
+  padding: 12px 9px;
+  border-bottom: 1px solid #f0f0f2;
+  font-size: 11px;
+}
+
+.product-info {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.thumb {
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #f0f0f4;
+  display: grid;
+  place-items: center;
+}
+
+.thumb img,
+.thumb video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.product-info strong {
+  display: block;
+}
+
+.product-info small {
+  color: #aaa;
+  display: block;
+  margin-top: 3px;
+}
+
+.category-path {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #777;
+}
+
+.category-path b {
+  color: #bbb;
+}
+
+.price {
+  color: #e83d94;
+}
+
+.media-pill {
+  background: #f5efff;
+  color: #8750c8;
+  border-radius: 999px;
+  padding: 5px 8px;
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.status {
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 9px;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.status.on {
+  background: #e8fff1;
+  color: #198754;
+}
+
+.status.off {
+  background: #eee;
+  color: #888;
+}
+
+/* LOADING */
+
+.loading {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: #f5f6fa;
+  color: #888;
+  font-family: Arial, sans-serif;
+}
+
+/* MOBILE */
+
+@media (max-width: 800px) {
+  .admin-page {
+    display: block;
+  }
+
+  .sidebar {
+    width: 100%;
+    min-height: auto;
+    height: auto;
+    position: relative;
+  }
+
+  .sidebar nav {
+    display: flex;
+    overflow-x: auto;
+  }
+
+  .sidebar nav a {
+    white-space: nowrap;
+  }
+
+  .back-shop {
+    margin-top: 12px;
+  }
+
+  .main {
+    padding: 15px;
+  }
+
+  .header {
+    display: block;
+  }
+
+  .stats {
+    margin-top: 12px;
+  }
+
+  .form-grid,
+  .upload-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .field.full {
+    grid-column: auto;
+  }
+}
+`;
