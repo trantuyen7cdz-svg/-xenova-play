@@ -8,10 +8,9 @@ const ZALO_ADMIN = "https://zalo.me/0987654321";
 
 const DEFAULT_SETTINGS = {
   logo_url: "",
-  shop_badge: "XENOVA PLAY SHOP",
-  shop_title: "Cửa hàng",
-  shop_description:
-    "Chọn danh mục để xem sản phẩm và mua KEY.",
+  shop_badge: "",
+  shop_title: "",
+  shop_description: "",
   banners: [],
 };
 
@@ -82,12 +81,6 @@ export default function ShopPage() {
   const [buying, setBuying] = useState(false);
   const [bannerIndex, setBannerIndex] = useState(0);
 
-  /*
-   * =====================================================
-   * AUTH
-   * =====================================================
-   */
-
   useEffect(() => {
     let mounted = true;
 
@@ -117,12 +110,6 @@ export default function ShopPage() {
       subscription.unsubscribe();
     };
   }, []);
-
-  /*
-   * =====================================================
-   * SETTINGS
-   * =====================================================
-   */
 
   async function loadSettings() {
     try {
@@ -223,12 +210,6 @@ export default function ShopPage() {
     );
   }
 
-  /*
-   * =====================================================
-   * LOAD SHOP
-   * =====================================================
-   */
-
   async function loadShop() {
     try {
       setLoading(true);
@@ -299,12 +280,6 @@ export default function ShopPage() {
     loadShop();
   }, []);
 
-  /*
-   * =====================================================
-   * WALLET
-   * =====================================================
-   */
-
   useEffect(() => {
     if (!user) {
       setWallet(0);
@@ -346,12 +321,6 @@ export default function ShopPage() {
       mounted = false;
     };
   }, [user]);
-
-  /*
-   * =====================================================
-   * CATEGORY
-   * =====================================================
-   */
 
   const parentCategories =
     useMemo(() => {
@@ -450,12 +419,6 @@ export default function ShopPage() {
     );
   }
 
-  /*
-   * =====================================================
-   * STOCK
-   * =====================================================
-   */
-
   function getStock(productId) {
     const value =
       stockMap?.[productId] ??
@@ -479,12 +442,6 @@ export default function ShopPage() {
 
     return Number(value || 0);
   }
-
-  /*
-   * =====================================================
-   * PRODUCTS
-   * =====================================================
-   */
 
   const filteredProducts =
     useMemo(() => {
@@ -580,12 +537,6 @@ export default function ShopPage() {
       sort,
     ]);
 
-  /*
-   * =====================================================
-   * MEDIA
-   * =====================================================
-   */
-
   function ProductMedia({ product }) {
     if (
       product?.media_type ===
@@ -660,12 +611,6 @@ export default function ShopPage() {
       </div>
     );
   }
-
-  /*
-   * =====================================================
-   * BUY
-   * =====================================================
-   */
 
   async function handleBuy() {
     if (!buyModal) return;
@@ -798,12 +743,6 @@ export default function ShopPage() {
     }
   }
 
-  /*
-   * =====================================================
-   * LOADING
-   * =====================================================
-   */
-
   if (loading) {
     return (
       <>
@@ -819,16 +758,9 @@ export default function ShopPage() {
     );
   }
 
-  /*
-   * =====================================================
-   * MAIN
-   * =====================================================
-   */
-
   return (
     <main className="page">
 
-      {/* HOA HỒNG */}
       <div className="petals">
         {Array.from({
           length: 30,
@@ -852,7 +784,6 @@ export default function ShopPage() {
         ))}
       </div>
 
-      {/* HEADER */}
       <header className="topbar">
         <div className="topbar-inner">
 
@@ -954,26 +885,6 @@ export default function ShopPage() {
         </div>
       </header>
 
-      {/* HERO */}
-      <section className="hero">
-        <div className="hero-inner">
-          <span className="badge">
-            {settings.shop_badge ||
-              "XENOVA PLAY SHOP"}
-          </span>
-
-          <h1>
-            {settings.shop_title ||
-              "Cửa hàng"}
-          </h1>
-
-          <p>
-            {settings.shop_description ||
-              "Chọn danh mục để xem sản phẩm và mua KEY."}
-          </p>
-        </div>
-      </section>
-
       {/* BANNER */}
       {activeBanners.length > 0 && (
         <section className="banner-section">
@@ -1042,7 +953,6 @@ export default function ShopPage() {
         </section>
       )}
 
-      {/* CONTENT */}
       <div className="container">
 
         <div className="breadcrumb">
@@ -1071,6 +981,7 @@ export default function ShopPage() {
           {selectedChild && (
             <>
               <span>›</span>
+
               <strong>
                 {
                   selectedChild.name
@@ -1102,7 +1013,6 @@ export default function ShopPage() {
           </div>
         )}
 
-        {/* PARENT */}
         {view === "parents" && (
           <>
             <div className="heading">
@@ -1197,7 +1107,6 @@ export default function ShopPage() {
           </>
         )}
 
-        {/* CHILDREN */}
         {view === "children" &&
           selectedParent && (
             <>
@@ -1293,7 +1202,6 @@ export default function ShopPage() {
             </>
           )}
 
-        {/* PRODUCTS */}
         {view === "products" && (
           <>
             <div className="products-heading">
@@ -1476,7 +1384,6 @@ export default function ShopPage() {
         )}
       </div>
 
-      {/* ZALO */}
       <a
         href={ZALO_ADMIN}
         target="_blank"
@@ -1489,7 +1396,6 @@ export default function ShopPage() {
         </span>
       </a>
 
-      {/* BUY MODAL */}
       {buyModal && (
         <div className="overlay">
           <div className="modal">
@@ -1572,7 +1478,6 @@ export default function ShopPage() {
         </div>
       )}
 
-      {/* SUCCESS */}
       {successModal && (
         <div className="overlay">
           <div className="modal">
@@ -1855,51 +1760,6 @@ const styles = `
 .account-button {
   color: white;
   background: #222;
-}
-
-/* HERO */
-
-.hero {
-  min-height: 155px;
-  display: flex;
-  align-items: center;
-  background:
-    linear-gradient(
-      110deg,
-      #ffd9ec,
-      #ffeef8 48%,
-      #eee4ff
-    );
-  border-bottom:
-    1px solid #f1dbe8;
-}
-
-.hero-inner {
-  width: 1220px;
-  margin: auto;
-  padding: 28px 18px;
-}
-
-.badge {
-  display: inline-block;
-  background: white;
-  color: #e23a91;
-  padding: 6px 11px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 900;
-  margin-bottom: 8px;
-}
-
-.hero h1 {
-  margin: 0;
-  font-size: 30px;
-  font-weight: 900;
-}
-
-.hero p {
-  margin: 7px 0 0;
-  color: #777;
 }
 
 /* BANNER */
@@ -2642,18 +2502,6 @@ const styles = `
 
   .wallet {
     font-size: 11px;
-  }
-
-  .hero {
-    min-height: 125px;
-  }
-
-  .hero-inner {
-    padding: 22px 14px;
-  }
-
-  .hero h1 {
-    font-size: 25px;
   }
 
   .banner-section {
