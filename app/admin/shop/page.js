@@ -1,176 +1,224 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { supabase } from "../../../lib/supabase";
 
 const BUCKET = "shop-banners";
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
+function getExtension(file) {
+  const name = file?.name || "";
+  const ext = name.split(".").pop()?.toLowerCase();
+
+  if (["jpg", "jpeg", "png", "webp", "gif", "avif"].includes(ext)) {
+    return ext;
+  }
+
+  return "png";
+}
+
+function isImage(file) {
+  return Boolean(file && file.type?.startsWith("image/"));
+}
+
 export default function AdminShopPage() {
-  const fileInputs = useRef({});
+  const bannerInputRef = useRef(null);
+  const logoInputRef = useRef(null);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState({});
-  const [message, setMessage] = useState("");
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingBanner, setUploadingBanner] = useState(false);
+
+  const [logoUrl, setLogoUrl] = useState("");
   const [banners, setBanners] = useState([]);
+
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     loadSettings();
   }, []);
 
-  async function getSessionToken() {
-    const {
-      data: { session },
-      error,
-    } = await supabase.auth.getSession();
-
-    if (error) {
-      throw new Error("Không thể lấy phiên đăng nhập.");
-    }
-
-    if (!session?.access_token) {
-      throw new Error(
-        "Chưa nhận được phiên đăng nhập. Hãy đăng xuất rồi đăng nhập lại."
-      );
-    }
-
-    return session.access_token;
-  }
-
   async function loadSettings() {
-    setLoading(true);
-    setMessage("");
-
     try {
-      const token = await getSessionToken();
+      setLoading(true);
+      setError("");
+      setMessage("");
 
       const response = await fetch("/api/admin/shop-settings", {
         method: "GET",
         cache: "no-store",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
       });
 
       const result = await response.json();
 
-      if (!response.ok || !result.success) {
+      if (!response.ok || !result?.success) {
         throw new Error(
-          result.error || "Không thể tải cài đặt Shop."
+          result?.error || "Không thể tải cài đặt SHOP."
         );
       }
 
-      const loaded = Array.isArray(result.settings?.banners)
-        ? result.settings.banners
-        : [];
+      const settings = result.settings || {};
+
+      setLogoUrl(String(settings.logo_url || ""));
 
       setBanners(
-        loaded
-          .map((banner, index) => ({
-            id:
-              banner?.id ||
-              `banner-${Date.now()}-${index}`,
-            image_url: String(banner?.image_url || ""),
-            title: String(banner?.title || ""),
-            enabled: banner?.enabled !== false,
-            order: index,
-          }))
-          .sort(
-            (a, b) =>
-              Number(a.order) - Number(b.order)
-          )
+        Array.isArray(settings.banners)
+          ? settings.banners.map((banner, index) => ({
+              id:
+                banner?.id ||
+                `banner-${Date.now()}-${index}`,
+              image_url: String(banner?.image_url || ""),
+              enabled: banner?.enabled !== false,
+              order:
+                Number.isFinite(Number(banner?.order))
+                  ? Number(banner.order)
+                  : index,
+            }))
+          : []
       );
-    } catch (error) {
-      console.error("ADMIN SHOP LOAD:", error);
-
-      setMessage(
-        error?.message ||
-          "Không thể tải cài đặt Shop."
-      );
+    } catch (err) {
+      console.error(err);
+      setError(err?.message || "Có lỗi xảy ra.");
     } finally {
       setLoading(false);
     }
   }
 
-  function addBanner() {
-    setBanners((current) => [
-      ...current,
-      {
-        id:
-          `banner-${Date.now()}-` +
-          Math.random()
-            .toString(36)
-            .slice(2, 8),
-        image_url: "",
-        title: "",
-        enabled: true,
-        order: current.length,
-      },
-    ]);
+  function clearMessages() {
+    setMessage("");
+    setError("");
   }
 
-  function updateBanner(id, field, value) {
-    setBanners((current) =>
-      current.map((banner) =>
-        banner.id === id
-          ? {
-              ...banner,
-              [field]: value,
-            }
-          : banner
-      )
-    );
-  }
+  async function uploadImage(file, type = "banner") {
+    if (!file) return null;
 
-  function deleteBanner(id) {
-    if (
-      !window.confirm(
-        "Bạn có chắc muốn xóa banner này?"
-      )
-    ) {
-      return;
+    if (!isImage(file)) {
+      throw new Error("Chỉ được chọn file hình ảnh.");
     }
 
-    setBanners((current) =>
-      current
-        .filter(
-          (banner) => banner.id !== id
-        )
-        .map((banner, index) => ({
-          ...banner,
-          order: index,
-        }))
-    );
+    if (file.size > MAX_FILE_SIZE) {
+      throw new Error("Ảnh không được vượt quá 10MB.");
+    }
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError) {
+      throw new Error(userError.message);
+    }
+
+    if (!user) {
+      throw new Error("Bạn chưa đăng nhập.");
+    }
+
+    const extension = getExtension(file);
+
+    const prefix =
+      type === "logo" ? "logo" : "banner";
+
+    const fileName = `${prefix}-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 10)}.${extension}`;
+
+    /*
+      Dùng trực tiếp thư mục user.id giống hệ thống banner
+      hiện tại để không làm thay đổi policy Storage.
+    */
+    const path = `${user.id}/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from(BUCKET)
+      .upload(path, file, {
+        cacheControl: "3600",
+        upsert: false,
+        contentType: file.type || undefined,
+      });
+
+    if (uploadError) {
+      throw new Error(uploadError.message);
+    }
+
+    const { data: publicData } = supabase.storage
+      .from(BUCKET)
+      .getPublicUrl(path);
+
+    if (!publicData?.publicUrl) {
+      throw new Error("Không lấy được URL ảnh.");
+    }
+
+    return publicData.publicUrl;
   }
 
-  function moveBanner(index, direction) {
-    setBanners((current) => {
-      const next = [...current];
+  async function handleLogoUpload(event) {
+    const file = event.target.files?.[0];
 
-      const target =
-        direction === "up"
-          ? index - 1
-          : index + 1;
+    event.target.value = "";
 
-      if (
-        target < 0 ||
-        target >= next.length
-      ) {
-        return current;
+    if (!file) return;
+
+    try {
+      clearMessages();
+      setUploadingLogo(true);
+
+      const url = await uploadImage(file, "logo");
+
+      setLogoUrl(url);
+
+      setMessage(
+        "Đã tải logo lên. Nhấn LƯU CẤU HÌNH để áp dụng."
+      );
+    } catch (err) {
+      console.error(err);
+      setError(err?.message || "Upload logo thất bại.");
+    } finally {
+      setUploadingLogo(false);
+    }
+  }
+
+  async function handleBannerUpload(event) {
+    const files = Array.from(event.target.files || []);
+
+    event.target.value = "";
+
+    if (!files.length) return;
+
+    try {
+      clearMessages();
+      setUploadingBanner(true);
+
+      const uploaded = [];
+
+      for (const file of files) {
+        const url = await uploadImage(file, "banner");
+
+        uploaded.push({
+          id: `banner-${Date.now()}-${Math.random()
+            .toString(36)
+            .slice(2, 10)}`,
+          image_url: url,
+          enabled: true,
+          order: banners.length + uploaded.length,
+        });
       }
 
-      const temp = next[index];
+      setBanners((current) => [
+        ...current,
+        ...uploaded,
+      ]);
 
-      next[index] = next[target];
-      next[target] = temp;
-
-      return next.map((banner, i) => ({
-        ...banner,
-        order: i,
-      }));
-    });
+      setMessage(
+        `Đã tải lên ${uploaded.length} banner. Nhấn LƯU CẤU HÌNH để áp dụng.`
+      );
+    } catch (err) {
+      console.error(err);
+      setError(err?.message || "Upload banner thất bại.");
+    } finally {
+      setUploadingBanner(false);
+    }
   }
 
   function toggleBanner(id) {
@@ -186,633 +234,517 @@ export default function AdminShopPage() {
     );
   }
 
-  async function uploadBannerFile(id, file) {
-    if (!file) return;
+  function deleteBanner(id) {
+    setBanners((current) =>
+      current
+        .filter((banner) => banner.id !== id)
+        .map((banner, index) => ({
+          ...banner,
+          order: index,
+        }))
+    );
+  }
 
-    if (!file.type.startsWith("image/")) {
-      setMessage("Chỉ được chọn file ảnh.");
-      return;
-    }
-
-    if (file.size > MAX_FILE_SIZE) {
-      setMessage(
-        "Ảnh quá lớn. Vui lòng chọn ảnh dưới 10MB."
+  function moveBanner(id, direction) {
+    setBanners((current) => {
+      const index = current.findIndex(
+        (banner) => banner.id === id
       );
-      return;
-    }
 
-    setUploading((current) => ({
-      ...current,
-      [id]: true,
-    }));
+      if (index === -1) return current;
 
-    setMessage("");
+      const newIndex =
+        direction === "up"
+          ? index - 1
+          : index + 1;
 
-    try {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError || !user) {
-        throw new Error(
-          "Phiên đăng nhập không còn hợp lệ. Hãy đăng nhập lại."
-        );
+      if (
+        newIndex < 0 ||
+        newIndex >= current.length
+      ) {
+        return current;
       }
 
-      const extension =
-        file.name
-          .split(".")
-          .pop()
-          ?.toLowerCase() || "jpg";
+      const next = [...current];
 
-      const fileName =
-        `${Date.now()}-` +
-        Math.random()
-          .toString(36)
-          .slice(2, 10) +
-        `.${extension}`;
+      const temp = next[index];
+      next[index] = next[newIndex];
+      next[newIndex] = temp;
 
-      const filePath =
-        `${user.id}/${fileName}`;
-
-      const { error: uploadError } =
-        await supabase.storage
-          .from(BUCKET)
-          .upload(
-            filePath,
-            file,
-            {
-              cacheControl: "3600",
-              upsert: false,
-              contentType: file.type,
-            }
-          );
-
-      if (uploadError) {
-        throw new Error(
-          uploadError.message ||
-            "Upload ảnh thất bại."
-        );
-      }
-
-      const {
-        data: publicData,
-      } = supabase.storage
-        .from(BUCKET)
-        .getPublicUrl(filePath);
-
-      const publicUrl =
-        publicData?.publicUrl || "";
-
-      if (!publicUrl) {
-        throw new Error(
-          "Không lấy được URL ảnh sau khi upload."
-        );
-      }
-
-      updateBanner(
-        id,
-        "image_url",
-        publicUrl
-      );
-
-      setMessage(
-        "✓ Upload ảnh thành công. Nhớ bấm LƯU."
-      );
-    } catch (error) {
-      console.error(
-        "BANNER UPLOAD ERROR:",
-        error
-      );
-
-      setMessage(
-        error?.message ||
-          "Không thể upload banner."
-      );
-    } finally {
-      setUploading((current) => ({
-        ...current,
-        [id]: false,
+      return next.map((banner, itemIndex) => ({
+        ...banner,
+        order: itemIndex,
       }));
-    }
+    });
   }
 
   async function saveSettings() {
-    if (saving) return;
-
-    setSaving(true);
-    setMessage("");
-
     try {
-      const token =
-        await getSessionToken();
+      setSaving(true);
+      clearMessages();
 
       const cleanBanners = banners
-        .map((banner, index) => ({
-          id:
-            banner.id ||
-            `banner-${Date.now()}-${index}`,
-          image_url: String(
-            banner.image_url || ""
-          ).trim(),
-          title: String(
-            banner.title || ""
-          ).trim(),
-          enabled:
-            banner.enabled !== false,
-          order: index,
-        }))
         .filter(
           (banner) =>
-            banner.image_url
-        );
+            banner &&
+            typeof banner.image_url === "string" &&
+            banner.image_url.trim()
+        )
+        .map((banner, index) => ({
+          id: banner.id,
+          image_url: banner.image_url.trim(),
+          enabled: banner.enabled !== false,
+          order: index,
+        }));
 
       const response = await fetch(
         "/api/admin/shop-settings",
         {
           method: "PUT",
           headers: {
-            "Content-Type":
-              "application/json",
-            Authorization:
-              `Bearer ${token}`,
+            "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            banners:
-              cleanBanners,
+            logo_url: logoUrl.trim(),
+            banners: cleanBanners,
           }),
         }
       );
 
-      const result =
-        await response.json();
+      const result = await response.json();
 
-      if (
-        !response.ok ||
-        !result.success
-      ) {
+      if (!response.ok || !result?.success) {
         throw new Error(
-          result.error ||
-            "Không thể lưu cài đặt."
+          result?.error ||
+            "Không thể lưu cài đặt SHOP."
         );
       }
 
-      setBanners(cleanBanners);
-
-      setMessage(
-        "✓ Đã lưu banner thành công."
-      );
-    } catch (error) {
-      console.error(
-        "ADMIN SHOP SAVE:",
-        error
+      setLogoUrl(
+        String(result?.settings?.logo_url || logoUrl || "")
       );
 
-      setMessage(
-        error?.message ||
-          "Không thể lưu cài đặt."
+      setBanners(
+        Array.isArray(result?.settings?.banners)
+          ? result.settings.banners
+          : cleanBanners
       );
+
+      setMessage(
+        "Đã lưu cấu hình SHOP thành công."
+      );
+    } catch (err) {
+      console.error(err);
+      setError(err?.message || "Lưu cấu hình thất bại.");
     } finally {
       setSaving(false);
     }
   }
 
+  if (loading) {
+    return (
+      <main style={styles.page}>
+        <div style={styles.loading}>
+          Đang tải quản lý SHOP...
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main style={styles.page}>
-      <div style={styles.glow} />
-
       <div style={styles.container}>
-        <header style={styles.header}>
+        <div style={styles.header}>
           <div>
-            <div style={styles.logo}>
+            <div style={styles.badge}>
               XENOVA PLAY
             </div>
 
-            <h1 style={styles.heading}>
-              QUẢN LÝ BANNER SHOP
+            <h1 style={styles.title}>
+              QUẢN LÝ SHOP
             </h1>
 
-            <p style={styles.subheading}>
-              Chọn ảnh trực tiếp từ thiết bị.
-              Không cần nhập link ảnh.
+            <p style={styles.subtitle}>
+              Quản lý logo và banner hiển thị trên trang
+              SHOP.
             </p>
           </div>
 
-          <div style={styles.headerActions}>
-            <Link
-              href="/admin"
-              style={styles.backButton}
-            >
-              ← Admin
-            </Link>
-
-            <Link
-              href="/shop"
-              target="_blank"
-              style={styles.shopButton}
-            >
-              Xem Shop ↗
-            </Link>
-          </div>
-        </header>
-
-        {message && (
-          <div
+          <button
+            type="button"
+            onClick={saveSettings}
+            disabled={saving}
             style={{
-              ...styles.message,
-              ...(message.startsWith("✓")
-                ? styles.successMessage
-                : styles.errorMessage),
+              ...styles.saveButton,
+              opacity: saving ? 0.65 : 1,
             }}
           >
-            {message}
+            {saving
+              ? "ĐANG LƯU..."
+              : "💾 LƯU CẤU HÌNH"}
+          </button>
+        </div>
+
+        {message && (
+          <div style={styles.successMessage}>
+            ✓ {message}
           </div>
         )}
 
-        {loading ? (
-          <div style={styles.loading}>
-            Đang tải banner...
+        {error && (
+          <div style={styles.errorMessage}>
+            ⚠ {error}
           </div>
-        ) : (
-          <>
-            <section style={styles.card}>
-              <div style={styles.cardHeader}>
-                <div>
-                  <div style={styles.tag}>
-                    ADVERTISEMENT
-                  </div>
+        )}
 
-                  <h2 style={styles.cardTitle}>
-                    BANNER QUẢNG CÁO
-                  </h2>
+        {/* ================= LOGO ================= */}
 
-                  <p
-                    style={
-                      styles.cardDescription
-                    }
-                  >
-                    Upload ảnh trực tiếp.
-                    Banner trên Shop sẽ
-                    tự động chuyển.
-                  </p>
-                </div>
+        <section style={styles.card}>
+          <div style={styles.sectionHeader}>
+            <div>
+              <h2 style={styles.sectionTitle}>
+                LOGO SHOP
+              </h2>
 
-                <button
-                  type="button"
-                  onClick={addBanner}
-                  style={styles.addButton}
-                >
-                  ＋ THÊM BANNER
-                </button>
-              </div>
+              <p style={styles.sectionDescription}>
+                Logo này sẽ được sử dụng trên giao diện
+                SHOP. Bạn có thể thay đổi bất cứ lúc nào.
+              </p>
+            </div>
+          </div>
 
-              {banners.length === 0 ? (
-                <div style={styles.empty}>
-                  <div
-                    style={
-                      styles.emptyIcon
-                    }
-                  >
-                    🖼️
-                  </div>
-
-                  <div>
-                    Chưa có banner
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={addBanner}
-                    style={
-                      styles.emptyButton
-                    }
-                  >
-                    ＋ THÊM BANNER ĐẦU TIÊN
-                  </button>
-                </div>
+          <div style={styles.logoArea}>
+            <div style={styles.logoPreview}>
+              {logoUrl ? (
+                <img
+                  src={logoUrl}
+                  alt="XENOVA PLAY Logo"
+                  style={styles.logoImage}
+                />
               ) : (
-                <div style={styles.list}>
-                  {banners.map(
-                    (banner, index) => (
-                      <div
-                        key={banner.id}
-                        style={{
-                          ...styles.bannerCard,
-                          opacity:
-                            banner.enabled
-                              ? 1
-                              : 0.55,
-                        }}
-                      >
-                        <div
-                          style={
-                            styles.bannerHeader
-                          }
-                        >
-                          <strong>
-                            BANNER #
-                            {index + 1}
-                          </strong>
-
-                          <div
-                            style={
-                              styles.actions
-                            }
-                          >
-                            <button
-                              type="button"
-                              onClick={() =>
-                                moveBanner(
-                                  index,
-                                  "up"
-                                )
-                              }
-                              disabled={
-                                index === 0
-                              }
-                              style={
-                                styles.iconButton
-                              }
-                            >
-                              ↑
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() =>
-                                moveBanner(
-                                  index,
-                                  "down"
-                                )
-                              }
-                              disabled={
-                                index ===
-                                banners.length -
-                                  1
-                              }
-                              style={
-                                styles.iconButton
-                              }
-                            >
-                              ↓
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() =>
-                                toggleBanner(
-                                  banner.id
-                                )
-                              }
-                              style={
-                                banner.enabled
-                                  ? styles.onButton
-                                  : styles.offButton
-                              }
-                            >
-                              {banner.enabled
-                                ? "ĐANG HIỆN"
-                                : "ĐANG ẨN"}
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() =>
-                                deleteBanner(
-                                  banner.id
-                                )
-                              }
-                              style={
-                                styles.deleteButton
-                              }
-                            >
-                              XÓA
-                            </button>
-                          </div>
-                        </div>
-
-                        <div
-                          style={
-                            styles.bannerContent
-                          }
-                        >
-                          <div
-                            style={
-                              styles.uploadArea
-                            }
-                          >
-                            <input
-                              ref={(element) => {
-                                fileInputs.current[
-                                  banner.id
-                                ] = element;
-                              }}
-                              type="file"
-                              accept="image/*"
-                              style={
-                                styles.hiddenInput
-                              }
-                              onChange={(
-                                event
-                              ) => {
-                                const file =
-                                  event.target
-                                    .files?.[0];
-
-                                if (file) {
-                                  uploadBannerFile(
-                                    banner.id,
-                                    file
-                                  );
-                                }
-
-                                event.target.value =
-                                  "";
-                              }}
-                            />
-
-                            <button
-                              type="button"
-                              onClick={() =>
-                                fileInputs.current[
-                                  banner.id
-                                ]?.click()
-                              }
-                              disabled={
-                                uploading[
-                                  banner.id
-                                ]
-                              }
-                              style={
-                                styles.uploadButton
-                              }
-                            >
-                              {uploading[
-                                banner.id
-                              ]
-                                ? "⏳ ĐANG UPLOAD..."
-                                : "📁 CHỌN ẢNH TỪ THIẾT BỊ"}
-                            </button>
-
-                            <div
-                              style={
-                                styles.fileHint
-                              }
-                            >
-                              JPG / PNG / WEBP
-                              · tối đa 10MB
-                            </div>
-
-                            <div
-                              style={
-                                styles.titleLabel
-                              }
-                            >
-                              TÊN BANNER
-                              <span
-                                style={
-                                  styles.optional
-                                }
-                              >
-                                {" "}
-                                (không bắt buộc)
-                              </span>
-                            </div>
-
-                            <input
-                              value={
-                                banner.title
-                              }
-                              onChange={(
-                                event
-                              ) =>
-                                updateBanner(
-                                  banner.id,
-                                  "title",
-                                  event.target
-                                    .value
-                                )
-                              }
-                              placeholder="Banner XENOVA"
-                              style={
-                                styles.input
-                              }
-                            />
-                          </div>
-
-                          <div
-                            style={
-                              styles.previewBox
-                            }
-                          >
-                            <div
-                              style={
-                                styles.previewTitle
-                              }
-                            >
-                              PREVIEW
-                            </div>
-
-                            {banner.image_url ? (
-                              <img
-                                src={
-                                  banner.image_url
-                                }
-                                alt={
-                                  banner.title ||
-                                  "Banner"
-                                }
-                                style={
-                                  styles.previewImage
-                                }
-                              />
-                            ) : (
-                              <div
-                                style={
-                                  styles.noImage
-                                }
-                              >
-                                Chưa chọn ảnh
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  )}
+                <div style={styles.noLogo}>
+                  <span>𝕏</span>
+                  <small>
+                    CHƯA CÓ LOGO
+                  </small>
                 </div>
               )}
-            </section>
+            </div>
 
-            <section style={styles.card}>
-              <div style={styles.cardHeader}>
-                <div>
-                  <div style={styles.tag}>
-                    LIVE PREVIEW
-                  </div>
-
-                  <h2 style={styles.cardTitle}>
-                    XEM TRƯỚC SHOP
-                  </h2>
-                </div>
-              </div>
-
-              <div style={styles.shopPreview}>
-                {banners.some(
-                  (banner) =>
-                    banner.enabled &&
-                    banner.image_url
-                ) ? (
-                  <img
-                    src={
-                      banners.find(
-                        (banner) =>
-                          banner.enabled &&
-                          banner.image_url
-                      )?.image_url
-                    }
-                    alt="Shop banner"
-                    style={
-                      styles.previewShopBanner
-                    }
-                  />
-                ) : (
-                  <div
-                    style={
-                      styles.noBanner
-                    }
-                  >
-                    Chưa có banner đang bật
-                  </div>
-                )}
-              </div>
-            </section>
-
-            <div style={styles.saveArea}>
+            <div style={styles.logoActions}>
               <button
                 type="button"
-                onClick={saveSettings}
-                disabled={
-                  saving ||
-                  Object.values(
-                    uploading
-                  ).some(Boolean)
+                onClick={() =>
+                  logoInputRef.current?.click()
                 }
-                style={{
-                  ...styles.saveButton,
-                  opacity:
-                    saving ? 0.6 : 1,
-                }}
+                disabled={uploadingLogo}
+                style={styles.primaryButton}
               >
-                {saving
-                  ? "ĐANG LƯU..."
-                  : "💾 LƯU TẤT CẢ BANNER"}
+                {uploadingLogo
+                  ? "ĐANG UPLOAD..."
+                  : "🖼️ TẢI LOGO MỚI"}
               </button>
+
+              {logoUrl && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLogoUrl("");
+                    setMessage(
+                      "Đã xóa logo khỏi cấu hình. Nhấn LƯU CẤU HÌNH để áp dụng."
+                    );
+                  }}
+                  style={styles.deleteButton}
+                >
+                  🗑️ XÓA LOGO
+                </button>
+              )}
+
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleLogoUpload}
+                style={{ display: "none" }}
+              />
+
+              <div style={styles.hint}>
+                JPG, PNG, WEBP, GIF hoặc AVIF · tối đa
+                10MB
+              </div>
             </div>
-          </>
-        )}
+          </div>
+        </section>
+
+        {/* ================= BANNER ================= */}
+
+        <section style={styles.card}>
+          <div style={styles.sectionHeader}>
+            <div>
+              <h2 style={styles.sectionTitle}>
+                BANNER QUẢNG CÁO
+              </h2>
+
+              <p style={styles.sectionDescription}>
+                Thêm nhiều banner. Banner đang bật sẽ
+                tự động chạy trên SHOP.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                bannerInputRef.current?.click()
+              }
+              disabled={uploadingBanner}
+              style={styles.primaryButton}
+            >
+              {uploadingBanner
+                ? "ĐANG UPLOAD..."
+                : "＋ THÊM BANNER"}
+            </button>
+
+            <input
+              ref={bannerInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleBannerUpload}
+              style={{ display: "none" }}
+            />
+          </div>
+
+          {banners.length === 0 ? (
+            <div style={styles.empty}>
+              <div style={styles.emptyIcon}>
+                🖼️
+              </div>
+
+              <strong>
+                Chưa có banner
+              </strong>
+
+              <span>
+                Nhấn “THÊM BANNER” để tải ảnh quảng cáo
+                lên.
+              </span>
+            </div>
+          ) : (
+            <div style={styles.bannerList}>
+              {banners.map((banner, index) => (
+                <div
+                  key={banner.id || index}
+                  style={{
+                    ...styles.bannerItem,
+                    opacity:
+                      banner.enabled === false
+                        ? 0.55
+                        : 1,
+                  }}
+                >
+                  <div style={styles.bannerNumber}>
+                    {index + 1}
+                  </div>
+
+                  <div style={styles.bannerPreview}>
+                    {banner.image_url ? (
+                      <img
+                        src={banner.image_url}
+                        alt={`Banner ${index + 1}`}
+                        style={styles.bannerImage}
+                      />
+                    ) : (
+                      <div style={styles.invalidImage}>
+                        Không có ảnh
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={styles.bannerInfo}>
+                    <strong>
+                      BANNER {index + 1}
+                    </strong>
+
+                    <span
+                      style={{
+                        ...styles.status,
+                        background:
+                          banner.enabled === false
+                            ? "#3a3a3a"
+                            : "#163d29",
+                        color:
+                          banner.enabled === false
+                            ? "#aaa"
+                            : "#66e09b",
+                      }}
+                    >
+                      {banner.enabled === false
+                        ? "ĐANG TẮT"
+                        : "ĐANG BẬT"}
+                    </span>
+                  </div>
+
+                  <div style={styles.bannerControls}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        moveBanner(
+                          banner.id,
+                          "up"
+                        )
+                      }
+                      disabled={index === 0}
+                      style={{
+                        ...styles.smallButton,
+                        opacity:
+                          index === 0 ? 0.35 : 1,
+                      }}
+                      title="Đưa lên"
+                    >
+                      ↑
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        moveBanner(
+                          banner.id,
+                          "down"
+                        )
+                      }
+                      disabled={
+                        index ===
+                        banners.length - 1
+                      }
+                      style={{
+                        ...styles.smallButton,
+                        opacity:
+                          index ===
+                          banners.length - 1
+                            ? 0.35
+                            : 1,
+                      }}
+                      title="Đưa xuống"
+                    >
+                      ↓
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        toggleBanner(
+                          banner.id
+                        )
+                      }
+                      style={
+                        banner.enabled === false
+                          ? styles.enableButton
+                          : styles.disableButton
+                      }
+                    >
+                      {banner.enabled === false
+                        ? "BẬT"
+                        : "TẮT"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        deleteBanner(
+                          banner.id
+                        )
+                      }
+                      style={styles.deleteButton}
+                    >
+                      XÓA
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={styles.bottomHint}>
+            💡 Banner được hiển thị theo thứ tự từ trên
+            xuống. Chỉ banner <b>ĐANG BẬT</b> mới xuất
+            hiện trên SHOP.
+          </div>
+        </section>
+
+        {/* ================= PREVIEW ================= */}
+
+        <section style={styles.card}>
+          <div style={styles.sectionHeader}>
+            <div>
+              <h2 style={styles.sectionTitle}>
+                XEM TRƯỚC
+              </h2>
+
+              <p style={styles.sectionDescription}>
+                Kiểm tra nhanh logo và banner trước khi
+                lưu.
+              </p>
+            </div>
+          </div>
+
+          <div style={styles.previewShop}>
+            <div style={styles.previewTop}>
+              {logoUrl ? (
+                <img
+                  src={logoUrl}
+                  alt="Logo preview"
+                  style={styles.previewLogo}
+                />
+              ) : (
+                <div style={styles.previewLogoText}>
+                  XENOVA
+                  <small>PLAY</small>
+                </div>
+              )}
+            </div>
+
+            {banners.filter(
+              (banner) =>
+                banner.enabled !== false &&
+                banner.image_url
+            ).length > 0 ? (
+              <div style={styles.previewBanner}>
+                <img
+                  src={
+                    banners.find(
+                      (banner) =>
+                        banner.enabled !== false &&
+                        banner.image_url
+                    )?.image_url
+                  }
+                  alt="Banner preview"
+                  style={styles.previewBannerImage}
+                />
+              </div>
+            ) : (
+              <div style={styles.previewEmpty}>
+                Chưa có banner đang bật
+              </div>
+            )}
+          </div>
+        </section>
       </div>
+
+      <style jsx global>{`
+        * {
+          box-sizing: border-box;
+        }
+
+        body {
+          margin: 0;
+          background: #08090d;
+          color: #fff;
+        }
+
+        button {
+          font-family: inherit;
+        }
+      `}</style>
     </main>
   );
 }
@@ -821,32 +753,23 @@ const styles = {
   page: {
     minHeight: "100vh",
     background:
-      "radial-gradient(circle at top,#24102f 0%,#08070b 42%,#040407 100%)",
-    color: "#fff",
-    fontFamily:
-      "Arial,Helvetica,sans-serif",
-    padding:
-      "30px 18px 110px",
-  },
-
-  glow: {
-    position: "fixed",
-    width: "500px",
-    height: "500px",
-    borderRadius: "50%",
-    background:
-      "rgba(255,55,170,.08)",
-    filter: "blur(100px)",
-    top: "-220px",
-    right: "-180px",
-    pointerEvents: "none",
+      "radial-gradient(circle at top, #15172a 0%, #08090d 48%, #050507 100%)",
+    padding: "30px 16px 80px",
   },
 
   container: {
-    maxWidth: "1150px",
+    width: "100%",
+    maxWidth: "1250px",
     margin: "0 auto",
-    position: "relative",
-    zIndex: 1,
+  },
+
+  loading: {
+    minHeight: "80vh",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "#aaa",
+    fontSize: "15px",
   },
 
   header: {
@@ -854,415 +777,379 @@ const styles = {
     justifyContent: "space-between",
     alignItems: "center",
     gap: "20px",
-    marginBottom: "25px",
+    marginBottom: "24px",
     flexWrap: "wrap",
   },
 
-  logo: {
-    color: "#ff4db8",
-    fontWeight: "900",
-    fontSize: "13px",
-    letterSpacing: "4px",
+  badge: {
+    display: "inline-flex",
+    padding: "6px 10px",
+    borderRadius: "999px",
+    background: "rgba(255,255,255,.07)",
+    border: "1px solid rgba(255,255,255,.10)",
+    color: "#aaa",
+    fontSize: "10px",
+    fontWeight: 800,
+    letterSpacing: "1.5px",
     marginBottom: "8px",
   },
 
-  heading: {
+  title: {
     margin: 0,
     fontSize: "30px",
-    fontWeight: "950",
+    fontWeight: 950,
+    letterSpacing: "-1px",
   },
 
-  subheading: {
-    margin:
-      "8px 0 0",
-    color: "#92909c",
+  subtitle: {
+    margin: "8px 0 0",
+    color: "#858894",
     fontSize: "13px",
-  },
-
-  headerActions: {
-    display: "flex",
-    gap: "10px",
-  },
-
-  backButton: {
-    textDecoration: "none",
-    color: "#fff",
-    background: "#17151d",
-    border:
-      "1px solid #302b3b",
-    borderRadius: "12px",
-    padding:
-      "12px 18px",
-    fontWeight: "800",
-  },
-
-  shopButton: {
-    textDecoration: "none",
-    color: "#fff",
-    background:
-      "linear-gradient(135deg,#8b32ff,#ff319f)",
-    borderRadius: "12px",
-    padding:
-      "12px 18px",
-    fontWeight: "900",
-  },
-
-  message: {
-    padding:
-      "14px 16px",
-    borderRadius: "12px",
-    marginBottom: "18px",
-    fontWeight: "700",
-  },
-
-  successMessage: {
-    background:
-      "rgba(0,230,118,.1)",
-    border:
-      "1px solid rgba(0,230,118,.3)",
-    color: "#5dffab",
-  },
-
-  errorMessage: {
-    background:
-      "rgba(255,23,68,.1)",
-    border:
-      "1px solid rgba(255,23,68,.3)",
-    color: "#ff7188",
-  },
-
-  loading: {
-    padding: "60px",
-    textAlign: "center",
-    background: "#111017",
-    border:
-      "1px solid #292531",
-    borderRadius: "18px",
-    color: "#aaa",
-  },
-
-  card: {
-    background:
-      "linear-gradient(145deg,rgba(20,18,27,.96),rgba(10,9,14,.96))",
-    border:
-      "1px solid rgba(255,255,255,.08)",
-    borderRadius: "20px",
-    padding: "24px",
-    marginBottom: "20px",
-  },
-
-  cardHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: "15px",
-    marginBottom: "20px",
-    flexWrap: "wrap",
-  },
-
-  tag: {
-    color: "#ff4db8",
-    fontSize: "10px",
-    fontWeight: "900",
-    letterSpacing: "2px",
-    marginBottom: "7px",
-  },
-
-  cardTitle: {
-    margin: 0,
-    fontSize: "19px",
-    fontWeight: "950",
-  },
-
-  cardDescription: {
-    color: "#85818e",
-    margin:
-      "7px 0 0",
-    fontSize: "13px",
-  },
-
-  addButton: {
-    border: 0,
-    background:
-      "linear-gradient(135deg,#ff329f,#8c35ff)",
-    color: "#fff",
-    borderRadius: "11px",
-    padding:
-      "13px 17px",
-    fontWeight: "900",
-    cursor: "pointer",
-  },
-
-  empty: {
-    textAlign: "center",
-    border:
-      "1px dashed #34303c",
-    borderRadius: "15px",
-    padding:
-      "45px 20px",
-    color: "#77737e",
-  },
-
-  emptyIcon: {
-    fontSize: "40px",
-    marginBottom: "10px",
-  },
-
-  emptyButton: {
-    marginTop: "15px",
-    border:
-      "1px solid #413849",
-    background: "#15121b",
-    color: "#fff",
-    padding:
-      "11px 16px",
-    borderRadius: "10px",
-    cursor: "pointer",
-    fontWeight: "800",
-  },
-
-  list: {
-    display: "grid",
-    gap: "15px",
-  },
-
-  bannerCard: {
-    background: "#0b0a10",
-    border:
-      "1px solid #292531",
-    borderRadius: "16px",
-    overflow: "hidden",
-  },
-
-  bannerHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: "10px",
-    padding:
-      "12px 14px",
-    borderBottom:
-      "1px solid #24212a",
-    flexWrap: "wrap",
-    color: "#ff4caf",
-  },
-
-  actions: {
-    display: "flex",
-    gap: "7px",
-    flexWrap: "wrap",
-  },
-
-  iconButton: {
-    minWidth: "34px",
-    height: "34px",
-    border:
-      "1px solid #38333f",
-    background: "#16131c",
-    color: "#fff",
-    borderRadius: "8px",
-    cursor: "pointer",
-    fontWeight: "900",
-  },
-
-  onButton: {
-    height: "34px",
-    border:
-      "1px solid rgba(0,230,118,.3)",
-    background:
-      "rgba(0,230,118,.08)",
-    color: "#49ff9a",
-    borderRadius: "8px",
-    padding:
-      "0 10px",
-    cursor: "pointer",
-    fontWeight: "900",
-    fontSize: "11px",
-  },
-
-  offButton: {
-    height: "34px",
-    border:
-      "1px solid #3a3541",
-    background: "#16131c",
-    color: "#8a8591",
-    borderRadius: "8px",
-    padding:
-      "0 10px",
-    cursor: "pointer",
-    fontWeight: "900",
-    fontSize: "11px",
-  },
-
-  deleteButton: {
-    height: "34px",
-    border:
-      "1px solid rgba(255,23,68,.3)",
-    background:
-      "rgba(255,23,68,.08)",
-    color: "#ff637e",
-    borderRadius: "8px",
-    padding:
-      "0 12px",
-    cursor: "pointer",
-    fontWeight: "900",
-  },
-
-  bannerContent: {
-    display: "grid",
-    gridTemplateColumns:
-      "minmax(0,1fr) minmax(280px,450px)",
-    gap: "20px",
-    padding: "20px",
-  },
-
-  uploadArea: {
-    minWidth: 0,
-  },
-
-  hiddenInput: {
-    display: "none",
-  },
-
-  uploadButton: {
-    width: "100%",
-    border:
-      "1px dashed rgba(255,61,171,.5)",
-    background:
-      "rgba(255,61,171,.06)",
-    color: "#ff65bd",
-    borderRadius: "13px",
-    padding:
-      "22px 15px",
-    cursor: "pointer",
-    fontWeight: "950",
-    fontSize: "14px",
-  },
-
-  fileHint: {
-    color: "#66616e",
-    fontSize: "11px",
-    marginTop: "8px",
-    marginBottom: "20px",
-    textAlign: "center",
-  },
-
-  titleLabel: {
-    color: "#aaa6b4",
-    fontSize: "11px",
-    fontWeight: "900",
-    letterSpacing: "1px",
-    marginBottom: "8px",
-  },
-
-  optional: {
-    color: "#65616d",
-    fontWeight: "500",
-  },
-
-  input: {
-    width: "100%",
-    boxSizing: "border-box",
-    background: "#0a090e",
-    border:
-      "1px solid #302c38",
-    borderRadius: "11px",
-    color: "#fff",
-    padding:
-      "13px 14px",
-    outline: "none",
-    fontSize: "14px",
-  },
-
-  previewBox: {
-    minWidth: 0,
-  },
-
-  previewTitle: {
-    fontSize: "10px",
-    color: "#696572",
-    fontWeight: "900",
-    letterSpacing: "1px",
-    marginBottom: "7px",
-  },
-
-  previewImage: {
-    width: "100%",
-    aspectRatio:
-      "1200 / 320",
-    objectFit: "cover",
-    display: "block",
-    borderRadius: "11px",
-    border:
-      "1px solid #2c2833",
-    background: "#07070a",
-  },
-
-  noImage: {
-    width: "100%",
-    aspectRatio:
-      "1200 / 320",
-    border:
-      "1px dashed #37323f",
-    borderRadius: "11px",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    color: "#68636f",
-    background: "#08070b",
-    fontSize: "12px",
-  },
-
-  shopPreview: {
-    background: "#08070c",
-    border:
-      "1px solid #292431",
-    borderRadius: "16px",
-    padding: "15px",
-  },
-
-  previewShopBanner: {
-    width: "100%",
-    aspectRatio:
-      "1200 / 320",
-    objectFit: "cover",
-    borderRadius: "13px",
-    display: "block",
-  },
-
-  noBanner: {
-    aspectRatio:
-      "1200 / 320",
-    border:
-      "1px dashed #37323f",
-    borderRadius: "13px",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    color: "#68636f",
-    fontSize: "12px",
-  },
-
-  saveArea: {
-    position: "sticky",
-    bottom: "15px",
-    display: "flex",
-    justifyContent: "center",
-    zIndex: 20,
   },
 
   saveButton: {
     border: 0,
+    borderRadius: "12px",
+    padding: "13px 18px",
     background:
-      "linear-gradient(135deg,#ff329f,#7d35ff)",
-    color: "#fff",
-    borderRadius: "14px",
-    padding:
-      "16px 30px",
-    fontSize: "14px",
-    fontWeight: "950",
+      "linear-gradient(135deg,#ffffff,#d9d9df)",
+    color: "#08090d",
+    fontWeight: 950,
+    fontSize: "12px",
     cursor: "pointer",
+  },
+
+  successMessage: {
+    marginBottom: "18px",
+    padding: "13px 15px",
+    borderRadius: "12px",
+    background: "rgba(36,150,88,.12)",
+    border: "1px solid rgba(70,200,120,.22)",
+    color: "#78e2a5",
+    fontSize: "13px",
+  },
+
+  errorMessage: {
+    marginBottom: "18px",
+    padding: "13px 15px",
+    borderRadius: "12px",
+    background: "rgba(220,50,70,.12)",
+    border: "1px solid rgba(255,80,100,.22)",
+    color: "#ff8a9b",
+    fontSize: "13px",
+  },
+
+  card: {
+    background:
+      "linear-gradient(145deg,rgba(24,25,35,.96),rgba(13,14,20,.96))",
+    border: "1px solid rgba(255,255,255,.08)",
+    borderRadius: "18px",
+    padding: "20px",
+    marginBottom: "18px",
     boxShadow:
-      "0 15px 45px rgba(174,40,255,.35)",
+      "0 20px 60px rgba(0,0,0,.25)",
+  },
+
+  sectionHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "15px",
+    marginBottom: "18px",
+    flexWrap: "wrap",
+  },
+
+  sectionTitle: {
+    margin: 0,
+    fontSize: "16px",
+    fontWeight: 950,
+    letterSpacing: ".5px",
+  },
+
+  sectionDescription: {
+    margin: "6px 0 0",
+    color: "#777b88",
+    fontSize: "12px",
+    lineHeight: 1.5,
+  },
+
+  primaryButton: {
+    border: 0,
+    borderRadius: "10px",
+    padding: "11px 14px",
+    background: "#fff",
+    color: "#08090d",
+    fontSize: "11px",
+    fontWeight: 950,
+    cursor: "pointer",
+  },
+
+  logoArea: {
+    display: "flex",
+    gap: "22px",
+    alignItems: "center",
+    flexWrap: "wrap",
+  },
+
+  logoPreview: {
+    width: "220px",
+    height: "100px",
+    borderRadius: "15px",
+    border: "1px solid rgba(255,255,255,.10)",
+    background:
+      "linear-gradient(145deg,#11131b,#090a0e)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+
+  logoImage: {
+    maxWidth: "90%",
+    maxHeight: "80%",
+    objectFit: "contain",
+  },
+
+  noLogo: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: "5px",
+    color: "#555965",
+  },
+
+  noLogoIcon: {},
+
+  noLogo: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "5px",
+    color: "#555965",
+  },
+
+  logoActions: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: "9px",
+  },
+
+  deleteButton: {
+    border: "1px solid rgba(255,70,90,.20)",
+    borderRadius: "9px",
+    padding: "9px 12px",
+    background: "rgba(255,60,80,.08)",
+    color: "#ff7788",
+    fontSize: "10px",
+    fontWeight: 900,
+    cursor: "pointer",
+  },
+
+  hint: {
+    color: "#555966",
+    fontSize: "10px",
+  },
+
+  empty: {
+    minHeight: "180px",
+    borderRadius: "14px",
+    border:
+      "1px dashed rgba(255,255,255,.10)",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "7px",
+    color: "#707480",
+    fontSize: "12px",
+    textAlign: "center",
+  },
+
+  emptyIcon: {
+    fontSize: "28px",
+    marginBottom: "3px",
+  },
+
+  bannerList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
+  },
+
+  bannerItem: {
+    display: "grid",
+    gridTemplateColumns:
+      "38px minmax(220px,360px) 1fr auto",
+    gap: "14px",
+    alignItems: "center",
+    padding: "12px",
+    borderRadius: "14px",
+    background:
+      "rgba(255,255,255,.025)",
+    border: "1px solid rgba(255,255,255,.07)",
+    transition: "opacity .2s",
+  },
+
+  bannerNumber: {
+    width: "32px",
+    height: "32px",
+    borderRadius: "9px",
+    background: "rgba(255,255,255,.07)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: 950,
+    fontSize: "12px",
+    color: "#aaa",
+  },
+
+  bannerPreview: {
+    width: "100%",
+    aspectRatio: "1200 / 320",
+    borderRadius: "9px",
+    overflow: "hidden",
+    background: "#090a0e",
+    border:
+      "1px solid rgba(255,255,255,.07)",
+  },
+
+  bannerImage: {
+    width: "100%",
+    height: "100%",
+    display: "block",
+    objectFit: "cover",
+  },
+
+  invalidImage: {
+    width: "100%",
+    height: "100%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "#666",
+    fontSize: "11px",
+  },
+
+  bannerInfo: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: "7px",
+    minWidth: 0,
+  },
+
+  status: {
+    display: "inline-flex",
+    padding: "5px 8px",
+    borderRadius: "999px",
+    fontSize: "9px",
+    fontWeight: 900,
+  },
+
+  bannerControls: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: "6px",
+    flexWrap: "wrap",
+  },
+
+  smallButton: {
+    width: "32px",
+    height: "32px",
+    border: "1px solid rgba(255,255,255,.10)",
+    borderRadius: "8px",
+    background: "rgba(255,255,255,.05)",
+    color: "#fff",
+    fontWeight: 900,
+    cursor: "pointer",
+  },
+
+  enableButton: {
+    border: "1px solid rgba(80,210,130,.20)",
+    borderRadius: "8px",
+    background: "rgba(70,200,120,.08)",
+    color: "#6de29a",
+    padding: "8px 10px",
+    fontSize: "9px",
+    fontWeight: 900,
+    cursor: "pointer",
+  },
+
+  disableButton: {
+    border: "1px solid rgba(255,190,70,.20)",
+    borderRadius: "8px",
+    background: "rgba(255,180,60,.08)",
+    color: "#e8b66a",
+    padding: "8px 10px",
+    fontSize: "9px",
+    fontWeight: 900,
+    cursor: "pointer",
+  },
+
+  bottomHint: {
+    marginTop: "15px",
+    padding: "12px",
+    borderRadius: "10px",
+    background: "rgba(255,255,255,.025)",
+    color: "#777b87",
+    fontSize: "10px",
+    lineHeight: 1.5,
+  },
+
+  previewShop: {
+    borderRadius: "14px",
+    overflow: "hidden",
+    background: "#090a0f",
+    border:
+      "1px solid rgba(255,255,255,.08)",
+  },
+
+  previewTop: {
+    height: "64px",
+    padding: "0 18px",
+    display: "flex",
+    alignItems: "center",
+    borderBottom:
+      "1px solid rgba(255,255,255,.06)",
+  },
+
+  previewLogo: {
+    maxWidth: "150px",
+    maxHeight: "42px",
+    objectFit: "contain",
+  },
+
+  previewLogoText: {
+    fontSize: "17px",
+    fontWeight: 950,
+    letterSpacing: "1px",
+    display: "flex",
+    alignItems: "center",
+    gap: "5px",
+  },
+
+  previewBanner: {
+    width: "100%",
+    aspectRatio: "1200 / 320",
+    overflow: "hidden",
+  },
+
+  previewBannerImage: {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    display: "block",
+  },
+
+  previewEmpty: {
+    minHeight: "160px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "#555966",
+    fontSize: "12px",
   },
 };
