@@ -4,56 +4,150 @@ import { createClient } from "@supabase/supabase-js";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
-if (!supabaseUrl || !serviceRoleKey) {
-  console.error("Missing Supabase environment variables");
+/*
+==================================================
+SỬA LỖI TIẾNG VIỆT BỊ KIỂU:
+
+PHáº¦N Má»€M
+CÃ¡c loáº¡i KEY
+KEY 1 NGÃ€Y
+
+THÀNH:
+
+PHẦN MỀM
+Các loại KEY
+KEY 1 NGÀY
+==================================================
+*/
+
+function fixVietnamese(value) {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  // Chỉ sửa khi chuỗi có dấu hiệu bị mojibake
+  const looksBroken =
+    value.includes("Ã") ||
+    value.includes("Â") ||
+    value.includes("áº") ||
+    value.includes("á»") ||
+    value.includes("á»") ||
+    value.includes("â") ||
+    value.includes("Ä") ||
+    value.includes("Å") ||
+    value.includes("Æ") ||
+    value.includes("ð");
+
+  if (!looksBroken) {
+    return value;
+  }
+
+  try {
+    const fixed = Buffer
+      .from(value, "latin1")
+      .toString("utf8");
+
+    // Chỉ dùng kết quả nếu nó hợp lệ
+    if (
+      fixed &&
+      !fixed.includes("�") &&
+      fixed !== value
+    ) {
+      return fixed;
+    }
+  } catch (error) {
+    console.error("FIX UTF8 ERROR:", error);
+  }
+
+  return value;
 }
 
-const supabaseAdmin = createClient(
-  supabaseUrl,
-  serviceRoleKey
-);
+/*
+==================================================
+SỬA TOÀN BỘ OBJECT ĐỆ QUY
+==================================================
+*/
+
+function fixObject(value) {
+  if (typeof value === "string") {
+    return fixVietnamese(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) =>
+      fixObject(item)
+    );
+  }
+
+  if (
+    value &&
+    typeof value === "object"
+  ) {
+    const result = {};
+
+    for (const [key, item] of Object.entries(value)) {
+      result[key] = fixObject(item);
+    }
+
+    return result;
+  }
+
+  return value;
+}
+
+/*
+==================================================
+GET
+==================================================
+*/
 
 export async function GET() {
   try {
-    // ==========================================
-    // LẤY DANH MỤC
-    // ==========================================
+    /*
+    ==============================================
+    CATEGORY
+    ==============================================
+    */
 
-    const { data: categories, error: categoryError } =
-      await supabaseAdmin
-        .from("product_categories")
-        .select(
-          `
-          id,
-          name,
-          description,
-          image_url,
-          demo_image_url,
-          active,
-          parent_id,
-          created_at,
-          updated_at
-          `
-        )
-        .eq("active", true)
-        .order("id", {
-          ascending: true,
-        });
+    const {
+      data: categories,
+      error: categoryError,
+    } = await supabaseAdmin
+      .from("product_categories")
+      .select(
+        `
+        id,
+        name,
+        description,
+        image_url,
+        demo_image_url,
+        active,
+        parent_id,
+        created_at,
+        updated_at
+        `
+      )
+      .eq("active", true)
+      .order("id", {
+        ascending: true,
+      });
 
     if (categoryError) {
       console.error(
-        "SHOP CATALOG CATEGORY ERROR:",
+        "CATEGORY ERROR:",
         categoryError
       );
 
-      return new NextResponse(
-        JSON.stringify({
+      return NextResponse.json(
+        {
           success: false,
           error: categoryError.message,
-        }),
+        },
         {
           status: 500,
           headers: {
@@ -66,46 +160,50 @@ export async function GET() {
       );
     }
 
-    // ==========================================
-    // LẤY SẢN PHẨM
-    // ==========================================
+    /*
+    ==============================================
+    PRODUCTS
+    ==============================================
+    */
 
-    const { data: products, error: productError } =
-      await supabaseAdmin
-        .from("products")
-        .select(
-          `
-          id,
-          name,
-          description,
-          price,
-          duration_days,
-          active,
-          is_active,
-          demo_image_url,
-          category_id,
-          media_type,
-          video_url,
-          created_at
-          `
-        )
-        .eq("active", true)
-        .eq("is_active", true)
-        .order("id", {
-          ascending: true,
-        });
+    const {
+      data: products,
+      error: productError,
+    } = await supabaseAdmin
+      .from("products")
+      .select(
+        `
+        id,
+        name,
+        description,
+        price,
+        duration_days,
+        active,
+        is_active,
+        demo_image_url,
+        category_id,
+        media_type,
+        video_url,
+        created_at
+        `
+      )
+      .eq("active", true)
+      .eq("is_active", true)
+      .order("id", {
+        ascending: true,
+      });
 
     if (productError) {
       console.error(
-        "SHOP CATALOG PRODUCT ERROR:",
+        "PRODUCT ERROR:",
         productError
       );
 
-      return new NextResponse(
-        JSON.stringify({
+      return NextResponse.json(
+        {
           success: false,
           error: productError.message,
-        }),
+        },
         {
           status: 500,
           headers: {
@@ -118,9 +216,11 @@ export async function GET() {
       );
     }
 
-    // ==========================================
-    // TẠO MAP CATEGORY
-    // ==========================================
+    /*
+    ==============================================
+    CATEGORY MAP
+    ==============================================
+    */
 
     const categoryMap = new Map();
 
@@ -131,21 +231,23 @@ export async function GET() {
       );
     }
 
-    // ==========================================
-    // LẤY ĐƯỜNG DẪN CATEGORY
-    //
-    // Ví dụ:
-    //
-    // KEY
-    //  └── ANDROID
-    //
-    // sẽ trả:
-    //
-    // [
-    //   KEY,
-    //   ANDROID
-    // ]
-    // ==========================================
+    /*
+    ==============================================
+    CATEGORY PATH
+
+    Ví dụ:
+
+    KEY
+    └── ANDROID
+
+    =>
+
+    [
+      KEY,
+      ANDROID
+    ]
+    ==============================================
+    */
 
     function getCategoryPath(categoryId) {
       if (
@@ -155,16 +257,20 @@ export async function GET() {
         return [];
       }
 
-      const result = [];
+      const path = [];
 
-      let current = categoryMap.get(
-        Number(categoryId)
-      );
+      let current =
+        categoryMap.get(
+          Number(categoryId)
+        );
 
       let guard = 0;
 
-      while (current && guard < 20) {
-        result.unshift({
+      while (
+        current &&
+        guard < 20
+      ) {
+        path.unshift({
           id: current.id,
           name: current.name,
           parent_id:
@@ -178,67 +284,73 @@ export async function GET() {
           break;
         }
 
-        current = categoryMap.get(
-          Number(current.parent_id)
-        );
+        current =
+          categoryMap.get(
+            Number(current.parent_id)
+          );
 
         guard++;
       }
 
-      return result;
+      return path;
     }
 
-    // ==========================================
-    // GẮN CATEGORY VÀO PRODUCT
-    // ==========================================
+    /*
+    ==============================================
+    GẮN CATEGORY VÀO PRODUCT
+    ==============================================
+    */
 
     const productsWithCategory =
-      (products || []).map((product) => {
-        const categoryPath =
-          getCategoryPath(product.category_id);
+      (products || []).map(
+        (product) => {
+          const categoryPath =
+            getCategoryPath(
+              product.category_id
+            );
 
-        const parentCategory =
-          categoryPath.length > 0
-            ? categoryPath[0]
-            : null;
+          return {
+            ...product,
 
-        const childCategory =
-          categoryPath.length > 1
-            ? categoryPath[
-                categoryPath.length - 1
-              ]
-            : null;
+            category:
+              categoryPath.length
+                ? categoryPath[
+                    categoryPath.length - 1
+                  ]
+                : null,
 
-        return {
-          ...product,
+            category_path:
+              categoryPath,
 
-          category:
-            categoryPath.length > 0
-              ? categoryPath[
-                  categoryPath.length - 1
-                ]
-              : null,
+            parent_category:
+              categoryPath.length
+                ? categoryPath[0]
+                : null,
 
-          category_path: categoryPath,
+            child_category:
+              categoryPath.length > 1
+                ? categoryPath[
+                    categoryPath.length - 1
+                  ]
+                : null,
+          };
+        }
+      );
 
-          parent_category:
-            parentCategory,
-
-          child_category:
-            childCategory,
-        };
-      });
-
-    // ==========================================
-    // RESPONSE
-    // ==========================================
+    /*
+    ==============================================
+    RESPONSE
+    ==============================================
+    */
 
     const responseData = {
       success: true,
 
-      categories: categories || [],
+      categories:
+        categories || [],
 
-      products: productsWithCategory,
+      products:
+        productsWithCategory,
 
       meta: {
         category_count:
@@ -252,8 +364,18 @@ export async function GET() {
       },
     };
 
+    /*
+    ==============================================
+    QUAN TRỌNG:
+    SỬA MOJIBAKE NGAY TRƯỚC KHI TRẢ JSON
+    ==============================================
+    */
+
+    const fixedResponse =
+      fixObject(responseData);
+
     return new NextResponse(
-      JSON.stringify(responseData),
+      JSON.stringify(fixedResponse),
       {
         status: 200,
 
@@ -272,19 +394,20 @@ export async function GET() {
     );
   } catch (error) {
     console.error(
-      "SHOP CATALOG UNEXPECTED ERROR:",
+      "SHOP CATALOG ERROR:",
       error
     );
 
-    return new NextResponse(
-      JSON.stringify({
+    return NextResponse.json(
+      {
         success: false,
         error:
           error?.message ||
-          "Không thể tải danh mục cửa hàng",
-      }),
+          "Không thể tải catalog",
+      },
       {
         status: 500,
+
         headers: {
           "Content-Type":
             "application/json; charset=utf-8",
