@@ -1,17 +1,37 @@
 import { NextResponse } from "next/server";
 import { supabase } from "../../../../lib/supabase";
 
-async function checkAdmin() {
+async function checkAdmin(request) {
+  const authHeader = request.headers.get("authorization");
+
+  if (!authHeader?.startsWith("Bearer ")) {
+    return {
+      ok: false,
+      status: 401,
+      error: "Chưa nhận được phiên đăng nhập.",
+    };
+  }
+
+  const token = authHeader.replace("Bearer ", "").trim();
+
+  if (!token) {
+    return {
+      ok: false,
+      status: 401,
+      error: "Token đăng nhập không hợp lệ.",
+    };
+  }
+
   const {
     data: { user },
     error: userError,
-  } = await supabase.auth.getUser();
+  } = await supabase.auth.getUser(token);
 
   if (userError || !user) {
     return {
       ok: false,
       status: 401,
-      error: "Bạn chưa đăng nhập.",
+      error: "Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại.",
     };
   }
 
@@ -31,8 +51,7 @@ async function checkAdmin() {
   }
 
   const isAdmin =
-    String(profile?.role || "").toLowerCase() ===
-      "admin" ||
+    String(profile?.role || "").toLowerCase() === "admin" ||
     profile?.is_admin === true;
 
   if (!isAdmin) {
@@ -59,14 +78,18 @@ function normalizeBanners(banners) {
       id:
         banner?.id ||
         `banner-${Date.now()}-${index}`,
+
       image_url: String(
         banner?.image_url || ""
       ).trim(),
+
       title: String(
         banner?.title || ""
       ).trim(),
+
       enabled:
         banner?.enabled !== false,
+
       order:
         Number.isFinite(Number(banner?.order))
           ? Number(banner.order)
@@ -86,8 +109,8 @@ function normalizeBanners(banners) {
     }));
 }
 
-export async function GET() {
-  const auth = await checkAdmin();
+export async function GET(request) {
+  const auth = await checkAdmin(request);
 
   if (!auth.ok) {
     return NextResponse.json(
@@ -118,20 +141,21 @@ export async function GET() {
 
   return NextResponse.json({
     success: true,
-    settings: data || {
-      id: 1,
-      logo_url: "",
-      shop_badge: "XENOVA PLAY SHOP",
-      shop_title: "Cửa hàng",
-      shop_description:
-        "Chọn danh mục để xem sản phẩm và mua KEY.",
-      banners: [],
-    },
+    settings:
+      data || {
+        id: 1,
+        logo_url: "",
+        shop_badge: "XENOVA PLAY SHOP",
+        shop_title: "Cửa hàng",
+        shop_description:
+          "Chọn danh mục để xem sản phẩm và mua KEY.",
+        banners: [],
+      },
   });
 }
 
 export async function PUT(request) {
-  const auth = await checkAdmin();
+  const auth = await checkAdmin(request);
 
   if (!auth.ok) {
     return NextResponse.json(
@@ -150,28 +174,24 @@ export async function PUT(request) {
       body?.logo_url || ""
     ).trim();
 
-    const shopBadge =
-      String(
-        body?.shop_badge ||
-          "XENOVA PLAY SHOP"
-      ).trim();
+    const shopBadge = String(
+      body?.shop_badge ||
+        "XENOVA PLAY SHOP"
+    ).trim();
 
-    const shopTitle =
-      String(
-        body?.shop_title ||
-          "Cửa hàng"
-      ).trim();
+    const shopTitle = String(
+      body?.shop_title ||
+        "Cửa hàng"
+    ).trim();
 
-    const shopDescription =
-      String(
-        body?.shop_description ||
-          "Chọn danh mục để xem sản phẩm và mua KEY."
-      ).trim();
+    const shopDescription = String(
+      body?.shop_description ||
+        "Chọn danh mục để xem sản phẩm và mua KEY."
+    ).trim();
 
-    const banners =
-      normalizeBanners(
-        body?.banners
-      );
+    const banners = normalizeBanners(
+      body?.banners
+    );
 
     const { data, error } =
       await supabase
