@@ -51,60 +51,27 @@ export default function ShopPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  /*
-  ==================================================
-  SHOP NAVIGATION
-
-  parents
-  ↓
-  children
-  ↓
-  products
-  ==================================================
-  */
-
   const [selectedParent, setSelectedParent] =
     useState(null);
 
   const [selectedChild, setSelectedChild] =
     useState(null);
 
-  const [view, setView] =
-    useState("parents");
-
-  /*
-  ==================================================
-  SEARCH / SORT
-  ==================================================
-  */
+  const [view, setView] = useState("parents");
 
   const [search, setSearch] = useState("");
-  const [sort, setSort] =
-    useState("default");
+  const [sort, setSort] = useState("default");
 
-  /*
-  ==================================================
-  BUY
-  ==================================================
-  */
-
-  const [buyModal, setBuyModal] =
-    useState(null);
-
+  const [buyModal, setBuyModal] = useState(null);
   const [successModal, setSuccessModal] =
     useState(null);
 
-  const [buying, setBuying] =
-    useState(false);
+  const [buying, setBuying] = useState(false);
+  const [message, setMessage] = useState("");
 
-  const [message, setMessage] =
-    useState("");
-
-  /*
-  ==================================================
-  AUTH
-  ==================================================
-  */
+  /* =========================================
+     AUTH
+  ========================================= */
 
   useEffect(() => {
     let mounted = true;
@@ -114,9 +81,7 @@ export default function ShopPage() {
         data: { user },
       } = await supabase.auth.getUser();
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       setUser(user || null);
     }
@@ -125,14 +90,11 @@ export default function ShopPage() {
 
     const {
       data: { subscription },
-    } =
-      supabase.auth.onAuthStateChange(
-        (_event, session) => {
-          setUser(
-            session?.user || null
-          );
-        }
-      );
+    } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setUser(session?.user || null);
+      }
+    );
 
     return () => {
       mounted = false;
@@ -140,11 +102,9 @@ export default function ShopPage() {
     };
   }, []);
 
-  /*
-  ==================================================
-  LOAD SHOP
-  ==================================================
-  */
+  /* =========================================
+     LOAD SHOP
+  ========================================= */
 
   async function loadShop() {
     try {
@@ -198,7 +158,10 @@ export default function ShopPage() {
         setStockMap({});
       }
     } catch (err) {
-      console.error(err);
+      console.error(
+        "LOAD SHOP ERROR:",
+        err
+      );
 
       setError(
         err.message ||
@@ -213,11 +176,9 @@ export default function ShopPage() {
     loadShop();
   }, []);
 
-  /*
-  ==================================================
-  LOAD WALLET
-  ==================================================
-  */
+  /* =========================================
+     LOAD WALLET
+  ========================================= */
 
   useEffect(() => {
     if (!user) {
@@ -242,7 +203,6 @@ export default function ShopPage() {
           "WALLET ERROR:",
           error
         );
-
         return;
       }
 
@@ -258,31 +218,24 @@ export default function ShopPage() {
     loadWallet();
   }, [user]);
 
-  /*
-  ==================================================
-  CATEGORY DATA
-  ==================================================
-  */
+  /* =========================================
+     CATEGORY
+  ========================================= */
 
   const parentCategories =
     useMemo(() => {
       return categories.filter(
         (category) =>
-          category.parent_id ===
-            null ||
-          category.parent_id ===
-            undefined
+          category.parent_id === null ||
+          category.parent_id === undefined
       );
     }, [categories]);
 
-  function getChildren(
-    parentId
-  ) {
+  function getChildren(parentId) {
     return categories.filter(
       (category) =>
-        Number(
-          category.parent_id
-        ) === Number(parentId)
+        Number(category.parent_id) ===
+        Number(parentId)
     );
   }
 
@@ -291,9 +244,8 @@ export default function ShopPage() {
   ) {
     return products.filter(
       (product) =>
-        Number(
-          product.category_id
-        ) === Number(categoryId)
+        Number(product.category_id) ===
+        Number(categoryId)
     );
   }
 
@@ -318,57 +270,39 @@ export default function ShopPage() {
     ).length;
   }
 
-  /*
-  ==================================================
-  SELECT PARENT
-  ==================================================
-  */
+  /* =========================================
+     OPEN PARENT
+  ========================================= */
 
   function openParent(parent) {
     setSelectedParent(parent);
     setSelectedChild(null);
+    setSearch("");
 
     const children =
       getChildren(parent.id);
-
-    /*
-    ----------------------------------------------
-    Nếu có thư mục con:
-    Parent → Child
-    ----------------------------------------------
-    */
 
     if (children.length > 0) {
       setView("children");
       return;
     }
 
-    /*
-    ----------------------------------------------
-    Nếu parent chưa có child:
-    Parent → Product
-    ----------------------------------------------
-    */
-
     setView("products");
   }
 
-  /*
-  ==================================================
-  SELECT CHILD
-  ==================================================
-  */
+  /* =========================================
+     OPEN CHILD
+  ========================================= */
 
   function openChild(child) {
     setSelectedChild(child);
+    setSearch("");
     setView("products");
   }
 
-  /*
-  ==================================================
-  BACK
-  ==================================================
-  */
+  /* =========================================
+     BACK
+  ========================================= */
 
   function goHome() {
     setSelectedParent(null);
@@ -384,6 +318,7 @@ export default function ShopPage() {
     }
 
     setSelectedChild(null);
+    setSearch("");
 
     const children =
       getChildren(
@@ -397,49 +332,53 @@ export default function ShopPage() {
     }
   }
 
-  /*
-  ==================================================
-  STOCK
-  ==================================================
-  */
+  /* =========================================
+     STOCK
+  ========================================= */
 
   function getStock(productId) {
     const value =
       stockMap?.[productId] ??
-      stockMap?.[
-        String(productId)
-      ] ??
-      0;
+      stockMap?.[String(productId)] ??
+      null;
+
+    if (
+      value === null ||
+      value === undefined
+    ) {
+      return 0;
+    }
+
+    if (
+      typeof value === "object"
+    ) {
+      return Number(
+        value.available || 0
+      );
+    }
 
     return Number(value || 0);
   }
 
-  /*
-  ==================================================
-  FILTER PRODUCTS
-  ==================================================
-  */
+  /* =========================================
+     FILTER PRODUCTS
+  ========================================= */
 
   const filteredProducts =
     useMemo(() => {
-      let result = [
-        ...products,
-      ];
+      let result = [...products];
 
       if (selectedChild) {
-        result =
-          result.filter(
-            (product) =>
-              Number(
-                product.category_id
-              ) ===
-              Number(
-                selectedChild.id
-              )
-          );
-      } else if (
-        selectedParent
-      ) {
+        result = result.filter(
+          (product) =>
+            Number(
+              product.category_id
+            ) ===
+            Number(
+              selectedChild.id
+            )
+        );
+      } else if (selectedParent) {
         const children =
           getChildren(
             selectedParent.id
@@ -455,73 +394,48 @@ export default function ShopPage() {
           ),
         ];
 
-        result =
-          result.filter(
-            (product) =>
-              allowedIds.includes(
-                Number(
-                  product.category_id
-                )
+        result = result.filter(
+          (product) =>
+            allowedIds.includes(
+              Number(
+                product.category_id
               )
-          );
+            )
+        );
       }
 
       const keyword =
         normalize(search);
 
       if (keyword) {
-        result =
-          result.filter(
-            (product) => {
-              return (
-                normalize(
-                  product.name
-                ).includes(
-                  keyword
-                ) ||
-                normalize(
-                  product.description
-                ).includes(
-                  keyword
-                )
-              );
-            }
-          );
-      }
-
-      if (
-        sort ===
-        "price-asc"
-      ) {
-        result.sort(
-          (a, b) =>
-            Number(
-              a.price || 0
-            ) -
-            Number(
-              b.price || 0
-            )
+        result = result.filter(
+          (product) =>
+            normalize(
+              product.name
+            ).includes(keyword) ||
+            normalize(
+              product.description
+            ).includes(keyword)
         );
       }
 
-      if (
-        sort ===
-        "price-desc"
-      ) {
+      if (sort === "price-asc") {
         result.sort(
           (a, b) =>
-            Number(
-              b.price || 0
-            ) -
-            Number(
-              a.price || 0
-            )
+            Number(a.price || 0) -
+            Number(b.price || 0)
         );
       }
 
-      if (
-        sort === "name"
-      ) {
+      if (sort === "price-desc") {
+        result.sort(
+          (a, b) =>
+            Number(b.price || 0) -
+            Number(a.price || 0)
+        );
+      }
+
+      if (sort === "name") {
         result.sort(
           (a, b) =>
             String(
@@ -545,15 +459,11 @@ export default function ShopPage() {
       sort,
     ]);
 
-  /*
-  ==================================================
-  PRODUCT MEDIA
-  ==================================================
-  */
+  /* =========================================
+     PRODUCT MEDIA
+  ========================================= */
 
-  function ProductMedia({
-    product,
-  }) {
+  function ProductMedia({ product }) {
     const image =
       getProductImage(product);
 
@@ -564,9 +474,7 @@ export default function ShopPage() {
     ) {
       return (
         <video
-          src={
-            product.video_url
-          }
+          src={product.video_url}
           className="product-media"
           muted
           loop
@@ -585,9 +493,7 @@ export default function ShopPage() {
         <div className="media-wrap">
           <img
             src={image}
-            alt={
-              product.name
-            }
+            alt={product.name}
             className="product-media"
           />
 
@@ -601,40 +507,28 @@ export default function ShopPage() {
     return (
       <img
         src={image}
-        alt={
-          product.name
-        }
+        alt={product.name}
         className="product-media"
       />
     );
   }
 
-  /*
-  ==================================================
-  CATEGORY MEDIA
-  ==================================================
-  */
+  /* =========================================
+     CATEGORY MEDIA
+  ========================================= */
 
   function CategoryMedia({
     category,
     large = false,
   }) {
     const image =
-      getCategoryImage(
-        category
-      );
+      getCategoryImage(category);
 
     const type =
       category?.media_type ||
       (category?.video_url
         ? "video"
         : "image");
-
-    /*
-    ----------------------------------------------
-    VIDEO
-    ----------------------------------------------
-    */
 
     if (
       type === "video" &&
@@ -649,9 +543,7 @@ export default function ShopPage() {
           }
         >
           <video
-            src={
-              category.video_url
-            }
+            src={category.video_url}
             muted
             loop
             playsInline
@@ -664,12 +556,6 @@ export default function ShopPage() {
         </div>
       );
     }
-
-    /*
-    ----------------------------------------------
-    IMAGE
-    ----------------------------------------------
-    */
 
     if (image) {
       return (
@@ -691,12 +577,6 @@ export default function ShopPage() {
       );
     }
 
-    /*
-    ----------------------------------------------
-    NO MEDIA
-    ----------------------------------------------
-    */
-
     return (
       <div
         className={
@@ -705,9 +585,7 @@ export default function ShopPage() {
             : "category-media category-empty"
         }
       >
-        <span>
-          📁
-        </span>
+        <span>📁</span>
 
         <small>
           {category?.name ||
@@ -717,11 +595,9 @@ export default function ShopPage() {
     );
   }
 
-  /*
-  ==================================================
-  BUY
-  ==================================================
-  */
+  /* =========================================
+     BUY
+  ========================================= */
 
   async function handleBuy() {
     if (!buyModal) {
@@ -729,23 +605,17 @@ export default function ShopPage() {
     }
 
     if (!user) {
-      router.push(
-        "/login"
-      );
-
+      router.push("/login");
       return;
     }
 
     const stock =
-      getStock(
-        buyModal.id
-      );
+      getStock(buyModal.id);
 
     if (stock <= 0) {
       setMessage(
         "Sản phẩm hiện đã hết hàng."
       );
-
       return;
     }
 
@@ -758,7 +628,6 @@ export default function ShopPage() {
       setMessage(
         "Số dư không đủ. Vui lòng nạp tiền."
       );
-
       return;
     }
 
@@ -776,10 +645,7 @@ export default function ShopPage() {
       if (
         !session?.access_token
       ) {
-        router.push(
-          "/login"
-        );
-
+        router.push("/login");
         return;
       }
 
@@ -798,7 +664,7 @@ export default function ShopPage() {
             },
 
             body: JSON.stringify({
-              product_id:
+              productId:
                 Number(
                   buyModal.id
                 ),
@@ -827,24 +693,14 @@ export default function ShopPage() {
         data?.data?.key_code ||
         "";
 
-      setBuyModal(
-        null
-      );
+      setBuyModal(null);
 
       setSuccessModal({
-        product:
-          buyModal,
-
+        product: buyModal,
         key,
       });
 
       await loadShop();
-
-      /*
-      --------------------------------------------
-      CẬP NHẬT SỐ DƯ
-      --------------------------------------------
-      */
 
       const {
         data: profile,
@@ -854,10 +710,7 @@ export default function ShopPage() {
           .select(
             "wallet_balance,balance"
           )
-          .eq(
-            "id",
-            user.id
-          )
+          .eq("id", user.id)
           .maybeSingle();
 
       if (profile) {
@@ -870,7 +723,10 @@ export default function ShopPage() {
         );
       }
     } catch (err) {
-      console.error(err);
+      console.error(
+        "BUY ERROR:",
+        err
+      );
 
       setMessage(
         err.message ||
@@ -881,11 +737,9 @@ export default function ShopPage() {
     }
   }
 
-  /*
-  ==================================================
-  LOADING
-  ==================================================
-  */
+  /* =========================================
+     LOADING
+  ========================================= */
 
   if (loading) {
     return (
@@ -905,18 +759,14 @@ export default function ShopPage() {
     );
   }
 
-  /*
-  ==================================================
-  MAIN
-  ==================================================
-  */
+  /* =========================================
+     MAIN
+  ========================================= */
 
   return (
     <main className="page">
 
-      {/* ========================================
-          HEADER
-      ======================================== */}
+      {/* HEADER */}
 
       <header className="topbar">
         <div className="topbar-inner">
@@ -934,8 +784,7 @@ export default function ShopPage() {
             <span>
               XENOVA
               <small>
-                {" "}
-                PLAY
+                {" "}PLAY
               </small>
             </span>
           </button>
@@ -987,9 +836,7 @@ export default function ShopPage() {
               }
             >
               💰{" "}
-              {formatPrice(
-                wallet
-              )}
+              {formatPrice(wallet)}
             </button>
 
             {user ? (
@@ -1021,33 +868,30 @@ export default function ShopPage() {
         </div>
       </header>
 
-      {/* ========================================
-          HERO
-      ======================================== */}
+      {/* HERO */}
 
       <section className="hero">
         <div>
-
-          <div className="hero-badge">
-            XENOVA PLAY
-          </div>
+          <span className="hero-badge">
+            XENOVA PLAY SHOP
+          </span>
 
           <h1>
-            CỬA HÀNG
+            Cửa hàng
           </h1>
 
           <p>
-            Kho sản phẩm XENOVA PLAY
+            Chọn danh mục để xem
+            sản phẩm và mua KEY.
           </p>
-
         </div>
       </section>
 
+      {/* CONTENT */}
+
       <div className="container">
 
-        {/* ======================================
-            BREADCRUMB
-        ====================================== */}
+        {/* BREADCRUMB */}
 
         <div className="breadcrumb">
 
@@ -1059,51 +903,40 @@ export default function ShopPage() {
 
           {selectedParent && (
             <>
-              <span>
-                /
-              </span>
+              <span>›</span>
 
               <button
-                onClick={
-                  goParent
-                }
+                onClick={goParent}
               >
-                {
-                  selectedParent.name
-                }
+                {selectedParent.name}
               </button>
             </>
           )}
 
           {selectedChild && (
             <>
-              <span>
-                /
-              </span>
+              <span>›</span>
 
               <strong>
-                {
-                  selectedChild.name
-                }
+                {selectedChild.name}
               </strong>
             </>
           )}
 
         </div>
 
-        {/* ======================================
-            ERROR
-        ====================================== */}
+        {/* ERROR */}
 
         {error && (
           <div className="error-box">
-            ⚠️ {error}
+            {error}
           </div>
         )}
 
+        {/* MESSAGE */}
+
         {message && (
           <div className="message-box">
-
             <span>
               {message}
             </span>
@@ -1113,37 +946,37 @@ export default function ShopPage() {
                 setMessage("")
               }
             >
-              ×
+              ✕
             </button>
-
           </div>
         )}
 
-        {/* ======================================
-            VIEW: PARENTS
-        ====================================== */}
+        {/* =================================
+            PARENT
+        ================================= */}
 
-        {view ===
-          "parents" && (
-          <section>
-
+        {view === "parents" && (
+          <>
             <div className="section-heading">
 
               <div>
+                <span className="back-link">
+                  DANH MỤC SHOP
+                </span>
+
                 <h2>
-                  Danh mục sản phẩm
+                  Chọn thư mục
                 </h2>
 
                 <p>
-                  Chọn thư mục để xem sản phẩm
+                  Chọn thư mục mẹ để
+                  xem các thư mục con.
                 </p>
               </div>
 
               <span className="count-badge">
-                {
-                  parentCategories.length
-                }{" "}
-                danh mục
+                {parentCategories.length}
+                {" "}thư mục
               </span>
 
             </div>
@@ -1151,32 +984,23 @@ export default function ShopPage() {
             {parentCategories.length ===
             0 ? (
               <div className="empty">
-
-                <div>
-                  📁
-                </div>
+                <div>📁</div>
 
                 <h3>
                   Chưa có danh mục
                 </h3>
 
                 <p>
-                  Admin chưa tạo thư mục sản phẩm.
+                  Admin chưa tạo thư mục
+                  sản phẩm.
                 </p>
-
               </div>
             ) : (
-              /*
-              ====================================
-              QUAN TRỌNG:
-              ĐÚNG 2 Ô MỖI HÀNG
-              ====================================
-              */
-
               <div className="parent-grid">
 
                 {parentCategories.map(
                   (parent) => {
+
                     const children =
                       getChildren(
                         parent.id
@@ -1189,10 +1013,10 @@ export default function ShopPage() {
 
                     return (
                       <button
-                        className="parent-card"
                         key={
                           parent.id
                         }
+                        className="parent-card"
                         onClick={() =>
                           openParent(
                             parent
@@ -1223,13 +1047,10 @@ export default function ShopPage() {
 
                           </div>
 
-                          {parent.description && (
-                            <p>
-                              {
-                                parent.description
-                              }
-                            </p>
-                          )}
+                          <p>
+                            {parent.description ||
+                              "Xem các sản phẩm trong danh mục này."}
+                          </p>
 
                           <div className="parent-meta">
 
@@ -1252,10 +1073,15 @@ export default function ShopPage() {
                           </div>
 
                           <div className="view-all">
-                            XEM TẤT CẢ
+
+                            <span>
+                              XEM TẤT CẢ
+                            </span>
+
                             <span>
                               →
                             </span>
+
                           </div>
 
                         </div>
@@ -1267,216 +1093,189 @@ export default function ShopPage() {
 
               </div>
             )}
-
-          </section>
+          </>
         )}
 
-        {/* ======================================
-            VIEW: CHILDREN
-        ====================================== */}
+        {/* =================================
+            CHILD
+        ================================= */}
 
-        {view ===
-          "children" &&
+        {view === "children" &&
           selectedParent && (
-          <section>
-
-            <div className="section-heading">
-
-              <div>
-
-                <button
-                  className="back-link"
-                  onClick={goHome}
-                >
-                  ← Tất cả danh mục
-                </button>
-
-                <h2>
-                  {
-                    selectedParent.name
-                  }
-                </h2>
-
-                <p>
-                  Chọn thư mục con để xem sản phẩm
-                </p>
-
-              </div>
-
-              <span className="count-badge">
-                {
-                  getChildren(
-                    selectedParent.id
-                  ).length
-                }{" "}
-                thư mục
-              </span>
-
-            </div>
-
-            {getChildren(
-              selectedParent.id
-            ).length === 0 ? (
-              <div className="empty">
+            <>
+              <div className="section-heading">
 
                 <div>
-                  📦
+                  <button
+                    className="back-link"
+                    onClick={goHome}
+                  >
+                    ← QUAY LẠI
+                  </button>
+
+                  <h2>
+                    {
+                      selectedParent.name
+                    }
+                  </h2>
+
+                  <p>
+                    Chọn thư mục con để
+                    xem sản phẩm.
+                  </p>
                 </div>
 
-                <h3>
-                  Chưa có thư mục con
-                </h3>
-
-                <p>
-                  Danh mục này chưa có sản phẩm.
-                </p>
+                <span className="count-badge">
+                  {
+                    getChildren(
+                      selectedParent.id
+                    ).length
+                  }{" "}
+                  thư mục con
+                </span>
 
               </div>
-            ) : (
+
               <div className="child-grid">
 
                 {getChildren(
                   selectedParent.id
-                ).map(
-                  (child) => {
-                    const productCount =
-                      getProductsByCategory(
+                ).map((child) => {
+
+                  const childProducts =
+                    getProductsByCategory(
+                      child.id
+                    );
+
+                  return (
+                    <button
+                      key={
                         child.id
-                      ).length;
+                      }
+                      className="child-card"
+                      onClick={() =>
+                        openChild(
+                          child
+                        )
+                      }
+                    >
 
-                    return (
-                      <button
-                        className="child-card"
-                        key={
-                          child.id
+                      <CategoryMedia
+                        category={
+                          child
                         }
-                        onClick={() =>
-                          openChild(
-                            child
-                          )
-                        }
-                      >
+                        large
+                      />
 
-                        <CategoryMedia
-                          category={
-                            child
-                          }
-                          large
-                        />
+                      <div className="child-card-body">
 
-                        <div className="child-card-body">
+                        <div className="child-card-title-row">
 
-                          <div className="child-card-title-row">
-
-                            <h3>
-                              {
-                                child.name
-                              }
-                            </h3>
-
-                            <span className="circle-arrow">
-                              →
-                            </span>
-
-                          </div>
-
-                          {child.description && (
-                            <p>
-                              {
-                                child.description
-                              }
-                            </p>
-                          )}
-
-                          <div className="child-meta">
-                            🛒{" "}
+                          <h3>
                             {
-                              productCount
-                            }{" "}
-                            sản phẩm
-                          </div>
+                              child.name
+                            }
+                          </h3>
 
-                          <div className="view-all">
-                            XEM SẢN PHẨM
-                            <span>
-                              →
-                            </span>
-                          </div>
+                          <span className="circle-arrow">
+                            →
+                          </span>
 
                         </div>
 
-                      </button>
-                    );
-                  }
-                )}
+                        <p>
+                          {child.description ||
+                            "Xem sản phẩm trong thư mục này."}
+                        </p>
+
+                        <span className="child-meta">
+                          🛒{" "}
+                          {
+                            childProducts.length
+                          }{" "}
+                          sản phẩm
+                        </span>
+
+                        <div className="view-all">
+
+                          <span>
+                            XEM SẢN PHẨM
+                          </span>
+
+                          <span>
+                            →
+                          </span>
+
+                        </div>
+
+                      </div>
+
+                    </button>
+                  );
+                })}
 
               </div>
-            )}
+            </>
+          )}
 
-          </section>
-        )}
+        {/* =================================
+            PRODUCTS
+        ================================= */}
 
-        {/* ======================================
-            VIEW: PRODUCTS
-        ====================================== */}
-
-        {view ===
-          "products" && (
-          <section>
-
+        {view === "products" && (
+          <>
             <div className="products-heading">
 
               <div>
-
                 <button
                   className="back-link"
                   onClick={
-                    selectedParent
+                    selectedChild
                       ? goParent
                       : goHome
                   }
                 >
-                  ← Quay lại
+                  ← QUAY LẠI
                 </button>
 
                 <h2>
                   {selectedChild
                     ? selectedChild.name
-                    : selectedParent
-                    ? selectedParent.name
-                    : "Sản phẩm"}
+                    : selectedParent?.name ||
+                      "Sản phẩm"}
                 </h2>
 
                 <p>
-                  {
-                    filteredProducts.length
-                  }{" "}
-                  sản phẩm
+                  Chọn sản phẩm để
+                  mua KEY.
                 </p>
-
               </div>
 
               <div className="tools">
 
                 <div className="search">
-                  🔎
+
+                  <span>
+                    🔎
+                  </span>
 
                   <input
                     value={search}
-                    onChange={(event) =>
+                    onChange={(e) =>
                       setSearch(
-                        event.target.value
+                        e.target.value
                       )
                     }
                     placeholder="Tìm sản phẩm..."
                   />
+
                 </div>
 
                 <select
                   value={sort}
-                  onChange={(event) =>
+                  onChange={(e) =>
                     setSort(
-                      event.target.value
+                      e.target.value
                     )
                   }
                 >
@@ -1514,7 +1313,8 @@ export default function ShopPage() {
                 </h3>
 
                 <p>
-                  Danh mục này hiện chưa có sản phẩm.
+                  Danh mục này hiện chưa
+                  có sản phẩm.
                 </p>
 
               </div>
@@ -1523,17 +1323,18 @@ export default function ShopPage() {
 
                 {filteredProducts.map(
                   (product) => {
+
                     const stock =
                       getStock(
                         product.id
                       );
 
                     return (
-                      <article
-                        className="product-card"
+                      <div
                         key={
                           product.id
                         }
+                        className="product-card"
                       >
 
                         <div className="cover">
@@ -1544,34 +1345,28 @@ export default function ShopPage() {
                             }
                           />
 
-                          {stock > 0 ? (
-                            <span className="stock available">
-                              Còn{" "}
-                              {stock}
-                            </span>
-                          ) : (
-                            <span className="stock soldout">
-                              Hết hàng
-                            </span>
-                          )}
-
-                          {product.media_type ===
-                            "video" && (
-                            <span className="media-tag">
-                              VIDEO
-                            </span>
-                          )}
+                          <span
+                            className={
+                              stock > 0
+                                ? "stock available"
+                                : "stock soldout"
+                            }
+                          >
+                            {stock > 0
+                              ? `Còn ${stock}`
+                              : "HẾT HÀNG"}
+                          </span>
 
                         </div>
 
                         <div className="product-body">
 
                           <div className="product-category">
-                            {selectedChild
-                              ? selectedChild.name
-                              : selectedParent
-                              ? selectedParent.name
-                              : "Sản phẩm"}
+                            {
+                              selectedChild?.name ||
+                              product.category?.name ||
+                              ""
+                            }
                           </div>
 
                           <h3>
@@ -1580,17 +1375,16 @@ export default function ShopPage() {
                             }
                           </h3>
 
-                          {product.description && (
-                            <p className="description">
-                              {
-                                product.description
-                              }
-                            </p>
-                          )}
+                          <p className="description">
+                            {
+                              product.description ||
+                              "Sản phẩm XENOVA PLAY."
+                            }
+                          </p>
 
                           {product.duration_days && (
                             <div className="duration">
-                              ⏱ HSD{" "}
+                              ⏱ Thời hạn:{" "}
                               {
                                 product.duration_days
                               }{" "}
@@ -1607,19 +1401,21 @@ export default function ShopPage() {
                             </strong>
 
                             <button
-                              disabled={
-                                stock <=
-                                0
-                              }
                               className="buy-button"
-                              onClick={() =>
+                              disabled={
+                                stock <= 0
+                              }
+                              onClick={() => {
+                                setMessage(
+                                  ""
+                                );
+
                                 setBuyModal(
                                   product
-                                )
-                              }
+                                );
+                              }}
                             >
-                              {stock >
-                              0
+                              {stock > 0
                                 ? "MUA NGAY"
                                 : "HẾT HÀNG"}
                             </button>
@@ -1628,7 +1424,7 @@ export default function ShopPage() {
 
                         </div>
 
-                      </article>
+                      </div>
                     );
                   }
                 )}
@@ -1636,14 +1432,12 @@ export default function ShopPage() {
               </div>
             )}
 
-          </section>
+          </>
         )}
 
       </div>
 
-      {/* ========================================
-          FLOATING ADMIN
-      ======================================== */}
+      {/* FLOATING ZALO */}
 
       <a
         href={ZALO_ADMIN}
@@ -1653,34 +1447,22 @@ export default function ShopPage() {
       >
         💬
         <span>
-          Chat Admin
+          Liên hệ Admin
         </span>
       </a>
 
-      {/* ========================================
+      {/* =================================
           BUY MODAL
-      ======================================== */}
+      ================================= */}
 
       {buyModal && (
-        <div
-          className="modal-overlay"
-          onClick={() =>
-            !buying &&
-            setBuyModal(null)
-          }
-        >
+        <div className="modal-overlay">
 
-          <div
-            className="modal"
-            onClick={(event) =>
-              event.stopPropagation()
-            }
-          >
+          <div className="modal">
 
             <button
               className="close"
               onClick={() =>
-                !buying &&
                 setBuyModal(null)
               }
             >
@@ -1692,7 +1474,7 @@ export default function ShopPage() {
             </div>
 
             <h2>
-              Xác nhận mua hàng
+              Xác nhận mua
             </h2>
 
             <p className="modal-product">
@@ -1725,15 +1507,32 @@ export default function ShopPage() {
               </strong>
             </div>
 
+            <div className="confirm-row">
+              <span>
+                Sau khi mua
+              </span>
+
+              <strong>
+                {formatPrice(
+                  Math.max(
+                    0,
+                    wallet -
+                      Number(
+                        buyModal.price ||
+                          0
+                      )
+                  )
+                )}
+              </strong>
+            </div>
+
             <div className="modal-actions">
 
               <button
                 className="cancel-button"
                 disabled={buying}
                 onClick={() =>
-                  setBuyModal(
-                    null
-                  )
+                  setBuyModal(null)
                 }
               >
                 Hủy
@@ -1758,9 +1557,9 @@ export default function ShopPage() {
         </div>
       )}
 
-      {/* ========================================
+      {/* =================================
           SUCCESS MODAL
-      ======================================== */}
+      ================================= */}
 
       {successModal && (
         <div className="modal-overlay">
@@ -1859,9 +1658,7 @@ const styles = `
     sans-serif;
 }
 
-/* ============================================
-   HEADER
-============================================ */
+/* HEADER */
 
 .topbar {
   height: 64px;
@@ -1965,9 +1762,7 @@ const styles = `
   color: white;
 }
 
-/* ============================================
-   HERO
-============================================ */
+/* HERO */
 
 .hero {
   min-height: 155px;
@@ -2011,9 +1806,7 @@ const styles = `
   color: #777;
 }
 
-/* ============================================
-   CONTAINER
-============================================ */
+/* CONTAINER */
 
 .container {
   max-width: 1220px;
@@ -2042,9 +1835,7 @@ const styles = `
   color: #e83d94;
 }
 
-/* ============================================
-   SECTION
-============================================ */
+/* SECTION */
 
 .section-heading,
 .products-heading {
@@ -2089,10 +1880,7 @@ const styles = `
   font-weight: 850;
 }
 
-/* ============================================
-   PARENT GRID
-   ĐÚNG 2 Ô MỖI HÀNG
-============================================ */
+/* PARENT GRID */
 
 .parent-grid {
   display: grid;
@@ -2124,9 +1912,7 @@ const styles = `
     rgba(40,20,60,.10);
 }
 
-/* ============================================
-   CATEGORY MEDIA
-============================================ */
+/* CATEGORY MEDIA */
 
 .category-media {
   width: 100%;
@@ -2182,9 +1968,7 @@ const styles = `
   font-size: 10px;
 }
 
-/* ============================================
-   PARENT CARD
-============================================ */
+/* PARENT CARD */
 
 .parent-card-body {
   padding: 15px;
@@ -2253,9 +2037,7 @@ const styles = `
   font-weight: 900;
 }
 
-/* ============================================
-   CHILD GRID
-============================================ */
+/* CHILD */
 
 .child-grid {
   display: grid;
@@ -2291,9 +2073,7 @@ const styles = `
   padding: 15px;
 }
 
-/* ============================================
-   PRODUCTS
-============================================ */
+/* PRODUCTS */
 
 .tools {
   display: flex;
@@ -2473,9 +2253,7 @@ const styles = `
   cursor: not-allowed;
 }
 
-/* ============================================
-   EMPTY
-============================================ */
+/* EMPTY */
 
 .empty {
   min-height: 300px;
@@ -2504,9 +2282,7 @@ const styles = `
   font-size: 12px;
 }
 
-/* ============================================
-   MESSAGE
-============================================ */
+/* MESSAGE */
 
 .error-box,
 .message-box {
@@ -2534,9 +2310,7 @@ const styles = `
   cursor: pointer;
 }
 
-/* ============================================
-   FLOATING ADMIN
-============================================ */
+/* FLOATING */
 
 .floating-admin {
   position: fixed;
@@ -2558,9 +2332,7 @@ const styles = `
     rgba(232,61,148,.3);
 }
 
-/* ============================================
-   MODAL
-============================================ */
+/* MODAL */
 
 .modal-overlay {
   position: fixed;
@@ -2705,9 +2477,7 @@ const styles = `
   cursor: pointer;
 }
 
-/* ============================================
-   LOADING
-============================================ */
+/* LOADING */
 
 .loading-screen {
   min-height: 100vh;
@@ -2737,11 +2507,10 @@ const styles = `
   }
 }
 
-/* ============================================
-   TABLET
-============================================ */
+/* TABLET */
 
 @media (max-width: 1050px) {
+
   .product-grid {
     grid-template-columns:
       repeat(3,minmax(0,1fr));
@@ -2752,9 +2521,7 @@ const styles = `
   }
 }
 
-/* ============================================
-   MOBILE
-============================================ */
+/* MOBILE */
 
 @media (max-width: 760px) {
 
@@ -2789,12 +2556,6 @@ const styles = `
   .container {
     padding: 12px;
   }
-
-  /*
-  ----------------------------------------------
-  MOBILE VẪN 2 Ô / HÀNG
-  ----------------------------------------------
-  */
 
   .parent-grid,
   .child-grid {
