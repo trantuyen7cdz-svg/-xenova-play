@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { supabase } from "../../../../lib/supabase";
 
+const ADMIN_EMAIL = "trantuyenzzz598@gmail.com";
+
 async function checkAdmin(request) {
-  const authHeader =
-    request.headers.get("authorization");
+  const authHeader = request.headers.get("authorization");
 
   if (!authHeader?.startsWith("Bearer ")) {
     return {
@@ -13,9 +14,7 @@ async function checkAdmin(request) {
     };
   }
 
-  const token = authHeader
-    .replace("Bearer ", "")
-    .trim();
+  const token = authHeader.replace("Bearer ", "").trim();
 
   if (!token) {
     return {
@@ -34,37 +33,15 @@ async function checkAdmin(request) {
     return {
       ok: false,
       status: 401,
-      error:
-        "Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại.",
+      error: "Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại.",
     };
   }
 
-  /*
-   * BẢNG PROFILES CỦA BẠN CHỈ DÙNG ROLE
-   * KHÔNG DÙNG is_admin
-   */
-  const {
-    data: profile,
-    error: profileError,
-  } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
+  const email = String(user.email || "")
+    .trim()
+    .toLowerCase();
 
-  if (profileError) {
-    return {
-      ok: false,
-      status: 500,
-      error: profileError.message,
-    };
-  }
-
-  const isAdmin =
-    String(profile?.role || "").toLowerCase() ===
-    "admin";
-
-  if (!isAdmin) {
+  if (email !== ADMIN_EMAIL.toLowerCase()) {
     return {
       ok: false,
       status: 403,
@@ -101,9 +78,7 @@ function normalizeBanners(banners) {
         banner?.enabled !== false,
 
       order:
-        Number.isFinite(
-          Number(banner?.order)
-        )
+        Number.isFinite(Number(banner?.order))
           ? Number(banner.order)
           : index,
     }))
@@ -122,8 +97,7 @@ function normalizeBanners(banners) {
 }
 
 export async function GET(request) {
-  const auth =
-    await checkAdmin(request);
+  const auth = await checkAdmin(request);
 
   if (!auth.ok) {
     return NextResponse.json(
@@ -131,65 +105,82 @@ export async function GET(request) {
         success: false,
         error: auth.error,
       },
-      { status: auth.status }
-    );
-  }
-
-  const {
-    data,
-    error,
-  } = await supabase
-    .from("shop_settings")
-    .select("*")
-    .eq("id", 1)
-    .maybeSingle();
-
-  if (error) {
-    return NextResponse.json(
       {
-        success: false,
-        error: error.message,
-      },
-      { status: 500 }
-    );
-  }
-
-  return NextResponse.json({
-    success: true,
-    settings:
-      data || {
-        id: 1,
-        logo_url: "",
-        shop_badge: "",
-        shop_title: "",
-        shop_description: "",
-        banners: [],
-      },
-  });
-}
-
-export async function PUT(request) {
-  const auth =
-    await checkAdmin(request);
-
-  if (!auth.ok) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: auth.error,
-      },
-      { status: auth.status }
+        status: auth.status,
+      }
     );
   }
 
   try {
-    const body =
-      await request.json();
+    const {
+      data,
+      error,
+    } = await supabase
+      .from("shop_settings")
+      .select("*")
+      .eq("id", 1)
+      .maybeSingle();
 
-    const banners =
-      normalizeBanners(
-        body?.banners
+    if (error) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: error.message,
+        },
+        {
+          status: 500,
+        }
       );
+    }
+
+    return NextResponse.json({
+      success: true,
+      settings:
+        data || {
+          id: 1,
+          logo_url: "",
+          shop_badge: "",
+          shop_title: "",
+          shop_description: "",
+          banners: [],
+        },
+    });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          error?.message ||
+          "Không thể tải cài đặt shop.",
+      },
+      {
+        status: 500,
+      }
+    );
+  }
+}
+
+export async function PUT(request) {
+  const auth = await checkAdmin(request);
+
+  if (!auth.ok) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: auth.error,
+      },
+      {
+        status: auth.status,
+      }
+    );
+  }
+
+  try {
+    const body = await request.json();
+
+    const banners = normalizeBanners(
+      body?.banners
+    );
 
     const {
       data,
@@ -200,10 +191,6 @@ export async function PUT(request) {
         {
           id: 1,
 
-          /*
-           * Không còn sử dụng
-           * badge/title/description
-           */
           logo_url: String(
             body?.logo_url || ""
           ).trim(),
@@ -232,7 +219,9 @@ export async function PUT(request) {
           success: false,
           error: error.message,
         },
-        { status: 500 }
+        {
+          status: 500,
+        }
       );
     }
 
@@ -246,9 +235,11 @@ export async function PUT(request) {
         success: false,
         error:
           error?.message ||
-          "Không thể lưu cài đặt.",
+          "Không thể lưu cài đặt shop.",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }
