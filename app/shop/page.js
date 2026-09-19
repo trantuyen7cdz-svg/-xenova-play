@@ -4,23 +4,32 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 
-const ZALO_ADMIN = "https://zalo.me/84365717262";
-
 const NAV_ITEMS = [
-  { label: "Trang chủ", href: "/" },
-  { label: "Cửa hàng", href: "/shop" },
-  { label: "Nạp tiền", href: "/deposit" },
-  { label: "KEY của tôi", href: "/keys" },
-  { label: "Đơn hàng", href: "/orders" },
-  { label: "Tài khoản", href: "/dashboard" },
-  { label: "Cài đặt", href: "/settings" },
+  { label: "Trang chủ", path: "/" },
+  { label: "Cửa hàng", path: "/shop" },
+  { label: "Nạp tiền", path: "/deposit" },
+  { label: "KEY của tôi", path: "/keys" },
+  { label: "Đơn hàng", path: "/orders" },
+  { label: "Tài khoản", path: "/account" },
+  { label: "Cài đặt", path: "/settings" },
 ];
 
 function normalize(value) {
-  return String(value || "")
-    .toLowerCase()
+  return String(value ?? "")
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function getProductType(product) {
+  return normalize(
+    product?.type ||
+      product?.product_type ||
+      product?.platform ||
+      product?.category_name ||
+      product?.category
+  );
 }
 
 function formatPrice(value) {
@@ -28,193 +37,117 @@ function formatPrice(value) {
   return `${number.toLocaleString("vi-VN")}đ`;
 }
 
-function formatDuration(days) {
-  const value = Number(days);
-
+function formatDuration(value) {
   if (!value) return "";
 
-  if (value === 1) return "1 ngày";
-  if (value === 7) return "7 ngày";
-  if (value === 30) return "1 tháng";
-  if (value === 90) return "3 tháng";
-  if (value === 365) return "1 năm";
+  const text = String(value).toLowerCase();
 
-  return `${value} ngày`;
+  if (text.includes("1 day") || text.includes("1 ngày")) return "1 ngày";
+  if (text.includes("7 day") || text.includes("7 ngày")) return "1 tuần";
+  if (text.includes("30 day") || text.includes("30 ngày")) return "1 tháng";
+
+  return String(value);
 }
 
-function getProductName(product) {
-  return (
-    product?.name ||
-    product?.title ||
-    product?.product_name ||
-    "Sản phẩm"
-  );
-}
-
-function getProductPrice(product) {
-  return Number(
-    product?.price ??
-      product?.selling_price ??
-      product?.amount ??
-      product?.price_vnd ??
-      0
-  );
-}
-
-function getProductDays(product) {
-  return (
-    product?.duration_days ??
-    product?.duration ??
-    product?.days ??
-    null
-  );
-}
-
-function getProductCategory(product) {
-  return (
-    product?.category_id ??
-    product?.categoryId ??
-    product?.category ??
-    null
-  );
-}
-
-function getProductStock(stock, product) {
-  if (!stock || !product) return 0;
-
-  const id = String(product.id);
-
-  const possible = [
-    stock[id],
-    stock[product.id],
-    stock?.products?.[id],
-    stock?.data?.[id],
-  ];
-
-  for (const item of possible) {
-    if (item == null) continue;
-
-    if (typeof item === "number") {
-      return Math.max(0, Number(item));
-    }
-
-    if (typeof item === "object") {
-      const value =
-        item.available ??
-        item.stock ??
-        item.quantity ??
-        item.count ??
-        item.total;
-
-      if (value != null) {
-        return Math.max(0, Number(value));
-      }
-    }
-  }
-
-  if (Array.isArray(stock)) {
-    const found = stock.find(
-      (item) =>
-        String(item?.product_id ?? item?.productId ?? item?.id) === id
+function SpriteImage({ src, alt = "", className = "" }) {
+  if (!src) {
+    return (
+      <div className={`sprite-placeholder ${className}`}>
+        <span>XP</span>
+      </div>
     );
-
-    if (found) {
-      return Math.max(
-        0,
-        Number(
-          found.available ??
-            found.stock ??
-            found.quantity ??
-            found.count ??
-            0
-        )
-      );
-    }
   }
 
-  return 0;
-}
-
-function getCategoryName(category) {
   return (
-    category?.name ||
-    category?.title ||
-    category?.category_name ||
-    "Danh mục"
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+      loading="lazy"
+      onError={(event) => {
+        event.currentTarget.style.display = "none";
+      }}
+    />
   );
-}
-
-function ProductIcon({ product }) {
-  const name = normalize(getProductName(product));
-
-  let icon = "✦";
-
-  if (name.includes("android") || name.includes("adr")) icon = "🤖";
-  else if (name.includes("iphone") || name.includes("ios")) icon = "";
-  else if (name.includes("pc") || name.includes("windows")) icon = "💻";
-  else if (name.includes("game")) icon = "🎮";
-  else if (name.includes("office")) icon = "▦";
-  else if (name.includes("photoshop")) icon = "Ps";
-  else if (name.includes("valorant")) icon = "V";
-  else if (name.includes("key")) icon = "🔑";
-
-  return <div className="product-icon">{icon}</div>;
 }
 
 function ProductCard({ product, stock, onBuy }) {
-  const available = getProductStock(stock, product);
-  const price = getProductPrice(product);
-  const days = getProductDays(product);
-  const name = getProductName(product);
+  const productStock =
+    stock?.[product.id] ??
+    stock?.[String(product.id)] ??
+    stock?.find?.((item) => Number(item.product_id) === Number(product.id))
+      ?.stock ??
+    product.stock ??
+    0;
 
-  const sold =
-    Number(product?.sold || 0) > 0 ||
-    normalize(name).includes("office") ||
-    normalize(name).includes("photoshop") ||
-    normalize(name).includes("valorant");
+  const quantity = Number(productStock || 0);
+  const soldOut = quantity <= 0;
+
+  const image =
+    product.image_url ||
+    product.image ||
+    product.thumbnail ||
+    product.icon ||
+    "";
+
+  const name =
+    product.name ||
+    product.title ||
+    product.product_name ||
+    "Sản phẩm XENOVA";
+
+  const price =
+    product.price ??
+    product.sell_price ??
+    product.sale_price ??
+    product.amount ??
+    0;
+
+  const duration = formatDuration(
+    product.duration ||
+      product.duration_text ||
+      product.term ||
+      product.period
+  );
 
   return (
     <article className="product-card">
-      <div className="product-cover">
-        <div className="cover-glow" />
-        <ProductIcon product={product} />
+      <div className="product-image-wrap">
+        <SpriteImage
+          src={image}
+          alt={name}
+          className="product-image"
+        />
 
-        <span className={`status-badge ${sold ? "hot" : ""}`}>
-          {sold ? "BÁN CHẠY" : "HOT"}
-        </span>
+        <div className={`stock-badge ${soldOut ? "out" : ""}`}>
+          {soldOut ? "Hết hàng" : `Còn ${quantity}`}
+        </div>
       </div>
 
-      <div className="product-content">
-        <h3>{name}</h3>
+      <div className="product-body">
+        <div className="product-title">{name}</div>
 
-        {days && (
-          <div className="duration">
-            ⏱ {formatDuration(days)}
+        {duration && (
+          <div className="product-duration">
+            <span>◷</span>
+            {duration}
           </div>
         )}
 
-        <div className="tags">
-          <span>{sold ? "Bán chạy" : "Hot"}</span>
-          <span>Tự động</span>
+        <div className="product-bottom">
+          <div>
+            <div className="product-price">{formatPrice(price)}</div>
+            <div className="product-note">KEY chính hãng</div>
+          </div>
+
+          <button
+            className="buy-button"
+            disabled={soldOut}
+            onClick={() => onBuy(product)}
+          >
+            {soldOut ? "Hết hàng" : "Mua ngay"}
+          </button>
         </div>
-
-        <div className="product-meta">
-          <strong>{formatPrice(price)}</strong>
-
-          <span className={available > 0 ? "in-stock" : "out-stock"}>
-            {available > 0
-              ? `${available} còn lại`
-              : "Hết hàng"}
-          </span>
-        </div>
-
-        <button
-          className="buy-button"
-          disabled={available <= 0}
-          onClick={() => onBuy(product)}
-        >
-          {available > 0 ? "Mua ngay  →" : "Hết hàng"}
-        </button>
       </div>
     </article>
   );
@@ -223,10 +156,10 @@ function ProductCard({ product, stock, onBuy }) {
 function ProductSkeleton() {
   return (
     <div className="product-card skeleton-card">
-      <div className="skeleton cover-skeleton" />
-      <div className="skeleton line big" />
-      <div className="skeleton line small" />
-      <div className="skeleton line button" />
+      <div className="skeleton image-skeleton" />
+      <div className="skeleton line-large" />
+      <div className="skeleton line-small" />
+      <div className="skeleton line-price" />
     </div>
   );
 }
@@ -244,36 +177,54 @@ export default function ShopPage() {
   const [error, setError] = useState("");
 
   const [selectedCategory, setSelectedCategory] = useState("all");
-  const [search, setSearch] = useState("");
-  const [sort, setSort] = useState("default");
 
   const [buyModal, setBuyModal] = useState(null);
   const [successModal, setSuccessModal] = useState(null);
+
   const [buying, setBuying] = useState(false);
   const [message, setMessage] = useState("");
 
-  async function loadWallet(currentUser) {
-    if (!currentUser) {
+  const loadWallet = async (currentUser) => {
+    if (!currentUser?.id) {
       setWallet(0);
       return;
     }
 
-    const { data, error: walletError } = await supabase
-      .from("wallets")
-      .select("balance")
-      .eq("user_id", currentUser.id)
-      .maybeSingle();
-
-    if (!walletError) {
-      setWallet(Number(data?.balance || 0));
-    }
-  }
-
-  async function loadShop(currentUser = user) {
     try {
-      setLoading(true);
-      setError("");
+      const { data, error: walletError } = await supabase
+        .from("wallets")
+        .select("*")
+        .eq("user_id", currentUser.id)
+        .maybeSingle();
 
+      if (walletError) {
+        console.error("Wallet error:", walletError);
+        return;
+      }
+
+      if (data) {
+        setWallet(
+          Number(
+            data.balance ??
+              data.amount ??
+              data.money ??
+              data.wallet_balance ??
+              0
+          )
+        );
+      } else {
+        setWallet(0);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const loadShop = async () => {
+    setLoading(true);
+    setError("");
+
+    try {
       const [catalogResponse, stockResponse] = await Promise.all([
         fetch("/api/shop/catalog", {
           cache: "no-store",
@@ -283,52 +234,55 @@ export default function ShopPage() {
         }),
       ]);
 
-      const catalogData = await catalogResponse.json();
-      const stockData = await stockResponse.json();
-
       if (!catalogResponse.ok) {
-        throw new Error(
-          catalogData?.error ||
-            catalogData?.message ||
-            "Không thể tải sản phẩm."
-        );
+        throw new Error("Không thể tải danh sách sản phẩm.");
       }
 
-      const categoryList =
+      const catalogData = await catalogResponse.json();
+
+      const catalogCategories =
         catalogData?.categories ||
         catalogData?.data?.categories ||
         [];
 
-      const productList =
+      const catalogProducts =
         catalogData?.products ||
         catalogData?.data?.products ||
         [];
 
-      const stockValue =
-        stockData?.stock ||
-        stockData?.data ||
-        stockData ||
-        {};
+      setCategories(
+        Array.isArray(catalogCategories) ? catalogCategories : []
+      );
 
-      setCategories(Array.isArray(categoryList) ? categoryList : []);
-      setProducts(Array.isArray(productList) ? productList : []);
-      setStock(stockValue);
+      setProducts(
+        Array.isArray(catalogProducts) ? catalogProducts : []
+      );
 
-      if (currentUser) {
-        await loadWallet(currentUser);
+      if (stockResponse.ok) {
+        const stockData = await stockResponse.json();
+
+        const stockValue =
+          stockData?.stock ??
+          stockData?.data?.stock ??
+          stockData?.data ??
+          stockData;
+
+        setStock(stockValue || {});
+      } else {
+        setStock({});
       }
     } catch (err) {
       console.error(err);
-      setError(err?.message || "Có lỗi khi tải cửa hàng.");
+      setError(err?.message || "Không thể tải cửa hàng.");
     } finally {
       setLoading(false);
     }
-  }
+  };
 
   useEffect(() => {
     let mounted = true;
 
-    async function init() {
+    const init = async () => {
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -338,8 +292,10 @@ export default function ShopPage() {
       const currentUser = session?.user || null;
 
       setUser(currentUser);
-      await loadShop(currentUser);
-    }
+
+      await loadWallet(currentUser);
+      await loadShop();
+    };
 
     init();
 
@@ -350,106 +306,46 @@ export default function ShopPage() {
 
       setUser(currentUser);
 
-      if (currentUser) {
-        await loadWallet(currentUser);
-      } else {
-        setWallet(0);
-      }
+      await loadWallet(currentUser);
     });
 
     return () => {
       mounted = false;
-      subscription.unsubscribe();
+      subscription?.unsubscribe();
     };
   }, []);
 
-  const visibleProducts = useMemo(() => {
-    let result = [...products];
-
-    if (selectedCategory !== "all") {
-      result = result.filter((product) => {
-        const category = getProductCategory(product);
-
-        return String(category) === String(selectedCategory);
-      });
+  const filteredProducts = useMemo(() => {
+    if (selectedCategory === "all") {
+      return products;
     }
 
-    const keyword = normalize(search.trim());
+    const selected = normalize(selectedCategory);
 
-    if (keyword) {
-      result = result.filter((product) => {
-        const name = normalize(getProductName(product));
-
-        const categoryText = normalize(
-          categories.find(
-            (category) =>
-              String(category.id) ===
-              String(getProductCategory(product))
-          )
-            ? getCategoryName(
-                categories.find(
-                  (category) =>
-                    String(category.id) ===
-                    String(getProductCategory(product))
-                )
-              )
-            : ""
-        );
-
-        return (
-          name.includes(keyword) ||
-          categoryText.includes(keyword)
-        );
-      });
-    }
-
-    if (sort === "price-asc") {
-      result.sort(
-        (a, b) => getProductPrice(a) - getProductPrice(b)
+    return products.filter((product) => {
+      const categoryId = String(
+        product.category_id ??
+          product.categoryId ??
+          ""
       );
-    }
 
-    if (sort === "price-desc") {
-      result.sort(
-        (a, b) => getProductPrice(b) - getProductPrice(a)
+      const categoryName = normalize(
+        product.category_name ??
+          product.category ??
+          product.type ??
+          product.product_type ??
+          product.platform ??
+          ""
       );
-    }
 
-    if (sort === "stock") {
-      result.sort(
-        (a, b) =>
-          getProductStock(stock, b) -
-          getProductStock(stock, a)
+      return (
+        categoryId === String(selectedCategory) ||
+        categoryName === selected
       );
-    }
+    });
+  }, [products, selectedCategory]);
 
-    if (sort === "name") {
-      result.sort((a, b) =>
-        getProductName(a).localeCompare(
-          getProductName(b),
-          "vi"
-        )
-      );
-    }
-
-    return result;
-  }, [
-    products,
-    categories,
-    stock,
-    selectedCategory,
-    search,
-    sort,
-  ]);
-
-  function handleBuyClick(product) {
-    const available = getProductStock(stock, product);
-
-    if (available <= 0) {
-      setMessage("Sản phẩm hiện đã hết hàng.");
-      return;
-    }
-
+  const handleBuy = (product) => {
     if (!user) {
       router.push("/login");
       return;
@@ -457,9 +353,9 @@ export default function ShopPage() {
 
     setMessage("");
     setBuyModal(product);
-  }
+  };
 
-  async function confirmBuy() {
+  const confirmBuy = async () => {
     if (!buyModal || buying) return;
 
     if (!user) {
@@ -468,24 +364,24 @@ export default function ShopPage() {
     }
 
     const product = buyModal;
-    const price = getProductPrice(product);
-    const available = getProductStock(stock, product);
 
-    if (available <= 0) {
-      setMessage("Sản phẩm vừa hết hàng.");
-      setBuyModal(null);
-      return;
-    }
+    const price = Number(
+      product.price ??
+        product.sell_price ??
+        product.sale_price ??
+        product.amount ??
+        0
+    );
 
     if (wallet < price) {
-      setMessage("Số dư không đủ. Vui lòng nạp thêm tiền.");
+      setMessage("Số dư ví không đủ. Vui lòng nạp thêm tiền.");
       return;
     }
 
-    try {
-      setBuying(true);
-      setMessage("");
+    setBuying(true);
+    setMessage("");
 
+    try {
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -506,13 +402,13 @@ export default function ShopPage() {
         }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
         throw new Error(
           data?.error ||
             data?.message ||
-            "Mua sản phẩm thất bại."
+            "Mua key thất bại."
         );
       }
 
@@ -528,1128 +424,494 @@ export default function ShopPage() {
       setSuccessModal({
         product,
         key,
-        order: data?.order || data?.data?.order || null,
       });
 
-      await loadShop(user);
+      await loadWallet(user);
+      await loadShop();
     } catch (err) {
       console.error(err);
-      setMessage(err?.message || "Không thể mua sản phẩm.");
+      setMessage(
+        err?.message ||
+          "Có lỗi xảy ra khi mua key."
+      );
     } finally {
       setBuying(false);
     }
-  }
+  };
 
-  async function copyKey() {
-    const key = successModal?.key;
-
-    if (!key) return;
-
-    try {
-      await navigator.clipboard.writeText(key);
-      setMessage("Đã copy KEY.");
-    } catch {
-      setMessage("Không thể copy tự động.");
-    }
-  }
-
-  function goDeposit() {
-    router.push("/deposit");
-  }
-
-  const totalStock = products.reduce(
-    (sum, product) =>
-      sum + getProductStock(stock, product),
-    0
-  );
+  const go = (path) => {
+    router.push(path);
+  };
 
   return (
-    <main className="shop-page">
-      <style jsx global>{`
-        * {
-          box-sizing: border-box;
-        }
-
-        body {
-          margin: 0;
-          background: #fff7fc;
-          color: #241b2d;
-          font-family:
-            Inter,
-            ui-sans-serif,
-            system-ui,
-            -apple-system,
-            BlinkMacSystemFont,
-            "Segoe UI",
-            sans-serif;
-        }
-
-        button,
-        input,
-        select {
-          font: inherit;
-        }
-
-        button {
-          cursor: pointer;
-        }
-
-        .shop-page {
-          min-height: 100vh;
-          background:
-            radial-gradient(
-              circle at 85% 0%,
-              rgba(255, 117, 188, 0.2),
-              transparent 30%
-            ),
-            linear-gradient(
-              180deg,
-              #fff6fc 0%,
-              #fff 50%,
-              #fff7fc 100%
-            );
-        }
-
-        .topbar {
-          height: 74px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 0 6%;
-          background: rgba(255, 255, 255, 0.9);
-          border-bottom: 1px solid #f4dce9;
-          backdrop-filter: blur(16px);
-          position: sticky;
-          top: 0;
-          z-index: 50;
-        }
-
-        .brand {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          font-weight: 950;
-          color: #e62f87;
-          font-size: 22px;
-          letter-spacing: -0.7px;
-        }
-
-        .brand-logo {
-          width: 40px;
-          height: 40px;
-          border-radius: 13px;
-          display: grid;
-          place-items: center;
-          color: white;
-          background: linear-gradient(
-            135deg,
-            #ff4ca0,
-            #c81d75
-          );
-          box-shadow:
-            0 8px 22px rgba(230, 47, 135, 0.25);
-        }
-
-        .nav {
-          display: flex;
-          align-items: center;
-          gap: 5px;
-        }
-
-        .nav a {
-          text-decoration: none;
-          color: #756778;
-          font-size: 13px;
-          font-weight: 750;
-          padding: 10px 12px;
-          border-radius: 12px;
-          transition: 0.2s;
-        }
-
-        .nav a:hover,
-        .nav a.active {
-          color: #d8297b;
-          background: #fff0f8;
-        }
-
-        .account-area {
-          display: flex;
-          align-items: center;
-          gap: 9px;
-        }
-
-        .balance {
-          padding: 9px 13px;
-          border-radius: 12px;
-          background: #fff1f8;
-          color: #d7287a;
-          font-weight: 850;
-          font-size: 13px;
-        }
-
-        .login-btn {
-          border: 0;
-          padding: 10px 15px;
-          border-radius: 12px;
-          color: white;
-          background: #e53287;
-          font-weight: 850;
-        }
-
-        .hero {
-          max-width: 1240px;
-          margin: 0 auto;
-          padding: 42px 24px 26px;
-          display: grid;
-          grid-template-columns: 1.35fr 0.65fr;
-          gap: 18px;
-        }
-
-        .hero-main {
-          position: relative;
-          overflow: hidden;
-          min-height: 250px;
-          border-radius: 30px;
-          padding: 38px;
-          background:
-            radial-gradient(
-              circle at 90% 10%,
-              rgba(255, 255, 255, 0.8),
-              transparent 25%
-            ),
-            linear-gradient(
-              135deg,
-              #ff65ae,
-              #ef398e 52%,
-              #c72075
-            );
-          color: white;
-          box-shadow:
-            0 24px 60px rgba(215, 39, 122, 0.2);
-        }
-
-        .hero-main::after {
-          content: "✦";
-          position: absolute;
-          right: 9%;
-          bottom: -25px;
-          font-size: 190px;
-          opacity: 0.12;
-        }
-
-        .hero-main small {
-          font-weight: 800;
-          opacity: 0.85;
-        }
-
-        .hero-main h1 {
-          margin: 9px 0;
-          max-width: 650px;
-          font-size: clamp(34px, 5vw, 58px);
-          line-height: 0.98;
-          letter-spacing: -2.8px;
-        }
-
-        .hero-main p {
-          margin: 14px 0 0;
-          max-width: 620px;
-          line-height: 1.6;
-          opacity: 0.92;
-        }
-
-        .hero-side {
-          border-radius: 30px;
-          padding: 27px;
-          background: white;
-          border: 1px solid #f3dce9;
-          box-shadow: 0 16px 45px rgba(70, 26, 52, 0.06);
-        }
-
-        .hero-side-title {
-          color: #8b7285;
-          font-size: 13px;
-          font-weight: 800;
-        }
-
-        .hero-number {
-          margin: 8px 0 3px;
-          font-size: 36px;
-          font-weight: 950;
-          color: #d9277a;
-        }
-
-        .hero-side p {
-          color: #897a87;
-          font-size: 13px;
-          line-height: 1.55;
-          margin: 0 0 18px;
-        }
-
-        .deposit-btn {
-          width: 100%;
-          border: 0;
-          border-radius: 14px;
-          padding: 13px;
-          color: white;
-          font-weight: 900;
-          background: linear-gradient(
-            135deg,
-            #ec3c91,
-            #c92276
-          );
-        }
-
-        .layout {
-          max-width: 1240px;
-          margin: 0 auto;
-          padding: 0 24px 60px;
-          display: grid;
-          grid-template-columns: 230px 1fr;
-          gap: 22px;
-        }
-
-        .sidebar {
-          position: sticky;
-          top: 94px;
-          align-self: start;
-          background: white;
-          border: 1px solid #f1dce8;
-          border-radius: 22px;
-          padding: 15px;
-          box-shadow: 0 14px 40px rgba(68, 25, 50, 0.05);
-        }
-
-        .sidebar-title {
-          padding: 7px 9px 12px;
-          font-size: 12px;
-          text-transform: uppercase;
-          color: #9a8292;
-          font-weight: 900;
-          letter-spacing: 0.7px;
-        }
-
-        .category-btn {
-          width: 100%;
-          border: 0;
-          background: transparent;
-          text-align: left;
-          border-radius: 12px;
-          padding: 11px 10px;
-          color: #6e5d6a;
-          font-weight: 750;
-          margin-bottom: 3px;
-        }
-
-        .category-btn:hover,
-        .category-btn.active {
-          color: #d7297a;
-          background: #fff0f8;
-        }
-
-        .category-count {
-          float: right;
-          color: #ae9ba8;
-          font-size: 12px;
-        }
-
-        .shop-content {
-          min-width: 0;
-        }
-
-        .toolbar {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          margin-bottom: 18px;
-        }
-
-        .search-box {
-          flex: 1;
-          position: relative;
-        }
-
-        .search-box span {
-          position: absolute;
-          left: 14px;
-          top: 50%;
-          transform: translateY(-50%);
-          color: #a793a1;
-        }
-
-        .search-box input {
-          width: 100%;
-          height: 46px;
-          border: 1px solid #efd9e7;
-          outline: none;
-          border-radius: 14px;
-          background: white;
-          padding: 0 15px 0 40px;
-          color: #342733;
-          transition: 0.2s;
-        }
-
-        .search-box input:focus {
-          border-color: #ef4b99;
-          box-shadow: 0 0 0 4px rgba(239, 75, 153, 0.08);
-        }
-
-        .sort-select {
-          height: 46px;
-          border: 1px solid #efd9e7;
-          border-radius: 14px;
-          padding: 0 13px;
-          background: white;
-          color: #5d4b59;
-          outline: none;
-          font-weight: 700;
-        }
-
-        .section-head {
-          display: flex;
-          justify-content: space-between;
-          align-items: end;
-          margin-bottom: 14px;
-        }
-
-        .section-head h2 {
-          margin: 0;
-          font-size: 23px;
-          letter-spacing: -0.8px;
-        }
-
-        .section-head p {
-          margin: 4px 0 0;
-          color: #998793;
-          font-size: 13px;
-        }
-
-        .product-grid {
-          display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 16px;
-        }
-
-        .product-card {
-          overflow: hidden;
-          background: white;
-          border: 1px solid #f0dce7;
-          border-radius: 21px;
-          box-shadow: 0 12px 32px rgba(60, 24, 46, 0.055);
-          transition:
-            transform 0.2s,
-            box-shadow 0.2s;
-        }
-
-        .product-card:hover {
-          transform: translateY(-4px);
-          box-shadow: 0 20px 42px rgba(60, 24, 46, 0.1);
-        }
-
-        .product-cover {
-          height: 155px;
-          position: relative;
-          display: grid;
-          place-items: center;
-          overflow: hidden;
-          background:
-            radial-gradient(
-              circle at 30% 25%,
-              rgba(255, 255, 255, 0.95),
-              transparent 18%
-            ),
-            linear-gradient(
-              135deg,
-              #ffe0ef,
-              #f8b5d5
-            );
-        }
-
-        .cover-glow {
-          position: absolute;
-          width: 150px;
-          height: 150px;
-          border-radius: 50%;
-          background: rgba(255, 255, 255, 0.42);
-          filter: blur(4px);
-        }
-
-        .product-icon {
-          position: relative;
-          z-index: 1;
-          width: 82px;
-          height: 82px;
-          border-radius: 24px;
-          display: grid;
-          place-items: center;
-          background: rgba(255, 255, 255, 0.84);
-          border: 1px solid rgba(255, 255, 255, 0.9);
-          box-shadow: 0 16px 35px rgba(170, 47, 112, 0.18);
-          font-size: 31px;
-          font-weight: 950;
-          color: #d32979;
-        }
-
-        .status-badge {
-          position: absolute;
-          top: 12px;
-          right: 12px;
-          z-index: 2;
-          padding: 6px 9px;
-          border-radius: 9px;
-          background: #fff;
-          color: #d62a7b;
-          font-size: 9px;
-          font-weight: 950;
-          box-shadow: 0 6px 15px rgba(100, 25, 65, 0.08);
-        }
-
-        .status-badge.hot {
-          background: #e72f84;
-          color: white;
-        }
-
-        .product-content {
-          padding: 15px;
-        }
-
-        .product-content h3 {
-          margin: 0;
-          min-height: 40px;
-          font-size: 15px;
-          line-height: 1.35;
-        }
-
-        .duration {
-          margin-top: 6px;
-          color: #9a8291;
-          font-size: 12px;
-        }
-
-        .tags {
-          display: flex;
-          gap: 5px;
-          margin-top: 11px;
-        }
-
-        .tags span {
-          padding: 5px 7px;
-          border-radius: 7px;
-          background: #fff1f8;
-          color: #d62a7b;
-          font-size: 9px;
-          font-weight: 850;
-        }
-
-        .product-meta {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 8px;
-          margin-top: 13px;
-        }
-
-        .product-meta strong {
-          color: #d62578;
-          font-size: 18px;
-        }
-
-        .stock-small,
-        .in-stock,
-        .out-stock {
-          font-size: 10px;
-          font-weight: 800;
-        }
-
-        .in-stock {
-          color: #35a36b;
-        }
-
-        .out-stock {
-          color: #df5c6d;
-        }
-
-        .buy-button {
-          width: 100%;
-          margin-top: 12px;
-          border: 0;
-          border-radius: 12px;
-          padding: 11px;
-          background: #e93287;
-          color: white;
-          font-weight: 900;
-          transition: 0.2s;
-        }
-
-        .buy-button:hover:not(:disabled) {
-          background: #d92478;
-          transform: translateY(-1px);
-        }
-
-        .buy-button:disabled {
-          cursor: not-allowed;
-          background: #e7dfe4;
-          color: #9b8e96;
-        }
-
-        .empty {
-          grid-column: 1 / -1;
-          text-align: center;
-          padding: 55px 20px;
-          background: white;
-          border: 1px dashed #e8cfdd;
-          border-radius: 20px;
-          color: #917e8b;
-        }
-
-        .error-box {
-          padding: 14px 16px;
-          margin-bottom: 15px;
-          border-radius: 14px;
-          color: #a92842;
-          background: #fff0f2;
-          border: 1px solid #ffd4dc;
-          font-size: 13px;
-        }
-
-        .message {
-          position: fixed;
-          left: 50%;
-          bottom: 24px;
-          transform: translateX(-50%);
-          z-index: 100;
-          padding: 12px 18px;
-          border-radius: 13px;
-          background: #241b2d;
-          color: white;
-          font-size: 13px;
-          font-weight: 750;
-          box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
-        }
-
-        .floating-zalo {
-          position: fixed;
-          right: 20px;
-          bottom: 20px;
-          z-index: 40;
-          border: 0;
-          border-radius: 999px;
-          padding: 13px 17px;
-          background: #e83288;
-          color: white;
-          font-weight: 900;
-          box-shadow: 0 12px 28px rgba(218, 42, 124, 0.3);
-        }
-
-        .modal-backdrop {
-          position: fixed;
-          inset: 0;
-          z-index: 200;
-          display: grid;
-          place-items: center;
-          padding: 20px;
-          background: rgba(32, 19, 29, 0.55);
-          backdrop-filter: blur(8px);
-        }
-
-        .modal {
-          width: min(460px, 100%);
-          background: white;
-          border-radius: 24px;
-          padding: 25px;
-          box-shadow: 0 30px 80px rgba(0, 0, 0, 0.2);
-        }
-
-        .modal h2 {
-          margin: 0 0 8px;
-          font-size: 22px;
-        }
-
-        .modal p {
-          color: #82717d;
-          font-size: 13px;
-          line-height: 1.55;
-        }
-
-        .modal-product {
-          margin: 18px 0;
-          padding: 15px;
-          border-radius: 15px;
-          background: #fff4f9;
-        }
-
-        .modal-product strong {
-          display: block;
-          color: #d7287a;
-          font-size: 19px;
-          margin-top: 5px;
-        }
-
-        .modal-actions {
-          display: flex;
-          gap: 9px;
-          margin-top: 18px;
-        }
-
-        .modal-actions button {
-          flex: 1;
-          border: 0;
-          border-radius: 12px;
-          padding: 12px;
-          font-weight: 850;
-        }
-
-        .cancel {
-          background: #f3edf1;
-          color: #675765;
-        }
-
-        .confirm {
-          color: white;
-          background: #e62f84;
-        }
-
-        .confirm:disabled {
-          opacity: 0.6;
-          cursor: wait;
-        }
-
-        .key-box {
-          margin: 17px 0;
-          padding: 15px;
-          border-radius: 15px;
-          background: #fff4f9;
-          border: 1px dashed #e75498;
-          word-break: break-all;
-          color: #c62570;
-          font-weight: 900;
-        }
-
-        .copy-key {
-          width: 100%;
-          border: 0;
-          border-radius: 12px;
-          padding: 12px;
-          color: white;
-          background: #e52f83;
-          font-weight: 900;
-        }
-
-        .skeleton-card {
-          padding-bottom: 15px;
-        }
-
-        .skeleton {
-          position: relative;
-          overflow: hidden;
-          background: #f5eaf0;
-        }
-
-        .skeleton::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          transform: translateX(-100%);
-          background: linear-gradient(
-            90deg,
-            transparent,
-            rgba(255, 255, 255, 0.7),
-            transparent
-          );
-          animation: shimmer 1.2s infinite;
-        }
-
-        .cover-skeleton {
-          height: 155px;
-        }
-
-        .line {
-          height: 13px;
-          margin: 15px 15px 0;
-          border-radius: 8px;
-        }
-
-        .line.big {
-          width: 65%;
-        }
-
-        .line.small {
-          width: 35%;
-          margin-top: 9px;
-        }
-
-        .line.button {
-          width: calc(100% - 30px);
-          height: 38px;
-          margin-top: 13px;
-        }
-
-        @keyframes shimmer {
-          100% {
-            transform: translateX(100%);
-          }
-        }
-
-        @media (max-width: 1000px) {
-          .nav {
-            display: none;
-          }
-
-          .hero {
-            grid-template-columns: 1fr;
-          }
-
-          .layout {
-            grid-template-columns: 190px 1fr;
-          }
-
-          .product-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-        }
-
-        @media (max-width: 720px) {
-          .topbar {
-            padding: 0 15px;
-          }
-
-          .brand {
-            font-size: 18px;
-          }
-
-          .account-area .balance {
-            display: none;
-          }
-
-          .hero {
-            padding: 20px 15px;
-          }
-
-          .hero-main {
-            min-height: 235px;
-            padding: 27px;
-            border-radius: 23px;
-          }
-
-          .hero-side {
-            border-radius: 23px;
-          }
-
-          .layout {
-            display: block;
-            padding: 0 15px 50px;
-          }
-
-          .sidebar {
-            position: static;
-            margin-bottom: 15px;
-            overflow-x: auto;
-            white-space: nowrap;
-            padding: 9px;
-          }
-
-          .sidebar-title {
-            display: none;
-          }
-
-          .category-btn {
-            width: auto;
-            display: inline-block;
-            margin: 0 3px;
-          }
-
-          .toolbar {
-            flex-direction: column;
-            align-items: stretch;
-          }
-
-          .product-grid {
-            grid-template-columns: 1fr;
-          }
-
-          .section-head {
-            align-items: flex-start;
-            flex-direction: column;
-            gap: 4px;
-          }
-
-          .floating-zalo {
-            right: 14px;
-            bottom: 14px;
-          }
-        }
-      `}</style>
-
-      <header className="topbar">
-        <a href="/shop" className="brand">
-          <span className="brand-logo">X</span>
-          XENOVA PLAY
-        </a>
-
-        <nav className="nav">
-          {NAV_ITEMS.map((item) => (
-            <a
-              key={item.href}
-              href={item.href}
-              className={
-                item.href === "/shop" ? "active" : ""
-              }
-            >
-              {item.label}
-            </a>
-          ))}
-        </nav>
-
-        <div className="account-area">
-          {user && (
-            <div className="balance">
-              {formatPrice(wallet)}
-            </div>
-          )}
-
-          {!user && (
+    <>
+      <div className="shop-page">
+        <header className="topbar">
+          <div className="topbar-inner">
             <button
-              className="login-btn"
-              onClick={() => router.push("/login")}
+              className="brand"
+              onClick={() => go("/")}
             >
-              Đăng nhập
+              <div className="brand-logo">X</div>
+
+              <div className="brand-text">
+                <strong>XENOVA</strong>
+                <span>PLAY</span>
+              </div>
             </button>
-          )}
-        </div>
-      </header>
 
-      <section className="hero">
-        <div className="hero-main">
-          <small>WELCOME TO XENOVA PLAY</small>
-          <h1>Kho KEY tự động dành cho bạn.</h1>
-          <p>
-            Mua KEY nhanh chóng, thanh toán bằng số dư
-            tài khoản và nhận KEY ngay sau khi đơn hàng
-            hoàn tất.
-          </p>
-        </div>
+            <nav className="main-nav">
+              {NAV_ITEMS.map((item) => {
+                const active =
+                  item.path === "/shop";
 
-        <div className="hero-side">
-          <div className="hero-side-title">
-            KEY ĐANG CÓ SẴN
-          </div>
+                return (
+                  <button
+                    key={item.path}
+                    className={`nav-item ${
+                      active ? "active" : ""
+                    }`}
+                    onClick={() => go(item.path)}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
+            </nav>
 
-          <div className="hero-number">
-            {totalStock.toLocaleString("vi-VN")}
-          </div>
-
-          <p>
-            Hệ thống tự động cập nhật số lượng sản phẩm
-            còn lại.
-          </p>
-
-          <button
-            className="deposit-btn"
-            onClick={goDeposit}
-          >
-            + Nạp tiền
-          </button>
-        </div>
-      </section>
-
-      <div className="layout">
-        <aside className="sidebar">
-          <div className="sidebar-title">Danh mục</div>
-
-          <button
-            className={`category-btn ${
-              selectedCategory === "all" ? "active" : ""
-            }`}
-            onClick={() => setSelectedCategory("all")}
-          >
-            Tất cả
-            <span className="category-count">
-              {products.length}
-            </span>
-          </button>
-
-          {categories.map((category) => {
-            const categoryId = category.id;
-
-            const count = products.filter(
-              (product) =>
-                String(getProductCategory(product)) ===
-                String(categoryId)
-            ).length;
-
-            return (
+            <div className="header-right">
               <button
-                key={categoryId}
-                className={`category-btn ${
-                  String(selectedCategory) ===
-                  String(categoryId)
-                    ? "active"
-                    : ""
-                }`}
+                className="theme-button"
+                aria-label="Đổi giao diện"
                 onClick={() =>
-                  setSelectedCategory(categoryId)
+                  document.documentElement.classList.toggle(
+                    "dark"
+                  )
                 }
               >
-                {getCategoryName(category)}
+                ☼
+              </button>
 
-                <span className="category-count">
-                  {count}
+              <button
+                className="wallet-box"
+                onClick={() => go("/deposit")}
+              >
+                <span className="wallet-icon">₫</span>
+
+                <span className="wallet-info">
+                  <small>Số dư</small>
+                  <strong>{formatPrice(wallet)}</strong>
                 </span>
               </button>
-            );
-          })}
-        </aside>
 
-        <section className="shop-content">
-          <div className="toolbar">
-            <div className="search-box">
-              <span>⌕</span>
-
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Tìm kiếm sản phẩm..."
-              />
-            </div>
-
-            <select
-              className="sort-select"
-              value={sort}
-              onChange={(e) => setSort(e.target.value)}
-            >
-              <option value="default">
-                Mặc định
-              </option>
-              <option value="price-asc">
-                Giá thấp → cao
-              </option>
-              <option value="price-desc">
-                Giá cao → thấp
-              </option>
-              <option value="stock">
-                Còn nhiều hàng
-              </option>
-              <option value="name">
-                Tên A → Z
-              </option>
-            </select>
-          </div>
-
-          {error && (
-            <div className="error-box">
-              {error}
-            </div>
-          )}
-
-          <div className="section-head">
-            <div>
-              <h2>Sản phẩm</h2>
-              <p>
-                {loading
-                  ? "Đang tải..."
-                  : `${visibleProducts.length} sản phẩm`}
-              </p>
+              <button
+                className="avatar"
+                onClick={() => go("/account")}
+              >
+                {user?.email
+                  ? user.email.charAt(0).toUpperCase()
+                  : "U"}
+              </button>
             </div>
           </div>
+        </header>
 
-          <div className="product-grid">
-            {loading ? (
-              <>
-                <ProductSkeleton />
-                <ProductSkeleton />
-                <ProductSkeleton />
-                <ProductSkeleton />
-                <ProductSkeleton />
-                <ProductSkeleton />
-              </>
-            ) : visibleProducts.length === 0 ? (
-              <div className="empty">
-                Không tìm thấy sản phẩm phù hợp.
-              </div>
-            ) : (
-              visibleProducts.map((product) => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  stock={stock}
-                  onBuy={handleBuyClick}
+        <main className="content">
+          <section className="hero">
+            <div className="petals">
+              {Array.from({ length: 24 }).map((_, index) => (
+                <span
+                  key={index}
+                  className="petal"
+                  style={{
+                    left: `${(index * 17) % 100}%`,
+                    animationDelay: `${(index % 8) * 0.7}s`,
+                    animationDuration: `${
+                      5 + (index % 5)
+                    }s`,
+                  }}
                 />
-              ))
-            )}
+              ))}
+            </div>
+
+            <div className="hero-copy">
+              <div className="hero-small">
+                XENOVA PLAY STORE
+              </div>
+
+              <h1>
+                SHOP
+                <span> XENOVA</span>
+              </h1>
+
+              <p>
+                Hệ thống cung cấp KEY nhanh chóng,
+                an toàn và tự động.
+              </p>
+
+              <div className="hero-buttons">
+                <button
+                  className="hero-button primary"
+                  onClick={() =>
+                    document
+                      .getElementById("products")
+                      ?.scrollIntoView({
+                        behavior: "smooth",
+                      })
+                  }
+                >
+                  Khám phá sản phẩm
+                </button>
+
+                <button
+                  className="hero-button secondary"
+                  onClick={() => go("/deposit")}
+                >
+                  Nạp tiền
+                </button>
+              </div>
+            </div>
+
+            <div className="hero-character">
+              <div className="character-glow" />
+              <div className="character">
+                <div className="hair-back" />
+                <div className="head">
+                  <div className="hair-top" />
+                  <div className="face">
+                    <span className="eye left" />
+                    <span className="eye right" />
+                    <span className="mouth" />
+                  </div>
+                </div>
+                <div className="neck" />
+                <div className="body">
+                  <div className="ribbon" />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <div className="shop-layout">
+            <aside className="sidebar">
+              <div className="side-card">
+                <div className="side-title">
+                  <span className="side-title-icon">
+                    ☰
+                  </span>
+                  Danh mục
+                </div>
+
+                <button
+                  className={`category ${
+                    selectedCategory === "all"
+                      ? "selected"
+                      : ""
+                  }`}
+                  onClick={() =>
+                    setSelectedCategory("all")
+                  }
+                >
+                  <span>✦</span>
+                  Tất cả sản phẩm
+                  <b>{products.length}</b>
+                </button>
+
+                {categories.map((category, index) => {
+                  const id =
+                    category.id ??
+                    category.category_id ??
+                    index;
+
+                  const label =
+                    category.name ??
+                    category.title ??
+                    category.category_name ??
+                    `Danh mục ${index + 1}`;
+
+                  const count = products.filter(
+                    (product) => {
+                      return (
+                        String(
+                          product.category_id ?? ""
+                        ) === String(id)
+                      );
+                    }
+                  ).length;
+
+                  return (
+                    <button
+                      key={id}
+                      className={`category ${
+                        String(selectedCategory) ===
+                        String(id)
+                          ? "selected"
+                          : ""
+                      }`}
+                      onClick={() =>
+                        setSelectedCategory(id)
+                      }
+                    >
+                      <span>◇</span>
+                      {label}
+                      <b>{count}</b>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="vip-card">
+                <div className="vip-spark">✦</div>
+
+                <div>
+                  <strong>VIP MEMBER</strong>
+                  <p>
+                    Nhận nhiều ưu đãi khi mua
+                    sản phẩm.
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => go("/account")}
+                >
+                  Xem ưu đãi
+                </button>
+              </div>
+
+              <div className="support-card">
+                <div className="support-icon">
+                  ?
+                </div>
+
+                <div>
+                  <strong>Cần hỗ trợ?</strong>
+                  <p>
+                    Liên hệ Admin để được hỗ trợ
+                    nhanh nhất.
+                  </p>
+                </div>
+
+                <button
+                  onClick={() =>
+                    window.open(
+                      "https://zalo.me/84365717262",
+                      "_blank"
+                    )
+                  }
+                >
+                  Chat Admin
+                </button>
+              </div>
+            </aside>
+
+            <section
+              className="products-section"
+              id="products"
+            >
+              <div className="section-heading">
+                <div>
+                  <span className="section-kicker">
+                    XENOVA STORE
+                  </span>
+
+                  <h2>Sản phẩm nổi bật</h2>
+
+                  <p>
+                    Chọn sản phẩm phù hợp với nhu cầu
+                    của bạn.
+                  </p>
+                </div>
+
+                <div className="result-count">
+                  {filteredProducts.length} sản phẩm
+                </div>
+              </div>
+
+              {error && (
+                <div className="error-box">
+                  {error}
+                </div>
+              )}
+
+              {loading ? (
+                <div className="products-grid">
+                  {Array.from({ length: 6 }).map(
+                    (_, index) => (
+                      <ProductSkeleton
+                        key={index}
+                      />
+                    )
+                  )}
+                </div>
+              ) : filteredProducts.length ? (
+                <div className="products-grid">
+                  {filteredProducts.map((product) => (
+                    <ProductCard
+                      key={product.id}
+                      product={product}
+                      stock={stock}
+                      onBuy={handleBuy}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="empty-products">
+                  <div className="empty-icon">
+                    ♢
+                  </div>
+                  <h3>Chưa có sản phẩm</h3>
+                  <p>
+                    Hiện chưa có sản phẩm trong danh
+                    mục này.
+                  </p>
+                </div>
+              )}
+
+              <div className="feature-grid">
+                <div className="feature-card">
+                  <div className="feature-icon">
+                    ⚡
+                  </div>
+                  <div>
+                    <strong>Giao key tự động</strong>
+                    <span>
+                      Nhận key ngay sau khi thanh toán.
+                    </span>
+                  </div>
+                </div>
+
+                <div className="feature-card">
+                  <div className="feature-icon">
+                    🔒
+                  </div>
+                  <div>
+                    <strong>Thanh toán an toàn</strong>
+                    <span>
+                      Hệ thống giao dịch nhanh chóng.
+                    </span>
+                  </div>
+                </div>
+
+                <div className="feature-card">
+                  <div className="feature-icon">
+                    ♡
+                  </div>
+                  <div>
+                    <strong>Hỗ trợ 24/7</strong>
+                    <span>
+                      Đội ngũ hỗ trợ luôn sẵn sàng.
+                    </span>
+                  </div>
+                </div>
+
+                <div className="feature-card">
+                  <div className="feature-icon">
+                    ★
+                  </div>
+                  <div>
+                    <strong>Sản phẩm chất lượng</strong>
+                    <span>
+                      Sản phẩm được kiểm tra trước khi
+                      bán.
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </section>
           </div>
-        </section>
+        </main>
+
+        <button
+          className="floating-zalo"
+          onClick={() =>
+            window.open(
+              "https://zalo.me/84365717262",
+              "_blank"
+            )
+          }
+        >
+          <span>💬</span>
+          <div>
+            <small>HỖ TRỢ</small>
+            <strong>Chat Admin</strong>
+          </div>
+        </button>
       </div>
-
-      <button
-        className="floating-zalo"
-        onClick={() =>
-          window.open(
-            ZALO_ADMIN,
-            "_blank",
-            "noopener,noreferrer"
-          )
-        }
-      >
-        💬 Chat Admin
-      </button>
-
-      {message && (
-        <div className="message">
-          {message}
-        </div>
-      )}
 
       {buyModal && (
         <div
-          className="modal-backdrop"
-          onMouseDown={() => {
+          className="modal-overlay"
+          onClick={() => {
             if (!buying) setBuyModal(null);
           }}
         >
           <div
             className="modal"
-            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(event) =>
+              event.stopPropagation()
+            }
           >
-            <h2>Xác nhận mua</h2>
+            <button
+              className="modal-close"
+              onClick={() => {
+                if (!buying) setBuyModal(null);
+              }}
+            >
+              ×
+            </button>
 
-            <p>
-              Kiểm tra thông tin trước khi xác nhận
-              đơn hàng.
+            <div className="modal-icon">
+              🛒
+            </div>
+
+            <h3>Xác nhận mua hàng</h3>
+
+            <p className="modal-product-name">
+              {buyModal.name ||
+                buyModal.title ||
+                "Sản phẩm XENOVA"}
             </p>
 
-            <div className="modal-product">
+            <div className="modal-info">
               <div>
-                {getProductName(buyModal)}
+                <span>Giá sản phẩm</span>
+                <strong>
+                  {formatPrice(
+                    buyModal.price ??
+                      buyModal.sell_price ??
+                      buyModal.sale_price ??
+                      0
+                  )}
+                </strong>
               </div>
 
-              <strong>
-                {formatPrice(
-                  getProductPrice(buyModal)
-                )}
-              </strong>
-
-              <div
-                style={{
-                  marginTop: 7,
-                  color: "#8d7a87",
-                  fontSize: 12,
-                }}
-              >
-                Số dư hiện tại:{" "}
-                {formatPrice(wallet)}
+              <div>
+                <span>Số dư hiện tại</span>
+                <strong>
+                  {formatPrice(wallet)}
+                </strong>
               </div>
             </div>
 
+            {message && (
+              <div className="modal-message">
+                {message}
+              </div>
+            )}
+
             <div className="modal-actions">
               <button
-                className="cancel"
+                className="cancel-button"
                 disabled={buying}
-                onClick={() => setBuyModal(null)}
+                onClick={() =>
+                  setBuyModal(null)
+                }
               >
                 Hủy
               </button>
 
               <button
-                className="confirm"
+                className="confirm-button"
                 disabled={buying}
                 onClick={confirmBuy}
               >
@@ -1663,55 +925,1425 @@ export default function ShopPage() {
       )}
 
       {successModal && (
-        <div className="modal-backdrop">
-          <div className="modal">
-            <h2>🎉 Mua hàng thành công</h2>
+        <div className="modal-overlay">
+          <div className="modal success-modal">
+            <div className="success-icon">
+              ✓
+            </div>
+
+            <h3>Mua hàng thành công</h3>
 
             <p>
-              Sản phẩm đã được giao. Hãy lưu KEY của
-              bạn.
+              Key của bạn đã được tạo thành công.
             </p>
 
             {successModal.key ? (
-              <div className="key-box">
-                {successModal.key}
+              <div className="key-result">
+                <span>KEY CỦA BẠN</span>
+
+                <strong>
+                  {successModal.key}
+                </strong>
+
+                <button
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(
+                        successModal.key
+                      );
+                    } catch (err) {
+                      console.error(err);
+                    }
+                  }}
+                >
+                  Sao chép KEY
+                </button>
               </div>
             ) : (
-              <div className="key-box">
-                KEY đã được thêm vào tài khoản của bạn.
+              <div className="key-result">
+                <span>ĐÃ HOÀN TẤT</span>
+                <strong>
+                  Kiểm tra mục KEY của tôi
+                </strong>
               </div>
             )}
 
-            {successModal.key && (
-              <button
-                className="copy-key"
-                onClick={copyKey}
-              >
-                📋 Copy KEY
-              </button>
-            )}
-
-            <div className="modal-actions">
-              <button
-                className="cancel"
-                onClick={() => {
-                  setSuccessModal(null);
-                  router.push("/keys");
-                }}
-              >
-                Xem KEY của tôi
-              </button>
-
-              <button
-                className="confirm"
-                onClick={() => setSuccessModal(null)}
-              >
-                Tiếp tục mua
-              </button>
-            </div>
+            <button
+              className="confirm-button full"
+              onClick={() =>
+                setSuccessModal(null)
+              }
+            >
+              Đóng
+            </button>
           </div>
         </div>
       )}
-    </main>
+
+      <style jsx global>{`
+        * {
+          box-sizing: border-box;
+        }
+
+        html {
+          scroll-behavior: smooth;
+        }
+
+        body {
+          margin: 0;
+          background: #f7f8fc;
+          color: #252536;
+          font-family:
+            Inter,
+            ui-sans-serif,
+            system-ui,
+            -apple-system,
+            BlinkMacSystemFont,
+            "Segoe UI",
+            sans-serif;
+        }
+
+        button {
+          font: inherit;
+        }
+
+        .shop-page {
+          min-height: 100vh;
+          background:
+            radial-gradient(
+              circle at 85% 10%,
+              rgba(255, 185, 216, 0.18),
+              transparent 30%
+            ),
+            #f7f8fc;
+        }
+
+        .topbar {
+          position: sticky;
+          top: 0;
+          z-index: 50;
+          height: 76px;
+          background: rgba(255, 255, 255, 0.94);
+          border-bottom: 1px solid #ececf3;
+          backdrop-filter: blur(16px);
+        }
+
+        .topbar-inner {
+          width: min(1440px, calc(100% - 48px));
+          height: 100%;
+          margin: auto;
+          display: flex;
+          align-items: center;
+          gap: 28px;
+        }
+
+        .brand {
+          border: 0;
+          background: transparent;
+          padding: 0;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-shrink: 0;
+        }
+
+        .brand-logo {
+          width: 38px;
+          height: 38px;
+          border-radius: 12px;
+          display: grid;
+          place-items: center;
+          color: white;
+          font-weight: 900;
+          font-size: 21px;
+          background:
+            linear-gradient(
+              145deg,
+              #ff5fa2,
+              #9b5cff
+            );
+          box-shadow:
+            0 8px 20px rgba(222, 83, 159, 0.24);
+        }
+
+        .brand-text {
+          display: flex;
+          flex-direction: column;
+          line-height: 1;
+          text-align: left;
+        }
+
+        .brand-text strong {
+          font-size: 17px;
+          letter-spacing: 0.8px;
+        }
+
+        .brand-text span {
+          margin-top: 4px;
+          color: #a65ce5;
+          font-size: 10px;
+          font-weight: 800;
+          letter-spacing: 3px;
+        }
+
+        .main-nav {
+          display: flex;
+          align-items: center;
+          gap: 3px;
+          flex: 1;
+        }
+
+        .nav-item {
+          border: 0;
+          background: transparent;
+          color: #737486;
+          padding: 10px 12px;
+          border-radius: 10px;
+          cursor: pointer;
+          font-size: 13px;
+          font-weight: 600;
+          white-space: nowrap;
+          transition:
+            background 0.2s,
+            color 0.2s;
+        }
+
+        .nav-item:hover {
+          background: #faf0f7;
+          color: #d84f9b;
+        }
+
+        .nav-item.active {
+          color: #d84f9b;
+          background: #fff0f8;
+        }
+
+        .header-right {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .theme-button {
+          width: 38px;
+          height: 38px;
+          border: 1px solid #e8e8ef;
+          border-radius: 12px;
+          background: white;
+          cursor: pointer;
+          color: #656577;
+        }
+
+        .wallet-box {
+          border: 1px solid #ececf3;
+          background: white;
+          border-radius: 12px;
+          padding: 6px 10px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          cursor: pointer;
+          min-width: 120px;
+        }
+
+        .wallet-icon {
+          width: 28px;
+          height: 28px;
+          border-radius: 9px;
+          display: grid;
+          place-items: center;
+          color: #b94e99;
+          background: #fff0f8;
+          font-weight: 800;
+        }
+
+        .wallet-info {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          line-height: 1.1;
+        }
+
+        .wallet-info small {
+          color: #999aaa;
+          font-size: 9px;
+        }
+
+        .wallet-info strong {
+          margin-top: 3px;
+          font-size: 12px;
+        }
+
+        .avatar {
+          width: 38px;
+          height: 38px;
+          border: 0;
+          border-radius: 50%;
+          color: white;
+          font-weight: 800;
+          cursor: pointer;
+          background:
+            linear-gradient(
+              135deg,
+              #f28bbb,
+              #8e72e8
+            );
+        }
+
+        .content {
+          width: min(1440px, calc(100% - 48px));
+          margin: auto;
+          padding: 24px 0 80px;
+        }
+
+        .hero {
+          position: relative;
+          overflow: hidden;
+          min-height: 330px;
+          border-radius: 24px;
+          background:
+            linear-gradient(
+              110deg,
+              #fff0f8 0%,
+              #f9ecff 45%,
+              #eee9ff 100%
+            );
+          border: 1px solid #f0ddec;
+          box-shadow:
+            0 20px 60px rgba(122, 79, 119, 0.08);
+        }
+
+        .hero:after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background:
+            radial-gradient(
+              circle at 75% 20%,
+              rgba(255, 255, 255, 0.8),
+              transparent 28%
+            ),
+            radial-gradient(
+              circle at 20% 100%,
+              rgba(255, 170, 210, 0.25),
+              transparent 30%
+            );
+          pointer-events: none;
+        }
+
+        .hero-copy {
+          position: relative;
+          z-index: 5;
+          padding: 58px 0 50px 68px;
+          max-width: 610px;
+        }
+
+        .hero-small {
+          color: #d35a9e;
+          font-size: 11px;
+          font-weight: 800;
+          letter-spacing: 3px;
+        }
+
+        .hero h1 {
+          margin: 10px 0 8px;
+          font-size: clamp(44px, 6vw, 78px);
+          line-height: 0.95;
+          letter-spacing: -4px;
+          color: #28283a;
+        }
+
+        .hero h1 span {
+          display: block;
+          background:
+            linear-gradient(
+              90deg,
+              #ed6fa9,
+              #9867e8
+            );
+          -webkit-background-clip: text;
+          background-clip: text;
+          color: transparent;
+        }
+
+        .hero p {
+          max-width: 450px;
+          color: #777688;
+          font-size: 14px;
+          line-height: 1.7;
+          margin: 18px 0 22px;
+        }
+
+        .hero-buttons {
+          display: flex;
+          gap: 10px;
+        }
+
+        .hero-button {
+          border: 0;
+          border-radius: 12px;
+          padding: 12px 17px;
+          cursor: pointer;
+          font-size: 12px;
+          font-weight: 800;
+        }
+
+        .hero-button.primary {
+          color: white;
+          background:
+            linear-gradient(
+              135deg,
+              #ed67a7,
+              #9b6be9
+            );
+          box-shadow:
+            0 10px 24px rgba(213, 91, 160, 0.25);
+        }
+
+        .hero-button.secondary {
+          background: rgba(255, 255, 255, 0.7);
+          border: 1px solid #eaddea;
+          color: #6f6374;
+        }
+
+        .hero-character {
+          position: absolute;
+          z-index: 3;
+          right: 8%;
+          bottom: -42px;
+          width: 430px;
+          height: 360px;
+        }
+
+        .character-glow {
+          position: absolute;
+          width: 330px;
+          height: 330px;
+          right: 20px;
+          bottom: 0;
+          border-radius: 50%;
+          background:
+            radial-gradient(
+              circle,
+              rgba(255, 255, 255, 0.96),
+              rgba(255, 182, 221, 0.3) 45%,
+              transparent 70%
+            );
+        }
+
+        .character {
+          position: absolute;
+          width: 260px;
+          height: 350px;
+          right: 65px;
+          bottom: 0;
+        }
+
+        .hair-back {
+          position: absolute;
+          left: 38px;
+          top: 14px;
+          width: 190px;
+          height: 210px;
+          border-radius: 55% 48% 40% 50%;
+          background:
+            linear-gradient(
+              145deg,
+              #633b73,
+              #ad5e9b 55%,
+              #e889bc
+            );
+          transform: rotate(8deg);
+        }
+
+        .head {
+          position: absolute;
+          z-index: 4;
+          left: 70px;
+          top: 38px;
+          width: 130px;
+          height: 155px;
+          border-radius: 48% 48% 46% 46%;
+          background: #ffe2d8;
+          overflow: hidden;
+          box-shadow:
+            inset -7px -5px 0 rgba(225, 130, 130, 0.08);
+        }
+
+        .hair-top {
+          position: absolute;
+          left: -8px;
+          top: -22px;
+          width: 150px;
+          height: 82px;
+          border-radius: 50%;
+          background:
+            linear-gradient(
+              135deg,
+              #513263,
+              #a75093
+            );
+        }
+
+        .face {
+          position: absolute;
+          left: 0;
+          right: 0;
+          bottom: 34px;
+          height: 52px;
+        }
+
+        .eye {
+          position: absolute;
+          top: 17px;
+          width: 9px;
+          height: 14px;
+          border-radius: 50%;
+          background: #3e3150;
+        }
+
+        .eye.left {
+          left: 36px;
+        }
+
+        .eye.right {
+          right: 36px;
+        }
+
+        .mouth {
+          position: absolute;
+          left: 59px;
+          top: 35px;
+          width: 14px;
+          height: 7px;
+          border-bottom: 2px solid #bb657c;
+          border-radius: 50%;
+        }
+
+        .neck {
+          position: absolute;
+          z-index: 3;
+          top: 177px;
+          left: 113px;
+          width: 43px;
+          height: 55px;
+          background: #ffd8cc;
+        }
+
+        .body {
+          position: absolute;
+          left: 34px;
+          top: 205px;
+          width: 200px;
+          height: 170px;
+          border-radius: 80px 80px 0 0;
+          background:
+            linear-gradient(
+              135deg,
+              #9d69d4,
+              #e98bb4
+            );
+        }
+
+        .ribbon {
+          position: absolute;
+          left: 70px;
+          top: 10px;
+          width: 60px;
+          height: 50px;
+          background: #ff8ebd;
+          clip-path: polygon(
+            50% 20%,
+            100% 0,
+            84% 100%,
+            50% 72%,
+            16% 100%,
+            0 0
+          );
+        }
+
+        .petals {
+          position: absolute;
+          z-index: 10;
+          inset: 0;
+          pointer-events: none;
+          overflow: hidden;
+        }
+
+        .petal {
+          position: absolute;
+          top: -20px;
+          width: 10px;
+          height: 6px;
+          border-radius: 80% 20% 80% 20%;
+          background: #ed9cc3;
+          opacity: 0.6;
+          transform: rotate(35deg);
+          animation: falling linear infinite;
+        }
+
+        @keyframes falling {
+          0% {
+            transform:
+              translate3d(0, -20px, 0)
+              rotate(0deg);
+            opacity: 0;
+          }
+
+          15% {
+            opacity: 0.7;
+          }
+
+          100% {
+            transform:
+              translate3d(
+                80px,
+                390px,
+                0
+              )
+              rotate(360deg);
+            opacity: 0;
+          }
+        }
+
+        .shop-layout {
+          display: grid;
+          grid-template-columns: 270px minmax(0, 1fr);
+          gap: 24px;
+          margin-top: 24px;
+        }
+
+        .sidebar {
+          display: flex;
+          flex-direction: column;
+          gap: 18px;
+        }
+
+        .side-card,
+        .support-card {
+          background: white;
+          border: 1px solid #ececf3;
+          border-radius: 18px;
+          padding: 18px;
+          box-shadow:
+            0 10px 35px rgba(41, 34, 56, 0.04);
+        }
+
+        .side-title {
+          display: flex;
+          align-items: center;
+          gap: 9px;
+          font-size: 14px;
+          font-weight: 800;
+          margin-bottom: 10px;
+        }
+
+        .side-title-icon {
+          color: #dc5fa0;
+        }
+
+        .category {
+          width: 100%;
+          border: 0;
+          background: transparent;
+          display: flex;
+          align-items: center;
+          gap: 9px;
+          text-align: left;
+          padding: 11px 10px;
+          margin-top: 3px;
+          border-radius: 11px;
+          color: #777888;
+          cursor: pointer;
+          font-size: 12px;
+          transition: 0.2s;
+        }
+
+        .category:hover {
+          background: #fff3f9;
+          color: #d65d9d;
+        }
+
+        .category.selected {
+          background:
+            linear-gradient(
+              90deg,
+              #fff0f8,
+              #faf1ff
+            );
+          color: #d35b9d;
+          font-weight: 700;
+        }
+
+        .category b {
+          margin-left: auto;
+          font-size: 10px;
+          color: #a5a5b1;
+        }
+
+        .vip-card {
+          position: relative;
+          overflow: hidden;
+          border-radius: 18px;
+          padding: 19px;
+          color: white;
+          background:
+            linear-gradient(
+              135deg,
+              #70488f,
+              #c15b9f
+            );
+          box-shadow:
+            0 15px 35px rgba(142, 73, 139, 0.18);
+        }
+
+        .vip-spark {
+          position: absolute;
+          right: 16px;
+          top: 10px;
+          font-size: 38px;
+          opacity: 0.2;
+        }
+
+        .vip-card strong {
+          font-size: 13px;
+          letter-spacing: 1px;
+        }
+
+        .vip-card p {
+          margin: 8px 0 15px;
+          max-width: 190px;
+          color: rgba(255, 255, 255, 0.75);
+          font-size: 11px;
+          line-height: 1.5;
+        }
+
+        .vip-card button {
+          border: 0;
+          border-radius: 9px;
+          background: white;
+          color: #9b5795;
+          padding: 8px 12px;
+          font-size: 10px;
+          font-weight: 800;
+          cursor: pointer;
+        }
+
+        .support-card {
+          display: flex;
+          gap: 10px;
+          align-items: flex-start;
+          flex-wrap: wrap;
+        }
+
+        .support-icon {
+          width: 31px;
+          height: 31px;
+          border-radius: 9px;
+          display: grid;
+          place-items: center;
+          color: #d6579b;
+          background: #fff0f8;
+          font-weight: 900;
+        }
+
+        .support-card > div:nth-child(2) {
+          flex: 1;
+          min-width: 150px;
+        }
+
+        .support-card strong {
+          display: block;
+          font-size: 12px;
+        }
+
+        .support-card p {
+          margin: 5px 0 0;
+          color: #9494a1;
+          font-size: 10px;
+          line-height: 1.5;
+        }
+
+        .support-card button {
+          width: 100%;
+          border: 0;
+          border-radius: 9px;
+          padding: 9px;
+          color: white;
+          background:
+            linear-gradient(
+              135deg,
+              #ee71aa,
+              #9a6ae7
+            );
+          font-size: 10px;
+          font-weight: 800;
+          cursor: pointer;
+        }
+
+        .products-section {
+          min-width: 0;
+        }
+
+        .section-heading {
+          display: flex;
+          justify-content: space-between;
+          align-items: end;
+          margin-bottom: 17px;
+        }
+
+        .section-kicker {
+          color: #d45d9f;
+          font-size: 9px;
+          font-weight: 900;
+          letter-spacing: 2px;
+        }
+
+        .section-heading h2 {
+          margin: 5px 0 3px;
+          font-size: 25px;
+          letter-spacing: -0.6px;
+        }
+
+        .section-heading p {
+          margin: 0;
+          color: #9898a7;
+          font-size: 11px;
+        }
+
+        .result-count {
+          border: 1px solid #eaeaf1;
+          background: white;
+          border-radius: 9px;
+          padding: 7px 10px;
+          color: #858594;
+          font-size: 10px;
+        }
+
+        .products-grid {
+          display: grid;
+          grid-template-columns:
+            repeat(3, minmax(0, 1fr));
+          gap: 15px;
+        }
+
+        .product-card {
+          overflow: hidden;
+          background: white;
+          border: 1px solid #ededf3;
+          border-radius: 16px;
+          box-shadow:
+            0 8px 25px rgba(40, 32, 50, 0.035);
+          transition:
+            transform 0.2s,
+            box-shadow 0.2s;
+        }
+
+        .product-card:hover {
+          transform: translateY(-3px);
+          box-shadow:
+            0 16px 35px rgba(40, 32, 50, 0.08);
+        }
+
+        .product-image-wrap {
+          position: relative;
+          height: 150px;
+          background:
+            linear-gradient(
+              135deg,
+              #fff0f8,
+              #f1ebff
+            );
+          overflow: hidden;
+        }
+
+        .product-image {
+          width: 100%;
+          height: 100%;
+          display: block;
+          object-fit: cover;
+        }
+
+        .sprite-placeholder {
+          width: 100%;
+          height: 100%;
+          display: grid;
+          place-items: center;
+          color: #d968a7;
+          font-size: 34px;
+          font-weight: 900;
+          background:
+            radial-gradient(
+              circle,
+              #fff 0,
+              transparent 55%
+            );
+        }
+
+        .stock-badge {
+          position: absolute;
+          top: 10px;
+          right: 10px;
+          padding: 5px 8px;
+          border-radius: 8px;
+          background: rgba(255, 255, 255, 0.9);
+          color: #48a47d;
+          font-size: 9px;
+          font-weight: 800;
+          backdrop-filter: blur(5px);
+        }
+
+        .stock-badge.out {
+          color: #d66b72;
+        }
+
+        .product-body {
+          padding: 13px;
+        }
+
+        .product-title {
+          min-height: 36px;
+          color: #303041;
+          font-size: 13px;
+          font-weight: 800;
+          line-height: 1.35;
+        }
+
+        .product-duration {
+          display: flex;
+          gap: 5px;
+          align-items: center;
+          color: #9a9aa8;
+          font-size: 9px;
+          margin-top: 5px;
+        }
+
+        .product-bottom {
+          display: flex;
+          justify-content: space-between;
+          align-items: end;
+          gap: 8px;
+          margin-top: 12px;
+        }
+
+        .product-price {
+          color: #d4529c;
+          font-size: 15px;
+          font-weight: 900;
+        }
+
+        .product-note {
+          margin-top: 2px;
+          color: #b0b0ba;
+          font-size: 8px;
+        }
+
+        .buy-button {
+          border: 0;
+          border-radius: 9px;
+          padding: 9px 11px;
+          color: white;
+          background:
+            linear-gradient(
+              135deg,
+              #ed6ba8,
+              #9b69e5
+            );
+          cursor: pointer;
+          font-size: 9px;
+          font-weight: 800;
+          white-space: nowrap;
+        }
+
+        .buy-button:disabled {
+          opacity: 0.45;
+          cursor: not-allowed;
+        }
+
+        .feature-grid {
+          display: grid;
+          grid-template-columns:
+            repeat(4, minmax(0, 1fr));
+          gap: 12px;
+          margin-top: 22px;
+        }
+
+        .feature-card {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          min-height: 72px;
+          padding: 12px;
+          border-radius: 14px;
+          background: white;
+          border: 1px solid #ededf3;
+        }
+
+        .feature-icon {
+          width: 34px;
+          height: 34px;
+          flex: 0 0 34px;
+          display: grid;
+          place-items: center;
+          border-radius: 10px;
+          color: #d45b9f;
+          background: #fff0f8;
+        }
+
+        .feature-card strong {
+          display: block;
+          color: #383846;
+          font-size: 10px;
+        }
+
+        .feature-card span {
+          display: block;
+          margin-top: 4px;
+          color: #9999a6;
+          font-size: 8px;
+          line-height: 1.4;
+        }
+
+        .empty-products {
+          padding: 70px 20px;
+          text-align: center;
+          border-radius: 18px;
+          border: 1px dashed #dedee8;
+          background: white;
+        }
+
+        .empty-icon {
+          font-size: 38px;
+          color: #d96aa7;
+        }
+
+        .empty-products h3 {
+          margin: 8px 0 5px;
+        }
+
+        .empty-products p {
+          margin: 0;
+          color: #9999a7;
+          font-size: 12px;
+        }
+
+        .error-box {
+          margin-bottom: 15px;
+          padding: 12px 14px;
+          border-radius: 12px;
+          color: #b34d58;
+          background: #fff0f2;
+          border: 1px solid #ffd9de;
+          font-size: 12px;
+        }
+
+        .skeleton-card {
+          padding-bottom: 15px;
+        }
+
+        .skeleton {
+          position: relative;
+          overflow: hidden;
+          background: #eeeef4;
+        }
+
+        .skeleton:after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          transform: translateX(-100%);
+          background:
+            linear-gradient(
+              90deg,
+              transparent,
+              rgba(255, 255, 255, 0.7),
+              transparent
+            );
+          animation: skeleton 1.3s infinite;
+        }
+
+        @keyframes skeleton {
+          100% {
+            transform: translateX(100%);
+          }
+        }
+
+        .image-skeleton {
+          height: 150px;
+        }
+
+        .line-large,
+        .line-small,
+        .line-price {
+          height: 11px;
+          border-radius: 5px;
+          margin: 14px 13px 0;
+        }
+
+        .line-small {
+          width: 45%;
+          height: 8px;
+          margin-top: 8px;
+        }
+
+        .line-price {
+          width: 35%;
+          margin-top: 15px;
+        }
+
+        .floating-zalo {
+          position: fixed;
+          z-index: 60;
+          right: 22px;
+          bottom: 22px;
+          border: 1px solid #eee0eb;
+          border-radius: 15px;
+          padding: 8px 13px 8px 8px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          background: white;
+          box-shadow:
+            0 14px 40px rgba(49, 31, 50, 0.15);
+          cursor: pointer;
+        }
+
+        .floating-zalo > span {
+          width: 34px;
+          height: 34px;
+          display: grid;
+          place-items: center;
+          border-radius: 10px;
+          background: #eaf6ff;
+          font-size: 17px;
+        }
+
+        .floating-zalo div {
+          display: flex;
+          flex-direction: column;
+          text-align: left;
+        }
+
+        .floating-zalo small {
+          color: #a2a2ae;
+          font-size: 7px;
+          letter-spacing: 1px;
+        }
+
+        .floating-zalo strong {
+          color: #4e4e60;
+          font-size: 10px;
+        }
+
+        .modal-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 100;
+          display: grid;
+          place-items: center;
+          padding: 20px;
+          background: rgba(25, 20, 32, 0.45);
+          backdrop-filter: blur(8px);
+        }
+
+        .modal {
+          position: relative;
+          width: min(420px, 100%);
+          border-radius: 22px;
+          padding: 27px;
+          background: white;
+          box-shadow:
+            0 30px 80px rgba(20, 14, 28, 0.2);
+          text-align: center;
+        }
+
+        .modal-close {
+          position: absolute;
+          top: 13px;
+          right: 15px;
+          border: 0;
+          background: transparent;
+          color: #aaaab5;
+          font-size: 24px;
+          cursor: pointer;
+        }
+
+        .modal-icon,
+        .success-icon {
+          width: 58px;
+          height: 58px;
+          display: grid;
+          place-items: center;
+          margin: 0 auto 13px;
+          border-radius: 18px;
+          background: #fff0f8;
+          font-size: 24px;
+        }
+
+        .success-icon {
+          color: white;
+          background:
+            linear-gradient(
+              135deg,
+              #58c68e,
+              #39a975
+            );
+          font-size: 28px;
+          font-weight: 900;
+        }
+
+        .modal h3 {
+          margin: 0;
+          font-size: 19px;
+        }
+
+        .modal-product-name {
+          margin: 7px 0 20px;
+          color: #8e8e9d;
+          font-size: 12px;
+        }
+
+        .modal-info {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+          margin-bottom: 15px;
+        }
+
+        .modal-info > div {
+          padding: 12px;
+          border-radius: 12px;
+          background: #f8f8fb;
+          text-align: left;
+        }
+
+        .modal-info span {
+          display: block;
+          color: #9999a6;
+          font-size: 9px;
+        }
+
+        .modal-info strong {
+          display: block;
+          margin-top: 4px;
+          color: #393948;
+          font-size: 13px;
+        }
+
+        .modal-message {
+          padding: 10px;
+          margin-bottom: 13px;
+          border-radius: 10px;
+          color: #b74d5a;
+          background: #fff0f2;
+          font-size: 10px;
+        }
+
+        .modal-actions {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+        }
+
+        .cancel-button,
+        .confirm-button {
+          border: 0;
+          border-radius: 11px;
+          padding: 11px;
+          cursor: pointer;
+          font-size: 11px;
+          font-weight: 800;
+        }
+
+        .cancel-button {
+          color: #747484;
+          background: #f1f1f5;
+        }
+
+        .confirm-button {
+          color: white;
+          background:
+            linear-gradient(
+              135deg,
+              #ed69a8,
+              #9869e4
+            );
+        }
+
+        .confirm-button:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
+        }
+
+        .confirm-button.full {
+          width: 100%;
+          margin-top: 15px;
+        }
+
+        .key-result {
+          padding: 15px;
+          border: 1px dashed #e2cfe0;
+          border-radius: 13px;
+          background: #fff8fc;
+        }
+
+        .key-result span {
+          display: block;
+          color: #b09daa;
+          font-size: 8px;
+          letter-spacing: 1.5px;
+          font-weight: 800;
+        }
+
+        .key-result strong {
+          display: block;
+          margin: 9px 0;
+          color: #cf5498;
+          font-size: 15px;
+          word-break: break-all;
+        }
+
+        .key-result button {
+          border: 0;
+          border-radius: 8px;
+          padding: 8px 12px;
+          color: white;
+          background: #cf5b9b;
+          cursor: pointer;
+          font-size: 9px;
+          font-weight: 800;
+        }
+
+        @media (max-width: 1100px) {
+          .main-nav {
+            gap: 0;
+          }
+
+          .nav-item {
+            padding-inline: 7px;
+            font-size: 11px;
+          }
+
+          .hero-character {
+            right: -20px;
+            opacity: 0.8;
+          }
+
+          .products-grid {
+            grid-template-columns:
+              repeat(2, minmax(0, 1fr));
+          }
+
+          .feature-grid {
+            grid-template-columns:
+              repeat(2, minmax(0, 1fr));
+          }
+        }
+
+        @media (max-width: 820px) {
+          .topbar {
+            height: auto;
+          }
+
+          .topbar-inner {
+            width: min(100% - 24px, 700px);
+            padding: 12px 0;
+            flex-wrap: wrap;
+            gap: 10px;
+          }
+
+          .main-nav {
+            order: 3;
+            width: 100%;
+            overflow-x: auto;
+            padding-bottom: 2px;
+          }
+
+          .header-right {
+            margin-left: auto;
+          }
+
+          .content {
+            width: min(100% - 24px, 700px);
+            padding-top: 12px;
+          }
+
+          .hero {
+            min-height: 380px;
+          }
+
+          .hero-copy {
+            padding: 40px 25px;
+            max-width: 100%;
+          }
+
+          .hero-character {
+            right: -80px;
+            opacity: 0.3;
+          }
+
+          .shop-layout {
+            grid-template-columns: 1fr;
+          }
+
+          .sidebar {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+          }
+
+          .side-card {
+            grid-row: span 2;
+          }
+        }
+
+        @media (max-width: 560px) {
+          .brand-text {
+            display: none;
+          }
+
+          .wallet-box {
+            min-width: auto;
+          }
+
+          .wallet-info {
+            display: none;
+          }
+
+          .theme-button {
+            display: none;
+          }
+
+          .hero {
+            border-radius: 18px;
+          }
+
+          .hero h1 {
+            font-size: 50px;
+          }
+
+          .hero-character {
+            right: -150px;
+          }
+
+          .products-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .feature-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .sidebar {
+            display: flex;
+          }
+
+          .floating-zalo {
+            right: 12px;
+            bottom: 12px;
+          }
+        }
+      `}</style>
+    </>
   );
 }
