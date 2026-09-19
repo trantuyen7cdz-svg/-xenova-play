@@ -197,13 +197,20 @@ export async function GET(request) {
       success: true,
       settings: {
         id: 1,
-        logo_url: "",
+
+        logo_url:
+          String(
+            data?.logo_url || ""
+          ),
+
         shop_badge: "",
         shop_title: "",
         shop_description: "",
-        banners: normalizeBanners(
-          data?.banners
-        ),
+
+        banners:
+          normalizeBanners(
+            data?.banners
+          ),
       },
     });
   } catch (error) {
@@ -265,17 +272,26 @@ export async function PUT(request) {
         body?.banners
       );
 
+    const logo_url =
+      String(
+        body?.logo_url || ""
+      ).trim();
+
     const { data, error } =
       await auth.client
         .from("shop_settings")
         .upsert(
           {
             id: 1,
-            logo_url: "",
+
+            logo_url,
+
             shop_badge: "",
             shop_title: "",
             shop_description: "",
+
             banners,
+
             updated_at:
               new Date().toISOString(),
           },
@@ -305,13 +321,22 @@ export async function PUT(request) {
 
     return NextResponse.json({
       success: true,
+
       message:
-        "Đã lưu banner thành công.",
+        "Đã lưu logo + banner thành công.",
+
       settings: {
         ...data,
-        banners: normalizeBanners(
-          data?.banners
-        ),
+
+        logo_url:
+          String(
+            data?.logo_url || ""
+          ),
+
+        banners:
+          normalizeBanners(
+            data?.banners
+          ),
       },
     });
   } catch (error) {
