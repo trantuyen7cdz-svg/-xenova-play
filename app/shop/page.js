@@ -1054,23 +1054,15 @@ export default function ShopPage() {
 
                           <div className="parent-meta">
 
-                            <span>
-                              📁{" "}
-                              {
-                                children.length
-                              }{" "}
-                              thư mục con
-                            </span>
+  <span>
+    🛒{" "}
+    {
+      productCount
+    }{" "}
+    sản phẩm
+  </span>
 
-                            <span>
-                              🛒{" "}
-                              {
-                                productCount
-                              }{" "}
-                              sản phẩm
-                            </span>
-
-                          </div>
+</div>
 
                           <div className="view-all">
 
