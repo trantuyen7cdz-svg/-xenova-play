@@ -8,6 +8,16 @@ const BANK_NAME = "VIETCOMBANK";
 const ACCOUNT_NAME = "TRAN VAN TUYEN";
 const ACCOUNT_NUMBER = "9365717262";
 
+const NAV_ITEMS = [
+  ["⌂", "Trang chủ", "/"],
+  ["🛒", "Cửa hàng", "/shop"],
+  ["▣", "Nạp tiền", "/deposit"],
+  ["♢", "KEY của tôi", "/keys"],
+  ["▤", "Đơn hàng", "/orders"],
+  ["♙", "Tài khoản", "/dashboard"],
+  ["⚙", "Cài đặt", "/settings"],
+];
+
 export default function DepositPage() {
   const router = useRouter();
 
@@ -197,8 +207,13 @@ export default function DepositPage() {
   if (loading) {
     return (
       <main className="loading-page">
-        <div className="loading-logo">XENOVA PLAY</div>
+        <div className="loading-logo">
+          XENOVA
+          <span>PLAY</span>
+        </div>
+
         <div className="loading-spinner" />
+
         <p>Đang tải...</p>
 
         <style jsx>{`
@@ -213,25 +228,34 @@ export default function DepositPage() {
           }
 
           .loading-logo {
-            font-size: 28px;
-            font-weight: 900;
-            letter-spacing: 2px;
-            color: #ed4f91;
+            font-size: 27px;
+            line-height: 0.8;
+            font-weight: 950;
+            letter-spacing: 1px;
+            color: #171925;
+          }
+
+          .loading-logo span {
+            display: block;
+            color: #f22f82;
+            margin-left: 38px;
+            margin-top: 5px;
+            font-size: 15px;
           }
 
           .loading-spinner {
             width: 30px;
             height: 30px;
-            margin-top: 18px;
-            border: 3px solid #ffd5e7;
-            border-top-color: #ed4f91;
+            margin-top: 20px;
+            border: 3px solid #ffd7e8;
+            border-top-color: #f22f82;
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
           }
 
           p {
             color: #999;
-            font-size: 13px;
+            font-size: 12px;
           }
 
           @keyframes spin {
@@ -245,122 +269,84 @@ export default function DepositPage() {
   }
 
   return (
-    <main className="site">
+    <>
+      <style jsx global>{`
+        * {
+          box-sizing: border-box;
+        }
 
-      {/* ================= HEADER ================= */}
+        html,
+        body {
+          margin: 0;
+          padding: 0;
+          background: #fff7fb;
+          font-family:
+            Inter,
+            -apple-system,
+            BlinkMacSystemFont,
+            "Segoe UI",
+            sans-serif;
+        }
 
-      <header className="top-header">
-        <div className="header-inner">
+        body {
+          color: #292631;
+        }
 
-          <button
-            className="brand"
-            onClick={() => router.push("/")}
-          >
-            <div className="brand-icon">X</div>
+        button,
+        input {
+          font-family: inherit;
+        }
+      `}</style>
 
-            <div>
-              <div className="brand-name">XENOVA PLAY</div>
-              <div className="brand-sub">
-                DIGITAL STORE
-              </div>
-            </div>
-          </button>
-
-          <nav className="desktop-nav">
-            <button onClick={() => router.push("/")}>
-              Trang chủ
-            </button>
-
-            <button onClick={() => router.push("/shop")}>
-              Cửa hàng
-            </button>
-
-            <button className="active">
-              Nạp tiền
-            </button>
-
-            <button onClick={() => router.push("/keys")}>
-              KEY của tôi
-            </button>
-
-            <button onClick={() => router.push("/orders")}>
-              Đơn hàng
-            </button>
-
-            <button onClick={() => router.push("/dashboard")}>
-              Tài khoản
-            </button>
-
-            <button onClick={() => router.push("/settings")}>
-              Cài đặt
-            </button>
-          </nav>
-
-          <div className="header-actions">
-
-            <div className="wallet">
-              <span className="wallet-icon">₫</span>
-              <span>Ví của tôi</span>
-            </div>
-
+      <div className="xenova-page">
+        <header className="topbar">
+          <div className="topbar-inner">
             <button
-              className="user-button"
-              onClick={() => router.push("/dashboard")}
+              className="brand"
+              onClick={() => router.push("/")}
             >
-              <span className="user-circle">
-                {user?.email?.charAt(0)?.toUpperCase() || "U"}
-              </span>
+              <span className="brand-main">XENOVA</span>
+              <span className="brand-play">PLAY</span>
             </button>
 
+            <nav className="desktop-nav">
+              {NAV_ITEMS.map(([icon, label, href]) => (
+                <button
+                  key={label}
+                  className={`nav-item ${
+                    label === "Nạp tiền" ? "active" : ""
+                  }`}
+                  onClick={() => router.push(href)}
+                >
+                  <span className="nav-icon">{icon}</span>
+                  <span>{label}</span>
+                </button>
+              ))}
+            </nav>
+
+            <div className="header-right">
+              <button
+                className="wallet-button"
+                onClick={() => router.push("/deposit")}
+              >
+                <span>💳</span>
+                <span>Ví của tôi</span>
+              </button>
+
+              <button
+                className="avatar-button"
+                onClick={() => router.push("/dashboard")}
+              >
+                {user?.email?.charAt(0)?.toUpperCase() || "U"}
+              </button>
+            </div>
           </div>
+        </header>
 
-        </div>
-      </header>
-
-      {/* ================= MOBILE NAV ================= */}
-
-      <div className="mobile-nav">
-
-        <button onClick={() => router.push("/")}>
-          <span>⌂</span>
-          Trang chủ
-        </button>
-
-        <button onClick={() => router.push("/shop")}>
-          <span>🛍</span>
-          Shop
-        </button>
-
-        <button className="mobile-active">
-          <span>₫</span>
-          Nạp tiền
-        </button>
-
-        <button onClick={() => router.push("/keys")}>
-          <span>🔑</span>
-          KEY
-        </button>
-
-        <button onClick={() => router.push("/dashboard")}>
-          <span>☻</span>
-          Tôi
-        </button>
-
-      </div>
-
-      {/* ================= MAIN ================= */}
-
-      <div className="page-background">
-
-        <div className="pink-decoration decoration-one" />
-        <div className="pink-decoration decoration-two" />
-        <div className="petal petal-one">✿</div>
-        <div className="petal petal-two">❀</div>
-        <div className="petal petal-three">✿</div>
-
-        <div className="content">
-
-          {/* BREADCRUMB */}
+        <main className="main">
+          <div className="petal petal-one">✿</div>
+          <div className="petal petal-two">❀</div>
+          <div className="petal petal-three">✿</div>
 
           <div className="breadcrumb">
             <button onClick={() => router.push("/")}>
@@ -372,48 +358,34 @@ export default function DepositPage() {
             <strong>Nạp tiền</strong>
           </div>
 
-          {/* TITLE */}
-
-          <div className="page-heading">
-            <div className="heading-icon">
-              ₫
-            </div>
+          <section className="page-title">
+            <div className="title-icon">₫</div>
 
             <div>
               <h1>Nạp tiền</h1>
+
               <p>
                 Nạp tiền vào ví XENOVA PLAY để mua sản phẩm
               </p>
             </div>
-          </div>
+          </section>
 
-          {/* ================= TWO COLUMNS ================= */}
-
-          <div className="deposit-layout">
-
-            {/* ================= LEFT ================= */}
-
-            <section className="main-card">
-
-              <div className="card-title">
-                <div className="title-icon pink">
-                  ₫
-                </div>
+          <section className="deposit-grid">
+            <div className="deposit-card">
+              <div className="card-heading">
+                <div className="heading-icon">₫</div>
 
                 <div>
                   <h2>Nạp tiền vào ví</h2>
-                  <p>
-                    Nhập số tiền bạn muốn nạp
-                  </p>
+                  <p>Nhập số tiền bạn muốn nạp</p>
                 </div>
               </div>
 
-              <div className="amount-label">
+              <label className="input-label">
                 Số tiền nạp
-              </div>
+              </label>
 
-              <div className="amount-input-wrap">
-
+              <div className="amount-input">
                 <input
                   value={
                     amount
@@ -430,15 +402,13 @@ export default function DepositPage() {
                 />
 
                 <span>VNĐ</span>
-
               </div>
 
-              <div className="quick-title">
+              <div className="quick-label">
                 Chọn nhanh
               </div>
 
-              <div className="quick-money">
-
+              <div className="quick-grid">
                 {[10000, 20000, 50000, 100000, 200000].map(
                   (money) => (
                     <button
@@ -453,22 +423,22 @@ export default function DepositPage() {
                     </button>
                   )
                 )}
-
               </div>
 
-              <div className="minimum-note">
+              <div className="minimum">
                 <span>ⓘ</span>
-                Số tiền nạp tối thiểu: <b>10.000đ</b>
+                Số tiền nạp tối thiểu:
+                <b>10.000đ</b>
               </div>
 
               <button
-                className="continue-button"
+                className="submit-button"
                 disabled={submitting}
                 onClick={createDeposit}
               >
                 {submitting ? (
                   <>
-                    <span className="button-spinner" />
+                    <span className="spinner" />
                     ĐANG TẠO...
                   </>
                 ) : (
@@ -481,106 +451,73 @@ export default function DepositPage() {
 
               {message && (
                 <div className="message-box">
-                  <span>✓</span>
+                  <span className="message-icon">
+                    ✓
+                  </span>
+
                   <div>{message}</div>
                 </div>
               )}
-
-            </section>
-
-            {/* ================= RIGHT ================= */}
+            </div>
 
             <aside className="side-column">
-
-              <div className="info-card">
-
-                <div className="side-title">
-                  <span className="side-title-icon">
-                    ♡
-                  </span>
+              <div className="guide-card">
+                <div className="guide-heading">
+                  <div className="guide-icon">♡</div>
 
                   <div>
                     <h3>Hướng dẫn nạp tiền</h3>
-                    <p>
-                      Thực hiện theo các bước
-                    </p>
+                    <p>Thực hiện theo các bước</p>
                   </div>
                 </div>
 
                 <div className="steps">
+                  {[
+                    [
+                      "1",
+                      "Nhập số tiền",
+                      "Chọn hoặc nhập số tiền muốn nạp.",
+                    ],
+                    [
+                      "2",
+                      "Tạo yêu cầu",
+                      "Nhấn tiếp tục để tạo đơn nạp.",
+                    ],
+                    [
+                      "3",
+                      "Chuyển khoản",
+                      "Quét QR và chuyển đúng số tiền, nội dung.",
+                    ],
+                    [
+                      "4",
+                      "Nhận tiền",
+                      "Hệ thống xử lý sau khi xác nhận.",
+                    ],
+                  ].map(([number, title, text]) => (
+                    <div className="step" key={number}>
+                      <div className="step-number">
+                        {number}
+                      </div>
 
-                  <div className="step">
-                    <div className="step-number">1</div>
-
-                    <div>
-                      <strong>
-                        Nhập số tiền
-                      </strong>
-
-                      <p>
-                        Chọn hoặc nhập số tiền muốn nạp.
-                      </p>
+                      <div>
+                        <strong>{title}</strong>
+                        <p>{text}</p>
+                      </div>
                     </div>
-                  </div>
-
-                  <div className="step">
-                    <div className="step-number">2</div>
-
-                    <div>
-                      <strong>
-                        Tạo yêu cầu
-                      </strong>
-
-                      <p>
-                        Nhấn nút tiếp tục để tạo đơn nạp.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="step">
-                    <div className="step-number">3</div>
-
-                    <div>
-                      <strong>
-                        Chuyển khoản
-                      </strong>
-
-                      <p>
-                        Quét QR và chuyển đúng số tiền,
-                        nội dung.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="step">
-                    <div className="step-number">4</div>
-
-                    <div>
-                      <strong>
-                        Nhận tiền
-                      </strong>
-
-                      <p>
-                        Hệ thống xử lý sau khi xác nhận.
-                      </p>
-                    </div>
-                  </div>
-
+                  ))}
                 </div>
-
               </div>
 
               <div className="support-card">
+                <div className="support-top">
+                  <div className="support-icon">
+                    💬
+                  </div>
 
-                <div className="support-icon">
-                  💬
-                </div>
-
-                <div>
-                  <strong>Cần hỗ trợ?</strong>
-                  <p>
-                    Liên hệ Admin nếu gặp vấn đề
-                  </p>
+                  <div>
+                    <strong>Cần hỗ trợ?</strong>
+                    <p>Liên hệ Admin nếu gặp vấn đề</p>
+                  </div>
                 </div>
 
                 <button
@@ -593,35 +530,26 @@ export default function DepositPage() {
                 >
                   Chat Admin
                 </button>
-
               </div>
-
             </aside>
-
-          </div>
-
-          {/* ================= QR ================= */}
+          </section>
 
           {depositInfo && (
-            <section className="qr-section">
-
+            <section className="section-card qr-section">
               <div className="section-heading">
-                <div className="heading-icon">
-                  QR
-                </div>
+                <div className="section-icon">QR</div>
 
                 <div>
                   <h2>Thanh toán</h2>
+
                   <p>
                     Quét mã QR để chuyển khoản nhanh chóng
                   </p>
                 </div>
               </div>
 
-              <div className="qr-content">
-
-                <div className="qr-left">
-
+              <div className="qr-layout">
+                <div className="qr-side">
                   <div className="qr-box">
                     <img
                       src={getQrUrl()}
@@ -633,14 +561,15 @@ export default function DepositPage() {
                   <div className="qr-note">
                     Quét mã QR bằng ứng dụng ngân hàng
                   </div>
-
                 </div>
 
-                <div className="payment-details">
-
+                <div className="payment-card">
                   <div className="payment-header">
                     <span>Thông tin chuyển khoản</span>
-                    <b>ĐƠN #{depositInfo.depositId}</b>
+
+                    <b>
+                      ĐƠN #{depositInfo.depositId}
+                    </b>
                   </div>
 
                   <div className="detail-row">
@@ -660,6 +589,7 @@ export default function DepositPage() {
 
                   <div className="detail-row">
                     <span>Số tiền</span>
+
                     <strong className="pink-value">
                       {formatMoney(depositInfo.amount)}
                     </strong>
@@ -684,37 +614,23 @@ export default function DepositPage() {
                       Mỗi đơn có một mã chuyển khoản riêng.
                     </div>
                   </div>
-
                 </div>
-
               </div>
-
             </section>
           )}
 
-          {/* ================= BANK INFO ================= */}
-
-          <section className="bank-section">
-
+          <section className="section-card bank-section">
             <div className="section-heading">
-
-              <div className="heading-icon">
-                🏦
-              </div>
+              <div className="section-icon">🏦</div>
 
               <div>
                 <h2>Thông tin chuyển khoản</h2>
-                <p>
-                  Thông tin tài khoản nhận tiền
-                </p>
+                <p>Thông tin tài khoản nhận tiền</p>
               </div>
-
             </div>
 
-            <div className="bank-grid">
-
+            <div className="bank-box">
               <div className="bank-main">
-
                 <div className="bank-logo">
                   VCB
                 </div>
@@ -724,15 +640,13 @@ export default function DepositPage() {
                     {BANK_NAME}
                   </div>
 
-                  <div className="bank-description">
+                  <div className="bank-sub">
                     Tài khoản ngân hàng XENOVA PLAY
                   </div>
                 </div>
-
               </div>
 
-              <div className="bank-details">
-
+              <div className="bank-info">
                 <div>
                   <span>Chủ tài khoản</span>
                   <strong>{ACCOUNT_NAME}</strong>
@@ -747,9 +661,7 @@ export default function DepositPage() {
                   <span>Nội dung</span>
                   <strong>Mã đơn riêng</strong>
                 </div>
-
               </div>
-
             </div>
 
             <div className="bank-warning">
@@ -761,33 +673,24 @@ export default function DepositPage() {
                 theo đơn được tạo.
               </div>
             </div>
-
           </section>
 
-          {/* ================= HISTORY ================= */}
-
-          <section className="history-section">
-
+          <section className="section-card history-section">
             <div className="section-heading">
-
-              <div className="heading-icon">
-                ↕
-              </div>
+              <div className="section-icon">↕</div>
 
               <div>
                 <h2>Lịch sử nạp tiền</h2>
+
                 <p>
                   Theo dõi các yêu cầu nạp tiền của bạn
                 </p>
               </div>
-
             </div>
 
             {requests.length === 0 ? (
               <div className="empty-history">
-                <div className="empty-icon">
-                  ₫
-                </div>
+                <div className="empty-icon">₫</div>
 
                 <strong>
                   Chưa có yêu cầu nạp tiền
@@ -800,15 +703,12 @@ export default function DepositPage() {
               </div>
             ) : (
               <div className="history-list">
-
                 {requests.map((item) => (
                   <div
                     className="history-item"
                     key={item.id}
                   >
-
                     <div className="history-left">
-
                       <div className="history-id">
                         #{item.id}
                       </div>
@@ -822,11 +722,9 @@ export default function DepositPage() {
                           {item.transfer_content}
                         </div>
                       )}
-
                     </div>
 
                     <div className="history-right">
-
                       <strong>
                         {formatMoney(item.amount)}
                       </strong>
@@ -842,586 +740,542 @@ export default function DepositPage() {
                           ? "THẤT BẠI"
                           : item.status}
                       </span>
-
                     </div>
-
                   </div>
                 ))}
-
               </div>
             )}
-
           </section>
 
+          <footer className="footer">
+            © {new Date().getFullYear()} XENOVA PLAY
+            — All rights reserved.
+          </footer>
+        </main>
+
+        <button
+          className="chat-admin"
+          onClick={() =>
+            window.open(
+              "https://zalo.me/84365717262",
+              "_blank"
+            )
+          }
+        >
+          Chat Admin 💬
+        </button>
+
+        <div className="mobile-bottom-nav">
+          {[
+            ["⌂", "Trang chủ", "/"],
+            ["🛒", "Cửa hàng", "/shop"],
+            ["▣", "Nạp tiền", "/deposit"],
+            ["♢", "KEY", "/keys"],
+            ["♙", "Tài khoản", "/dashboard"],
+          ].map(([icon, label, href]) => (
+            <button
+              key={label}
+              className={
+                label === "Nạp tiền"
+                  ? "mobile-active"
+                  : ""
+              }
+              onClick={() => router.push(href)}
+            >
+              <span>{icon}</span>
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* ================= STYLE ================= */}
-
       <style jsx>{`
-        * {
-          box-sizing: border-box;
-        }
-
-        .site {
+        .xenova-page {
           min-height: 100vh;
-          background: #fff;
-          color: #302a31;
-          font-family:
-            Inter,
-            ui-sans-serif,
-            system-ui,
-            -apple-system,
-            BlinkMacSystemFont,
-            "Segoe UI",
-            sans-serif;
+          background:
+            radial-gradient(
+              circle at 8% 18%,
+              rgba(255, 78, 153, 0.08),
+              transparent 19%
+            ),
+            radial-gradient(
+              circle at 94% 48%,
+              rgba(255, 120, 190, 0.08),
+              transparent 20%
+            ),
+            #fff7fb;
+          position: relative;
+          overflow-x: hidden;
         }
 
-        /* HEADER */
-
-        .top-header {
-          height: 72px;
-          background: rgba(255, 255, 255, 0.96);
-          border-bottom: 1px solid #f0e7ed;
+        .topbar {
           position: sticky;
           top: 0;
           z-index: 100;
-          backdrop-filter: blur(15px);
+          height: 62px;
+          background: rgba(255, 255, 255, 0.97);
+          border-bottom: 1px solid #eee7ed;
+          box-shadow: 0 2px 15px rgba(40, 20, 35, 0.04);
+          backdrop-filter: blur(12px);
         }
 
-        .header-inner {
-          max-width: 1240px;
+        .topbar-inner {
+          max-width: 1220px;
           height: 100%;
-          margin: 0 auto;
-          padding: 0 22px;
+          margin: auto;
+          padding: 0 18px;
           display: flex;
           align-items: center;
-          gap: 28px;
+          gap: 18px;
         }
 
         .brand {
+          width: 105px;
           border: 0;
           background: transparent;
-          display: flex;
-          align-items: center;
-          gap: 10px;
+          text-align: left;
           cursor: pointer;
           padding: 0;
+          line-height: 0.82;
           flex-shrink: 0;
         }
 
-        .brand-icon {
-          width: 38px;
-          height: 38px;
-          border-radius: 12px;
-          display: grid;
-          place-items: center;
-          color: white;
-          font-weight: 1000;
-          font-size: 18px;
-          background:
-            linear-gradient(
-              135deg,
-              #ff79b3,
-              #eb3f86
-            );
-          box-shadow:
-            0 7px 18px rgba(235, 63, 134, 0.22);
-        }
-
-        .brand-name {
-          color: #29222a;
-          font-size: 16px;
+        .brand-main {
+          display: block;
+          color: #111523;
+          font-size: 19px;
           font-weight: 950;
-          letter-spacing: 0.4px;
+          letter-spacing: -0.8px;
         }
 
-        .brand-sub {
-          margin-top: 2px;
-          color: #b5aab3;
-          font-size: 8px;
-          font-weight: 800;
-          letter-spacing: 2px;
+        .brand-play {
+          display: block;
+          color: #f22f82;
+          margin-left: 36px;
+          margin-top: 5px;
+          font-size: 12px;
+          font-weight: 900;
         }
 
         .desktop-nav {
-          display: flex;
-          align-items: center;
-          gap: 3px;
           flex: 1;
+          height: 100%;
+          display: flex;
+          justify-content: center;
+          align-items: center;
         }
 
-        .desktop-nav button {
+        .nav-item {
+          height: 42px;
+          min-width: 67px;
           border: 0;
           background: transparent;
-          color: #766d75;
-          font-size: 12px;
-          font-weight: 700;
-          padding: 9px 11px;
-          border-radius: 9px;
+          border-radius: 10px;
+          color: #555865;
           cursor: pointer;
-          white-space: nowrap;
+          font-size: 9px;
+          padding: 4px 7px;
+          position: relative;
         }
 
-        .desktop-nav button:hover {
-          background: #fff2f7;
-          color: #ed4f91;
+        .nav-icon {
+          display: block;
+          font-size: 15px;
+          line-height: 16px;
+          margin-bottom: 2px;
         }
 
-        .desktop-nav button.active {
-          background: #fff0f6;
-          color: #e9488b;
+        .nav-item:hover,
+        .nav-item.active {
+          color: #f12e81;
+          background: #fff0f7;
         }
 
-        .header-actions {
+        .nav-item.active::after {
+          content: "";
+          position: absolute;
+          left: 17px;
+          right: 17px;
+          bottom: 1px;
+          height: 2px;
+          border-radius: 10px;
+          background: #ff3486;
+        }
+
+        .header-right {
           display: flex;
           align-items: center;
-          gap: 9px;
+          gap: 8px;
         }
 
-        .wallet {
-          border: 1px solid #f0dfe8;
-          background: #fff9fc;
-          border-radius: 999px;
-          padding: 8px 13px;
+        .wallet-button {
+          height: 34px;
+          border: 1px solid #eee2e9;
+          background: white;
+          border-radius: 18px;
+          padding: 0 12px;
           display: flex;
           align-items: center;
-          gap: 7px;
-          color: #695f68;
-          font-size: 11px;
+          gap: 6px;
+          color: #e82e7e;
+          font-size: 9px;
           font-weight: 800;
-          white-space: nowrap;
-        }
-
-        .wallet-icon {
-          width: 22px;
-          height: 22px;
-          border-radius: 50%;
-          display: grid;
-          place-items: center;
-          background: #ffe3ef;
-          color: #e74789;
-          font-weight: 900;
-        }
-
-        .user-button {
-          border: 0;
-          background: transparent;
-          padding: 0;
           cursor: pointer;
         }
 
-        .user-circle {
+        .avatar-button {
           width: 34px;
           height: 34px;
-          display: grid;
-          place-items: center;
+          border: 0;
           border-radius: 50%;
           color: white;
+          background: linear-gradient(
+            135deg,
+            #ff72aa,
+            #ed2d7e
+          );
           font-size: 12px;
           font-weight: 900;
-          background:
-            linear-gradient(
-              135deg,
-              #ff92bd,
-              #e84589
-            );
+          cursor: pointer;
         }
 
-        /* BACKGROUND */
-
-        .page-background {
-          min-height: calc(100vh - 72px);
+        .main {
+          width: min(1160px, calc(100% - 30px));
+          margin: auto;
+          padding: 18px 0 80px;
           position: relative;
-          overflow: hidden;
-          background:
-            linear-gradient(
-              180deg,
-              #fff8fb 0%,
-              #fff 22%,
-              #fff 100%
-            );
-        }
-
-        .pink-decoration {
-          position: absolute;
-          border-radius: 50%;
-          pointer-events: none;
-          filter: blur(1px);
-        }
-
-        .decoration-one {
-          width: 350px;
-          height: 350px;
-          right: -150px;
-          top: 100px;
-          background: rgba(255, 197, 221, 0.22);
-        }
-
-        .decoration-two {
-          width: 280px;
-          height: 280px;
-          left: -160px;
-          top: 540px;
-          background: rgba(255, 214, 231, 0.18);
+          z-index: 1;
         }
 
         .petal {
           position: absolute;
-          color: #f4a7c5;
-          opacity: 0.4;
-          font-size: 30px;
+          color: #f0a1c3;
+          opacity: 0.42;
           pointer-events: none;
+          font-size: 25px;
         }
 
         .petal-one {
-          right: 7%;
-          top: 75px;
-          transform: rotate(20deg);
+          right: 3%;
+          top: 35px;
+          transform: rotate(25deg);
         }
 
         .petal-two {
-          left: 5%;
-          top: 280px;
-          font-size: 22px;
+          left: -20px;
+          top: 300px;
           transform: rotate(-25deg);
         }
 
         .petal-three {
-          right: 12%;
-          top: 610px;
-          font-size: 20px;
-          transform: rotate(45deg);
-        }
-
-        /* CONTENT */
-
-        .content {
-          width: min(1160px, calc(100% - 34px));
-          margin: 0 auto;
-          padding: 26px 0 80px;
-          position: relative;
-          z-index: 2;
+          right: 5%;
+          top: 650px;
+          transform: rotate(50deg);
         }
 
         .breadcrumb {
           display: flex;
           align-items: center;
-          gap: 8px;
-          color: #aaa0a8;
-          font-size: 11px;
-          margin-bottom: 18px;
+          gap: 7px;
+          color: #aaa1a9;
+          font-size: 9px;
+          margin-bottom: 14px;
         }
 
         .breadcrumb button {
           border: 0;
           background: transparent;
-          color: #9c919a;
           padding: 0;
+          color: #99909a;
+          font-size: 9px;
           cursor: pointer;
-          font-size: 11px;
         }
 
         .breadcrumb button:hover {
-          color: #e9498b;
+          color: #ed2f81;
         }
 
         .breadcrumb strong {
-          color: #e64b8b;
+          color: #ed2f81;
         }
 
-        .page-heading {
-          display: flex;
-          align-items: center;
-          gap: 13px;
-          margin-bottom: 25px;
-        }
-
-        .heading-icon {
-          width: 43px;
-          height: 43px;
-          border-radius: 13px;
-          display: grid;
-          place-items: center;
-          color: #e94b8c;
-          background: #ffe7f1;
-          font-weight: 950;
-          font-size: 15px;
-          flex-shrink: 0;
-        }
-
-        .page-heading h1,
-        .section-heading h2 {
-          margin: 0;
-          color: #302932;
-          font-weight: 950;
-        }
-
-        .page-heading h1 {
-          font-size: 25px;
-        }
-
-        .page-heading p,
-        .section-heading p {
-          margin: 4px 0 0;
-          color: #a59aa2;
-          font-size: 12px;
-        }
-
-        /* MAIN GRID */
-
-        .deposit-layout {
-          display: grid;
-          grid-template-columns: minmax(0, 1.6fr) minmax(300px, 0.9fr);
-          gap: 18px;
-          align-items: start;
-        }
-
-        .main-card,
-        .info-card,
-        .support-card,
-        .qr-section,
-        .bank-section,
-        .history-section {
-          background: rgba(255, 255, 255, 0.96);
-          border: 1px solid #f0e5eb;
-          border-radius: 18px;
-          box-shadow:
-            0 10px 30px rgba(67, 30, 51, 0.045);
-        }
-
-        .main-card {
-          padding: 25px;
-        }
-
-        .card-title,
-        .side-title,
-        .section-heading {
+        .page-title {
           display: flex;
           align-items: center;
           gap: 11px;
+          margin-bottom: 15px;
+        }
+
+        .title-icon,
+        .section-icon,
+        .heading-icon {
+          display: grid;
+          place-items: center;
+          color: #ed347f;
+          background: #ffe8f2;
+          font-weight: 900;
         }
 
         .title-icon {
-          width: 40px;
-          height: 40px;
+          width: 42px;
+          height: 42px;
           border-radius: 12px;
-          display: grid;
-          place-items: center;
-          font-weight: 900;
+          font-size: 16px;
         }
 
-        .title-icon.pink {
-          color: #e64a8b;
-          background: #ffe6f1;
-        }
-
-        .card-title h2,
-        .side-title h3 {
+        .page-title h1 {
           margin: 0;
-          color: #332b33;
-          font-size: 17px;
-          font-weight: 900;
+          color: #20232f;
+          font-size: 22px;
+          font-weight: 950;
         }
 
-        .card-title p,
-        .side-title p {
+        .page-title p {
           margin: 3px 0 0;
-          color: #aaa0a8;
-          font-size: 11px;
+          color: #a49aa2;
+          font-size: 10px;
         }
 
-        .amount-label {
-          margin-top: 27px;
-          margin-bottom: 8px;
-          color: #625862;
-          font-size: 12px;
-          font-weight: 800;
-        }
-
-        .amount-input-wrap {
-          height: 57px;
-          position: relative;
-        }
-
-        .amount-input-wrap input {
-          width: 100%;
-          height: 100%;
-          border: 1px solid #e8dce3;
-          border-radius: 12px;
-          outline: none;
-          background: #fff;
-          color: #322b32;
-          padding: 0 72px 0 16px;
-          font-size: 19px;
-          font-weight: 800;
-          box-shadow: inset 0 1px 2px rgba(0,0,0,0.015);
-        }
-
-        .amount-input-wrap input:focus {
-          border-color: #ef8fb6;
-          box-shadow:
-            0 0 0 3px rgba(239, 143, 182, 0.11);
-        }
-
-        .amount-input-wrap input::placeholder {
-          color: #c5bbc2;
-          font-weight: 500;
-        }
-
-        .amount-input-wrap span {
-          position: absolute;
-          right: 16px;
-          top: 50%;
-          transform: translateY(-50%);
-          color: #aaa0a8;
-          font-size: 11px;
-          font-weight: 900;
-        }
-
-        .quick-title {
-          margin-top: 17px;
-          margin-bottom: 8px;
-          color: #716771;
-          font-size: 11px;
-          font-weight: 800;
-        }
-
-        .quick-money {
+        .deposit-grid {
           display: grid;
-          grid-template-columns: repeat(5, 1fr);
-          gap: 7px;
+          grid-template-columns: minmax(0, 1.65fr) minmax(280px, 0.8fr);
+          gap: 12px;
+          align-items: start;
         }
 
-        .quick-money button {
-          border: 1px solid #ebdfe6;
-          background: #fffafd;
-          border-radius: 9px;
-          padding: 9px 3px;
-          color: #766b74;
-          font-size: 10px;
-          font-weight: 800;
-          cursor: pointer;
-          transition: 0.15s;
+        .deposit-card,
+        .guide-card,
+        .support-card,
+        .section-card {
+          background: rgba(255, 255, 255, 0.97);
+          border: 1px solid #eee5eb;
+          border-radius: 13px;
+          box-shadow: 0 5px 18px rgba(35, 20, 30, 0.045);
         }
 
-        .quick-money button:hover {
-          border-color: #f0a2c3;
-          color: #e7488a;
-          background: #fff2f7;
+        .deposit-card {
+          padding: 18px;
         }
 
-        .minimum-note {
-          margin-top: 12px;
-          color: #aaa0a8;
-          font-size: 10px;
+        .card-heading,
+        .guide-heading,
+        .section-heading {
           display: flex;
           align-items: center;
-          gap: 6px;
-        }
-
-        .minimum-note span {
-          color: #e95896;
-          font-size: 13px;
-        }
-
-        .minimum-note b {
-          color: #756b73;
-        }
-
-        .continue-button {
-          width: 100%;
-          height: 50px;
-          margin-top: 18px;
-          border: 0;
-          border-radius: 11px;
-          background:
-            linear-gradient(
-              135deg,
-              #f267a1,
-              #df4085
-            );
-          color: #fff;
-          font-size: 12px;
-          font-weight: 900;
-          cursor: pointer;
-          box-shadow:
-            0 8px 20px rgba(226, 67, 132, 0.17);
-          display: flex;
-          align-items: center;
-          justify-content: center;
           gap: 9px;
         }
 
-        .continue-button:hover:not(:disabled) {
+        .heading-icon {
+          width: 35px;
+          height: 35px;
+          border-radius: 10px;
+          font-size: 13px;
+          flex-shrink: 0;
+        }
+
+        .card-heading h2,
+        .guide-heading h3,
+        .section-heading h2 {
+          margin: 0;
+          color: #292631;
+          font-size: 14px;
+          font-weight: 900;
+        }
+
+        .card-heading p,
+        .guide-heading p,
+        .section-heading p {
+          margin: 3px 0 0;
+          color: #aaa0a8;
+          font-size: 9px;
+        }
+
+        .input-label,
+        .quick-label {
+          display: block;
+          color: #625963;
+          font-size: 10px;
+          font-weight: 800;
+        }
+
+        .input-label {
+          margin-top: 21px;
+          margin-bottom: 7px;
+        }
+
+        .amount-input {
+          height: 52px;
+          position: relative;
+        }
+
+        .amount-input input {
+          width: 100%;
+          height: 100%;
+          border: 1px solid #e8dce4;
+          border-radius: 10px;
+          outline: none;
+          background: white;
+          color: #302a32;
+          padding: 0 65px 0 14px;
+          font-size: 17px;
+          font-weight: 850;
+        }
+
+        .amount-input input:focus {
+          border-color: #ef76a9;
+          box-shadow: 0 0 0 3px rgba(239, 118, 169, 0.1);
+        }
+
+        .amount-input input::placeholder {
+          color: #c4bac2;
+          font-weight: 500;
+        }
+
+        .amount-input span {
+          position: absolute;
+          right: 14px;
+          top: 50%;
+          transform: translateY(-50%);
+          color: #aaa0a8;
+          font-size: 9px;
+          font-weight: 900;
+        }
+
+        .quick-label {
+          margin-top: 13px;
+          margin-bottom: 6px;
+        }
+
+        .quick-grid {
+          display: grid;
+          grid-template-columns: repeat(5, 1fr);
+          gap: 6px;
+        }
+
+        .quick-grid button {
+          border: 1px solid #eadfe6;
+          background: #fffafd;
+          border-radius: 8px;
+          padding: 8px 2px;
+          color: #716771;
+          font-size: 9px;
+          font-weight: 800;
+          cursor: pointer;
+        }
+
+        .quick-grid button:hover {
+          color: #ed347f;
+          border-color: #f0a1c3;
+          background: #fff0f6;
+        }
+
+        .minimum {
+          margin-top: 9px;
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          color: #aaa0a8;
+          font-size: 9px;
+        }
+
+        .minimum span {
+          color: #ed4386;
+          font-size: 12px;
+        }
+
+        .minimum b {
+          color: #716770;
+        }
+
+        .submit-button {
+          width: 100%;
+          height: 45px;
+          margin-top: 14px;
+          border: 0;
+          border-radius: 9px;
+          background: linear-gradient(
+            135deg,
+            #ff5796,
+            #ed2e7f
+          );
+          color: white;
+          font-size: 10px;
+          font-weight: 900;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          box-shadow: 0 7px 18px rgba(238, 45, 126, 0.2);
+        }
+
+        .submit-button:hover:not(:disabled) {
           transform: translateY(-1px);
         }
 
-        .continue-button:disabled {
+        .submit-button:disabled {
           opacity: 0.55;
           cursor: not-allowed;
         }
 
-        .button-spinner {
-          width: 14px;
-          height: 14px;
-          border: 2px solid rgba(255,255,255,.4);
-          border-top-color: #fff;
+        .spinner {
+          width: 13px;
+          height: 13px;
+          border: 2px solid rgba(255, 255, 255, 0.4);
+          border-top-color: white;
           border-radius: 50%;
           animation: spin 0.7s linear infinite;
         }
 
         .message-box {
-          margin-top: 13px;
-          padding: 12px;
-          border-radius: 10px;
-          border: 1px solid #f4d7e4;
-          background: #fff6fa;
-          color: #776b73;
-          font-size: 11px;
-          line-height: 1.55;
+          margin-top: 10px;
+          padding: 10px;
           display: flex;
-          gap: 8px;
+          gap: 7px;
+          border: 1px solid #f2d7e4;
+          border-radius: 8px;
+          background: #fff5f9;
+          color: #766a72;
+          font-size: 9px;
+          line-height: 1.5;
         }
 
-        .message-box > span {
-          color: #df4788;
+        .message-icon {
+          color: #e43c82;
           font-weight: 900;
         }
-
-        /* SIDEBAR */
 
         .side-column {
           display: flex;
           flex-direction: column;
-          gap: 14px;
+          gap: 10px;
         }
 
-        .info-card {
-          padding: 19px;
+        .guide-card {
+          padding: 15px;
         }
 
-        .side-title-icon {
-          width: 36px;
-          height: 36px;
+        .guide-icon {
+          width: 34px;
+          height: 34px;
           display: grid;
           place-items: center;
           border-radius: 10px;
-          background: #ffe8f1;
-          color: #e74c8b;
-          font-size: 15px;
+          background: #ffe7f1;
+          color: #e73580;
+          font-size: 14px;
         }
 
         .steps {
-          margin-top: 20px;
+          margin-top: 15px;
         }
 
         .step {
           display: grid;
-          grid-template-columns: 27px 1fr;
-          gap: 9px;
+          grid-template-columns: 24px 1fr;
+          gap: 8px;
           position: relative;
-          padding-bottom: 17px;
+          padding-bottom: 13px;
         }
 
         .step:last-child {
@@ -1431,318 +1285,304 @@ export default function DepositPage() {
         .step:not(:last-child)::after {
           content: "";
           position: absolute;
-          left: 13px;
-          top: 27px;
+          left: 11px;
+          top: 24px;
           bottom: 0;
           width: 1px;
-          background: #f0dfe7;
+          background: #f0dce6;
         }
 
         .step-number {
-          width: 27px;
-          height: 27px;
+          width: 24px;
+          height: 24px;
           border-radius: 50%;
           display: grid;
           place-items: center;
           background: #fff0f6;
-          color: #e74a8b;
-          font-size: 10px;
+          color: #e9337f;
+          font-size: 9px;
           font-weight: 900;
           position: relative;
           z-index: 2;
         }
 
         .step strong {
-          display: block;
-          color: #554c54;
-          font-size: 11px;
-        }
-
-        .step p {
-          margin: 4px 0 0;
-          color: #aaa0a8;
-          font-size: 10px;
-          line-height: 1.5;
-        }
-
-        .support-card {
-          padding: 15px;
-          display: grid;
-          grid-template-columns: 37px 1fr;
-          gap: 10px;
-          align-items: center;
-          background:
-            linear-gradient(
-              135deg,
-              #fff7fb,
-              #fff
-            );
-        }
-
-        .support-icon {
-          width: 37px;
-          height: 37px;
-          border-radius: 11px;
-          display: grid;
-          place-items: center;
-          background: #ffe6f1;
-          font-size: 16px;
-        }
-
-        .support-card strong {
-          color: #4e454d;
-          font-size: 11px;
-        }
-
-        .support-card p {
-          margin: 3px 0 0;
-          color: #aaa0a8;
+          color: #554b53;
           font-size: 9px;
         }
 
+        .step p {
+          margin: 3px 0 0;
+          color: #aaa0a8;
+          font-size: 8px;
+          line-height: 1.45;
+        }
+
+        .support-card {
+          padding: 12px;
+        }
+
+        .support-top {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .support-icon {
+          width: 34px;
+          height: 34px;
+          border-radius: 10px;
+          display: grid;
+          place-items: center;
+          background: #ffe7f1;
+          font-size: 14px;
+        }
+
+        .support-card strong {
+          color: #554b53;
+          font-size: 9px;
+        }
+
+        .support-card p {
+          margin: 2px 0 0;
+          color: #aaa0a8;
+          font-size: 8px;
+        }
+
         .support-card button {
-          grid-column: 1 / -1;
           width: 100%;
-          height: 35px;
-          border: 1px solid #f0b5cf;
-          border-radius: 9px;
-          background: #fff;
-          color: #df4889;
-          font-size: 10px;
+          height: 32px;
+          margin-top: 9px;
+          border: 1px solid #f1b3cd;
+          border-radius: 8px;
+          background: white;
+          color: #df327d;
+          font-size: 9px;
           font-weight: 900;
           cursor: pointer;
         }
 
-        .support-card button:hover {
-          background: #fff0f6;
-        }
-
-        /* SECTIONS */
-
-        .qr-section,
-        .bank-section,
-        .history-section {
-          margin-top: 18px;
-          padding: 23px;
+        .section-card {
+          margin-top: 12px;
+          padding: 17px;
         }
 
         .section-heading {
-          margin-bottom: 20px;
+          margin-bottom: 14px;
         }
 
-        .qr-content {
+        .section-icon {
+          width: 36px;
+          height: 36px;
+          border-radius: 10px;
+          font-size: 10px;
+        }
+
+        .qr-layout {
           display: grid;
-          grid-template-columns: 320px 1fr;
-          gap: 28px;
+          grid-template-columns: 300px minmax(0, 1fr);
+          gap: 22px;
           align-items: center;
         }
 
-        .qr-left {
+        .qr-side {
           display: flex;
           align-items: center;
           flex-direction: column;
         }
 
         .qr-box {
-          background: #fff;
-          padding: 12px;
-          border: 1px solid #eee3e9;
-          border-radius: 14px;
-          box-shadow:
-            0 8px 25px rgba(55, 25, 42, 0.06);
+          padding: 9px;
+          border: 1px solid #eee1e9;
+          border-radius: 12px;
+          background: white;
+          box-shadow: 0 7px 20px rgba(40, 20, 35, 0.06);
         }
 
         .qr-image {
           display: block;
-          width: 270px;
-          height: 270px;
+          width: 245px;
+          height: 245px;
           object-fit: contain;
         }
 
         .qr-note {
-          margin-top: 9px;
-          color: #a69ba3;
-          font-size: 10px;
+          margin-top: 7px;
+          color: #aaa0a8;
+          font-size: 8px;
         }
 
-        .payment-details {
-          border: 1px solid #eee3e9;
-          border-radius: 13px;
+        .payment-card {
           overflow: hidden;
+          border: 1px solid #eee2e9;
+          border-radius: 10px;
         }
 
         .payment-header {
-          padding: 13px 15px;
+          padding: 11px 13px;
           display: flex;
+          align-items: center;
           justify-content: space-between;
-          gap: 10px;
-          background: #fff7fa;
+          gap: 8px;
+          background: #fff5fa;
           border-bottom: 1px solid #f1e2e9;
-          color: #625861;
-          font-size: 11px;
+          color: #5e555d;
+          font-size: 9px;
           font-weight: 800;
         }
 
         .payment-header b {
-          color: #e64a8b;
-          font-size: 9px;
+          color: #e43380;
+          font-size: 8px;
         }
 
         .detail-row {
+          min-height: 39px;
+          padding: 9px 13px;
           display: flex;
           justify-content: space-between;
-          gap: 15px;
-          padding: 12px 15px;
-          border-bottom: 1px solid #f2e9ed;
-          font-size: 11px;
+          align-items: center;
+          gap: 10px;
+          border-bottom: 1px solid #f1e8ec;
+          font-size: 9px;
         }
 
         .detail-row span {
-          color: #a59ba2;
+          color: #aaa0a8;
         }
 
         .detail-row strong {
-          color: #4c444b;
+          color: #4f4750;
           text-align: right;
           word-break: break-word;
         }
 
         .pink-value {
-          color: #e4498a !important;
-          font-size: 13px;
+          color: #e5317e !important;
+          font-size: 11px;
         }
 
         .transfer-box {
-          margin: 12px;
-          padding: 12px;
-          border-radius: 10px;
-          background: #fff5f9;
-          border: 1px solid #f3dce7;
+          margin: 10px;
+          padding: 10px;
+          border: 1px solid #f1d8e5;
+          border-radius: 8px;
+          background: #fff4f9;
         }
 
         .transfer-box span {
           display: block;
-          color: #9d929a;
-          font-size: 9px;
-          margin-bottom: 6px;
+          margin-bottom: 5px;
+          color: #9e949b;
+          font-size: 8px;
         }
 
         .transfer-box strong {
-          color: #dd4385;
-          font-size: 13px;
-          letter-spacing: 0.5px;
+          color: #dc2e79;
+          font-size: 11px;
           word-break: break-all;
         }
 
         .warning-box,
         .bank-warning {
           display: flex;
-          gap: 9px;
-          padding: 12px;
-          border-radius: 10px;
+          gap: 7px;
+          padding: 10px;
+          border: 1px solid #f0e0bf;
+          border-radius: 8px;
           background: #fffaf0;
-          border: 1px solid #f3e4c2;
-          color: #9a7c43;
-          font-size: 10px;
-          line-height: 1.55;
+          color: #917641;
+          font-size: 8px;
+          line-height: 1.5;
         }
 
         .warning-box {
-          margin: 12px;
+          margin: 10px;
         }
 
-        /* BANK */
-
-        .bank-grid {
+        .bank-box {
           display: grid;
-          grid-template-columns: 0.9fr 1.6fr;
+          grid-template-columns: 0.9fr 1.7fr;
           gap: 15px;
-          border: 1px solid #eee3e9;
-          border-radius: 13px;
-          padding: 16px;
+          padding: 13px;
+          border: 1px solid #eee2e9;
+          border-radius: 10px;
         }
 
         .bank-main {
           display: flex;
           align-items: center;
-          gap: 12px;
+          gap: 9px;
         }
 
         .bank-logo {
-          width: 48px;
-          height: 48px;
+          width: 43px;
+          height: 43px;
           display: grid;
           place-items: center;
-          border-radius: 13px;
-          background:
-            linear-gradient(
-              135deg,
-              #f8e8ef,
-              #fff5f9
-            );
-          color: #e14a88;
+          border-radius: 11px;
+          background: #fff0f5;
+          color: #df347e;
+          font-size: 11px;
           font-weight: 950;
-          font-size: 13px;
         }
 
         .bank-name {
-          color: #514850;
-          font-size: 14px;
+          color: #4e464e;
+          font-size: 12px;
           font-weight: 900;
         }
 
-        .bank-description {
-          margin-top: 3px;
+        .bank-sub {
+          margin-top: 2px;
           color: #aaa0a8;
-          font-size: 9px;
+          font-size: 8px;
         }
 
-        .bank-details {
+        .bank-info {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
-          gap: 10px;
+          gap: 8px;
         }
 
-        .bank-details div {
-          padding-left: 12px;
-          border-left: 1px solid #eee4e9;
+        .bank-info > div {
+          padding-left: 9px;
+          border-left: 1px solid #eee3e8;
         }
 
-        .bank-details span {
+        .bank-info span {
           display: block;
           color: #aaa0a8;
-          font-size: 9px;
-          margin-bottom: 5px;
+          font-size: 8px;
+          margin-bottom: 4px;
         }
 
-        .bank-details strong {
+        .bank-info strong {
           display: block;
-          color: #50474f;
-          font-size: 11px;
+          color: #514950;
+          font-size: 9px;
           word-break: break-word;
         }
 
         .bank-warning {
-          margin-top: 12px;
+          margin-top: 9px;
         }
 
-        /* HISTORY */
-
         .history-list {
-          border: 1px solid #eee3e9;
-          border-radius: 13px;
           overflow: hidden;
+          border: 1px solid #eee2e9;
+          border-radius: 10px;
         }
 
         .history-item {
-          min-height: 70px;
-          padding: 13px 15px;
+          min-height: 61px;
+          padding: 10px 12px;
           display: flex;
           justify-content: space-between;
           align-items: center;
-          gap: 15px;
+          gap: 12px;
+          background: white;
           border-bottom: 1px solid #f0e7eb;
-          background: #fff;
         }
 
         .history-item:last-child {
@@ -1754,26 +1594,26 @@ export default function DepositPage() {
         }
 
         .history-id {
-          color: #514950;
-          font-size: 11px;
+          color: #514850;
+          font-size: 9px;
           font-weight: 900;
         }
 
         .history-date {
-          margin-top: 3px;
+          margin-top: 2px;
           color: #aaa0a8;
-          font-size: 9px;
+          font-size: 7px;
         }
 
         .history-content {
           display: inline-block;
-          margin-top: 6px;
-          padding: 3px 6px;
-          border-radius: 5px;
-          background: #fff4f8;
+          margin-top: 4px;
+          padding: 2px 5px;
           border: 1px solid #f1d9e5;
-          color: #dd4a88;
-          font-size: 8px;
+          border-radius: 4px;
+          background: #fff4f8;
+          color: #dd3c80;
+          font-size: 7px;
           word-break: break-all;
         }
 
@@ -1782,70 +1622,91 @@ export default function DepositPage() {
           flex-shrink: 0;
         }
 
-        .history-right > strong {
+        .history-right strong {
           display: block;
-          color: #e04887;
-          font-size: 12px;
+          color: #e3337f;
+          font-size: 10px;
         }
 
         .status {
           display: inline-block;
-          margin-top: 5px;
-          padding: 4px 7px;
+          margin-top: 4px;
+          padding: 3px 6px;
           border-radius: 999px;
-          font-size: 8px;
+          font-size: 7px;
           font-weight: 900;
         }
 
         .status.pending {
-          color: #aa7b16;
-          background: #fff6d9;
+          color: #a77a13;
+          background: #fff5d7;
         }
 
         .status.completed {
-          color: #258c50;
+          color: #25864e;
           background: #e9faef;
         }
 
         .status.failed {
-          color: #c43e4b;
+          color: #c33e4a;
           background: #fff0f1;
         }
 
         .empty-history {
+          padding: 35px 15px;
           border: 1px dashed #eadfe5;
-          border-radius: 13px;
-          padding: 45px 20px;
+          border-radius: 10px;
           text-align: center;
         }
 
         .empty-icon {
-          width: 48px;
-          height: 48px;
-          margin: 0 auto 10px;
-          border-radius: 14px;
+          width: 43px;
+          height: 43px;
+          margin: auto auto 8px;
           display: grid;
           place-items: center;
+          border-radius: 12px;
           background: #fff0f6;
-          color: #e64b8b;
+          color: #e63680;
           font-weight: 900;
         }
 
         .empty-history strong {
           display: block;
-          color: #665d64;
-          font-size: 12px;
-        }
-
-        .empty-history p {
-          margin: 5px 0 0;
-          color: #aaa0a8;
+          color: #665c64;
           font-size: 10px;
         }
 
-        /* MOBILE NAV */
+        .empty-history p {
+          margin: 4px 0 0;
+          color: #aaa0a8;
+          font-size: 8px;
+        }
 
-        .mobile-nav {
+        .footer {
+          padding: 18px 0 5px;
+          text-align: center;
+          color: #aaa1a8;
+          font-size: 8px;
+        }
+
+        .chat-admin {
+          position: fixed;
+          right: 18px;
+          bottom: 18px;
+          z-index: 120;
+          border: 0;
+          border-radius: 18px;
+          padding: 8px 12px;
+          background: #ff3987;
+          color: white;
+          font-size: 9px;
+          font-weight: 900;
+          cursor: pointer;
+          box-shadow: 0 8px 22px rgba(255, 40, 125, 0.28);
+        }
+
+        .mobile-bottom-nav {
           display: none;
         }
 
@@ -1855,127 +1716,114 @@ export default function DepositPage() {
           }
         }
 
-        /* TABLET */
-
         @media (max-width: 900px) {
           .desktop-nav {
             display: none;
           }
 
-          .header-inner {
+          .topbar-inner {
             justify-content: space-between;
           }
 
-          .deposit-layout {
+          .deposit-grid {
             grid-template-columns: 1fr;
           }
 
-          .qr-content {
+          .qr-layout {
             grid-template-columns: 1fr;
           }
 
-          .qr-left {
+          .qr-side {
             order: 1;
           }
 
-          .payment-details {
+          .payment-card {
             order: 2;
           }
 
-          .bank-grid {
+          .bank-box {
             grid-template-columns: 1fr;
-          }
-
-          .bank-details {
-            grid-template-columns: repeat(3, 1fr);
           }
         }
 
-        /* MOBILE */
-
         @media (max-width: 620px) {
-          .top-header {
-            height: 62px;
+          .topbar {
+            height: 57px;
           }
 
-          .header-inner {
-            padding: 0 15px;
+          .topbar-inner {
+            padding: 0 13px;
           }
 
-          .brand-icon {
-            width: 34px;
-            height: 34px;
-            border-radius: 10px;
+          .brand-main {
+            font-size: 17px;
           }
 
-          .brand-name {
-            font-size: 14px;
+          .brand-play {
+            font-size: 10px;
+            margin-left: 32px;
           }
 
-          .brand-sub {
+          .wallet-button {
             display: none;
           }
 
-          .wallet {
+          .main {
+            width: calc(100% - 20px);
+            padding: 14px 0 76px;
+          }
+
+          .petal {
             display: none;
           }
 
-          .user-circle {
-            width: 32px;
-            height: 32px;
+          .page-title {
+            margin-bottom: 12px;
           }
 
-          .page-background {
-            min-height: calc(100vh - 62px);
-            padding-bottom: 64px;
+          .page-title h1 {
+            font-size: 20px;
           }
 
-          .content {
-            width: calc(100% - 24px);
-            padding-top: 18px;
+          .page-title p {
+            font-size: 9px;
           }
 
-          .page-heading h1 {
-            font-size: 22px;
+          .deposit-card,
+          .section-card {
+            padding: 14px;
+            border-radius: 12px;
           }
 
-          .main-card,
-          .qr-section,
-          .bank-section,
-          .history-section {
-            padding: 17px;
-            border-radius: 15px;
-          }
-
-          .quick-money {
+          .quick-grid {
             grid-template-columns: repeat(3, 1fr);
           }
 
           .qr-image {
-            width: 245px;
-            height: 245px;
+            width: 220px;
+            height: 220px;
           }
 
           .detail-row {
             flex-direction: column;
-            gap: 4px;
+            align-items: flex-start;
           }
 
           .detail-row strong {
             text-align: left;
           }
 
-          .bank-details {
+          .bank-info {
             grid-template-columns: 1fr;
           }
 
-          .bank-details div {
-            padding: 9px 0 0;
+          .bank-info > div {
+            padding: 7px 0 0;
             border-left: 0;
-            border-top: 1px solid #eee4e9;
+            border-top: 1px solid #eee3e8;
           }
 
-          .bank-details div:first-child {
+          .bank-info > div:first-child {
             border-top: 0;
           }
 
@@ -1983,71 +1831,65 @@ export default function DepositPage() {
             align-items: flex-start;
           }
 
-          .mobile-nav {
-            position: fixed;
-            display: grid;
-            grid-template-columns: repeat(5, 1fr);
-            left: 0;
-            right: 0;
-            bottom: 0;
-            height: 61px;
-            background: rgba(255,255,255,.97);
-            border-top: 1px solid #eee2e8;
-            z-index: 200;
-            backdrop-filter: blur(15px);
-          }
-
-          .mobile-nav button {
-            border: 0;
-            background: transparent;
-            color: #aaa0a8;
-            font-size: 8px;
-            font-weight: 800;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 3px;
-            cursor: pointer;
-          }
-
-          .mobile-nav button span {
-            font-size: 17px;
-            line-height: 17px;
-          }
-
-          .mobile-nav button.mobile-active {
-            color: #e64b8b;
-          }
-
-          .mobile-nav button.mobile-active span {
-            color: #e64b8b;
-          }
-
           .support-card {
             display: none;
           }
 
-          .petal {
-            display: none;
+          .chat-admin {
+            bottom: 72px;
+            right: 12px;
+          }
+
+          .mobile-bottom-nav {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 59px;
+            z-index: 110;
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            background: rgba(255, 255, 255, 0.97);
+            border-top: 1px solid #eee5eb;
+            box-shadow: 0 -5px 20px rgba(30, 20, 30, 0.07);
+            backdrop-filter: blur(12px);
+          }
+
+          .mobile-bottom-nav button {
+            border: 0;
+            background: transparent;
+            color: #85818a;
+            font-size: 7px;
+            font-weight: 800;
+            cursor: pointer;
+          }
+
+          .mobile-bottom-nav span {
+            display: block;
+            margin-bottom: 2px;
+            font-size: 16px;
+          }
+
+          .mobile-bottom-nav button.mobile-active {
+            color: #ed2f80;
+          }
+
+          .mobile-bottom-nav button.mobile-active span {
+            color: #ed2f80;
           }
         }
 
         @media (max-width: 390px) {
-          .brand-name {
-            font-size: 13px;
-          }
-
-          .quick-money button {
-            font-size: 9px;
+          .quick-grid button {
+            font-size: 8px;
           }
 
           .qr-image {
-            width: 220px;
-            height: 220px;
+            width: 205px;
+            height: 205px;
           }
         }
       `}</style>
-    </main>
+    </>
   );
 }
