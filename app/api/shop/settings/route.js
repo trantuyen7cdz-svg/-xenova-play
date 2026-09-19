@@ -10,8 +10,6 @@ export async function GET() {
       .maybeSingle();
 
     if (error) {
-      console.error("SHOP SETTINGS GET ERROR:", error);
-
       return NextResponse.json(
         {
           success: false,
@@ -25,7 +23,7 @@ export async function GET() {
       success: true,
       settings: data || {
         id: 1,
-        logo_url: null,
+        logo_url: "",
         shop_badge: "XENOVA PLAY SHOP",
         shop_title: "Cửa hàng",
         shop_description:
@@ -34,12 +32,10 @@ export async function GET() {
       },
     });
   } catch (error) {
-    console.error(error);
-
     return NextResponse.json(
       {
         success: false,
-        error: error.message || "Lỗi server",
+        error: error.message,
       },
       { status: 500 }
     );
