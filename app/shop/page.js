@@ -6,6 +6,21 @@ import { supabase } from "../../lib/supabase";
 
 const ZALO_ADMIN = "https://zalo.me/0987654321";
 
+/* =========================================================
+   BANNER QUẢNG CÁO
+   Thêm ảnh mới bằng cách thêm 1 dòng vào mảng này.
+   ========================================================= */
+
+const BANNER_IMAGES = [
+  "https://placehold.co/1200x320/ff4ba6/ffffff?text=XENOVA+PLAY",
+  "https://placehold.co/1200x320/8d54ff/ffffff?text=QUANG+CAO",
+  "https://placehold.co/1200x320/e83d94/ffffff?text=XENOVA+SHOP",
+];
+
+/* =========================================================
+   FORMAT
+   ========================================================= */
+
 function formatPrice(value) {
   return (
     new Intl.NumberFormat("vi-VN").format(
@@ -37,6 +52,10 @@ function getCategoryImage(category) {
   );
 }
 
+/* =========================================================
+   SHOP
+   ========================================================= */
+
 export default function ShopPage() {
   const router = useRouter();
 
@@ -63,11 +82,57 @@ export default function ShopPage() {
   const [sort, setSort] = useState("default");
 
   const [buyModal, setBuyModal] = useState(null);
+
   const [successModal, setSuccessModal] =
     useState(null);
 
   const [buying, setBuying] = useState(false);
   const [message, setMessage] = useState("");
+
+  /* =======================================================
+     BANNER
+     ======================================================= */
+
+  const [bannerIndex, setBannerIndex] = useState(0);
+
+  useEffect(() => {
+    if (BANNER_IMAGES.length <= 1) {
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setBannerIndex((current) => {
+        return (
+          (current + 1) %
+          BANNER_IMAGES.length
+        );
+      });
+    }, 4000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  function previousBanner() {
+    setBannerIndex((current) => {
+      return (
+        (current - 1 + BANNER_IMAGES.length) %
+        BANNER_IMAGES.length
+      );
+    });
+  }
+
+  function nextBanner() {
+    setBannerIndex((current) => {
+      return (
+        (current + 1) %
+        BANNER_IMAGES.length
+      );
+    });
+  }
+
+  /* =======================================================
+     USER
+     ======================================================= */
 
   useEffect(() => {
     let mounted = true;
@@ -97,6 +162,10 @@ export default function ShopPage() {
       subscription.unsubscribe();
     };
   }, []);
+
+  /* =======================================================
+     LOAD SHOP
+     ======================================================= */
 
   async function loadShop() {
     try {
@@ -168,9 +237,9 @@ export default function ShopPage() {
     loadShop();
   }, []);
 
-  /* =========================
+  /* =======================================================
      WALLET
-  ========================= */
+     ======================================================= */
 
   useEffect(() => {
     if (!user) {
@@ -206,9 +275,9 @@ export default function ShopPage() {
     loadWallet();
   }, [user]);
 
-  /* =========================
+  /* =======================================================
      CATEGORY
-  ========================= */
+     ======================================================= */
 
   const parentCategories =
     useMemo(() => {
@@ -308,9 +377,9 @@ export default function ShopPage() {
     }
   }
 
-  /* =========================
+  /* =======================================================
      STOCK
-  ========================= */
+     ======================================================= */
 
   function getStock(productId) {
     const value =
@@ -336,9 +405,9 @@ export default function ShopPage() {
     return Number(value || 0);
   }
 
-  /* =========================
+  /* =======================================================
      PRODUCTS
-  ========================= */
+     ======================================================= */
 
   const filteredProducts =
     useMemo(() => {
@@ -435,9 +504,9 @@ export default function ShopPage() {
       sort,
     ]);
 
-  /* =========================
+  /* =======================================================
      MEDIA
-  ========================= */
+     ======================================================= */
 
   function ProductMedia({ product }) {
     const image =
@@ -547,9 +616,9 @@ export default function ShopPage() {
     );
   }
 
-  /* =========================
+  /* =======================================================
      BUY
-  ========================= */
+     ======================================================= */
 
   async function handleBuy() {
     if (!buyModal) {
@@ -654,8 +723,6 @@ export default function ShopPage() {
 
       await loadShop();
 
-      /* ĐỌC LẠI VÍ SAU KHI MUA */
-
       const {
         data: walletData,
         error: walletError,
@@ -693,9 +760,9 @@ export default function ShopPage() {
     }
   }
 
-  /* =========================
+  /* =======================================================
      LOADING
-  ========================= */
+     ======================================================= */
 
   if (loading) {
     return (
@@ -717,12 +784,50 @@ export default function ShopPage() {
     );
   }
 
-  /* =========================
+  /* =======================================================
      MAIN
-  ========================= */
+     ======================================================= */
 
   return (
     <main className="page">
+
+      {/* =================================================
+          HOA HỒNG RƠI
+          ================================================= */}
+
+      <div
+        className="rose-petals"
+        aria-hidden="true"
+      >
+        {Array.from({
+          length: 30,
+        }).map((_, index) => (
+          <span
+            key={index}
+            className="rose-petal"
+            style={{
+              left:
+                `${(index * 37) % 100}%`,
+
+              animationDuration:
+                `${7 + (index % 7)}s`,
+
+              animationDelay:
+                `${-(index % 9)}s`,
+
+              width:
+                `${7 + (index % 5)}px`,
+
+              height:
+                `${10 + (index % 6)}px`,
+            }}
+          />
+        ))}
+      </div>
+
+      {/* =================================================
+          HEADER
+          ================================================= */}
 
       <header className="topbar">
         <div className="topbar-inner">
@@ -761,9 +866,7 @@ export default function ShopPage() {
 
             <button
               onClick={() =>
-                router.push(
-                  "/keys"
-                )
+                router.push("/keys")
               }
             >
               Kho KEY
@@ -771,9 +874,7 @@ export default function ShopPage() {
 
             <button
               onClick={() =>
-                router.push(
-                  "/orders"
-                )
+                router.push("/orders")
               }
             >
               Đơn hàng
@@ -786,9 +887,7 @@ export default function ShopPage() {
             <button
               className="wallet"
               onClick={() =>
-                router.push(
-                  "/deposit"
-                )
+                router.push("/deposit")
               }
             >
               💰{" "}
@@ -824,6 +923,10 @@ export default function ShopPage() {
         </div>
       </header>
 
+      {/* =================================================
+          HERO
+          ================================================= */}
+
       <section className="hero">
         <div>
           <span className="hero-badge">
@@ -840,6 +943,92 @@ export default function ShopPage() {
           </p>
         </div>
       </section>
+
+      {/* =================================================
+          BANNER QUẢNG CÁO
+          ================================================= */}
+
+      {BANNER_IMAGES.length > 0 && (
+        <section className="banner-section">
+          <div className="banner-container">
+
+            <div className="banner-slider">
+
+              <img
+                key={bannerIndex}
+                src={
+                  BANNER_IMAGES[
+                    bannerIndex
+                  ]
+                }
+                alt="XENOVA PLAY banner"
+                className="banner-image"
+              />
+
+              {BANNER_IMAGES.length >
+                1 && (
+                <>
+                  <button
+                    type="button"
+                    className="banner-arrow banner-prev"
+                    onClick={
+                      previousBanner
+                    }
+                    aria-label="Banner trước"
+                  >
+                    ‹
+                  </button>
+
+                  <button
+                    type="button"
+                    className="banner-arrow banner-next"
+                    onClick={
+                      nextBanner
+                    }
+                    aria-label="Banner tiếp theo"
+                  >
+                    ›
+                  </button>
+                </>
+              )}
+
+              {BANNER_IMAGES.length >
+                1 && (
+                <div className="banner-dots">
+                  {BANNER_IMAGES.map(
+                    (_, index) => (
+                      <button
+                        key={index}
+                        type="button"
+                        className={
+                          index ===
+                          bannerIndex
+                            ? "banner-dot active"
+                            : "banner-dot"
+                        }
+                        onClick={() =>
+                          setBannerIndex(
+                            index
+                          )
+                        }
+                        aria-label={
+                          `Banner ${index + 1}`
+                        }
+                      />
+                    )
+                  )}
+                </div>
+              )}
+
+            </div>
+
+          </div>
+        </section>
+      )}
+
+      {/* =================================================
+          CONTENT
+          ================================================= */}
 
       <div className="container">
 
@@ -897,7 +1086,9 @@ export default function ShopPage() {
           </div>
         )}
 
-        {/* PARENT */}
+        {/* =================================================
+            PARENT
+            ================================================= */}
 
         {view === "parents" && (
           <>
@@ -919,8 +1110,8 @@ export default function ShopPage() {
               </div>
 
               <span className="count-badge">
-                {parentCategories.length}
-                {" "}thư mục
+                {parentCategories.length}{" "}
+                thư mục
               </span>
 
             </div>
@@ -1027,7 +1218,9 @@ export default function ShopPage() {
           </>
         )}
 
-        {/* CHILD */}
+        {/* =================================================
+            CHILD
+            ================================================= */}
 
         {view === "children" &&
           selectedParent && (
@@ -1035,6 +1228,7 @@ export default function ShopPage() {
               <div className="section-heading">
 
                 <div>
+
                   <button
                     className="back-link"
                     onClick={goHome}
@@ -1052,6 +1246,7 @@ export default function ShopPage() {
                     Chọn thư mục con để
                     xem sản phẩm.
                   </p>
+
                 </div>
 
                 <span className="count-badge">
@@ -1147,13 +1342,16 @@ export default function ShopPage() {
             </>
           )}
 
-        {/* PRODUCTS */}
+        {/* =================================================
+            PRODUCTS
+            ================================================= */}
 
         {view === "products" && (
           <>
             <div className="products-heading">
 
               <div>
+
                 <button
                   className="back-link"
                   onClick={
@@ -1176,6 +1374,7 @@ export default function ShopPage() {
                   Chọn sản phẩm để
                   mua KEY.
                 </p>
+
               </div>
 
               <div className="tools">
@@ -1364,7 +1563,9 @@ export default function ShopPage() {
 
       </div>
 
-      {/* ZALO */}
+      {/* =================================================
+          ZALO
+          ================================================= */}
 
       <a
         href={ZALO_ADMIN}
@@ -1378,7 +1579,9 @@ export default function ShopPage() {
         </span>
       </a>
 
-      {/* BUY MODAL */}
+      {/* =================================================
+          BUY MODAL
+          ================================================= */}
 
       {buyModal && (
         <div className="modal-overlay">
@@ -1409,6 +1612,7 @@ export default function ShopPage() {
             </p>
 
             <div className="confirm-row">
+
               <span>
                 Giá
               </span>
@@ -1418,9 +1622,11 @@ export default function ShopPage() {
                   buyModal.price
                 )}
               </strong>
+
             </div>
 
             <div className="confirm-row">
+
               <span>
                 Số dư
               </span>
@@ -1430,9 +1636,11 @@ export default function ShopPage() {
                   wallet
                 )}
               </strong>
+
             </div>
 
             <div className="confirm-row">
+
               <span>
                 Sau khi mua
               </span>
@@ -1449,6 +1657,7 @@ export default function ShopPage() {
                   )
                 )}
               </strong>
+
             </div>
 
             <div className="modal-actions">
@@ -1482,7 +1691,9 @@ export default function ShopPage() {
         </div>
       )}
 
-      {/* SUCCESS */}
+      {/* =================================================
+          SUCCESS
+          ================================================= */}
 
       {successModal && (
         <div className="modal-overlay">
@@ -1555,6 +1766,10 @@ export default function ShopPage() {
   );
 }
 
+/* =========================================================
+   CSS
+   ========================================================= */
+
 const styles = `
 * {
   box-sizing: border-box;
@@ -1562,6 +1777,7 @@ const styles = `
 
 .page {
   min-height: 100vh;
+
   background:
     radial-gradient(
       circle at 10% 10%,
@@ -1574,43 +1790,172 @@ const styles = `
       transparent 28%
     ),
     #f7f8fc;
+
   color: #222;
+
   font-family:
     Arial,
     Helvetica,
     sans-serif;
+
+  padding-bottom: 90px;
 }
+
+/* =========================================================
+   HOA HỒNG
+   ========================================================= */
+
+.rose-petals {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 80;
+}
+
+.rose-petal {
+  position: absolute;
+  top: -30px;
+
+  display: block;
+
+  border-radius:
+    75% 25% 70% 30%;
+
+  background:
+    linear-gradient(
+      135deg,
+      #ff5a91,
+      #d71955
+    );
+
+  opacity: .55;
+
+  transform:
+    rotate(25deg);
+
+  animation:
+    roseFall
+    linear
+    infinite;
+
+  will-change:
+    transform;
+}
+
+@keyframes roseFall {
+
+  0% {
+    transform:
+      translate3d(
+        0,
+        -40px,
+        0
+      )
+      rotate(0deg);
+
+    opacity: 0;
+  }
+
+  10% {
+    opacity: .55;
+  }
+
+  30% {
+    transform:
+      translate3d(
+        30px,
+        30vh,
+        0
+      )
+      rotate(110deg);
+  }
+
+  55% {
+    transform:
+      translate3d(
+        -35px,
+        60vh,
+        0
+      )
+      rotate(220deg);
+  }
+
+  80% {
+    opacity: .45;
+
+    transform:
+      translate3d(
+        45px,
+        85vh,
+        0
+      )
+      rotate(300deg);
+  }
+
+  100% {
+    transform:
+      translate3d(
+        -25px,
+        110vh,
+        0
+      )
+      rotate(390deg);
+
+    opacity: 0;
+  }
+}
+
+/* =========================================================
+   TOPBAR
+   ========================================================= */
 
 .topbar {
   height: 64px;
-  background: rgba(255,255,255,.96);
-  border-bottom: 1px solid #eee;
+
+  background:
+    rgba(255,255,255,.96);
+
+  border-bottom:
+    1px solid #eee;
+
   position: sticky;
   top: 0;
+
   z-index: 100;
-  backdrop-filter: blur(14px);
+
+  backdrop-filter:
+    blur(14px);
 }
 
 .topbar-inner {
   max-width: 1220px;
   height: 100%;
+
   margin: auto;
   padding: 0 18px;
+
   display: flex;
   align-items: center;
   justify-content: space-between;
+
   gap: 20px;
 }
 
 .logo {
   border: 0;
   background: transparent;
+
   cursor: pointer;
+
   display: flex;
   align-items: center;
+
   gap: 9px;
+
   font-size: 18px;
   font-weight: 900;
+
   color: #151515;
 }
 
@@ -1622,17 +1967,23 @@ const styles = `
 .logo-x {
   width: 34px;
   height: 34px;
+
   border-radius: 11px;
+
   display: grid;
   place-items: center;
+
   background:
     linear-gradient(
       135deg,
       #ff4ba6,
       #8d54ff
     );
+
   color: white;
+
   font-weight: 900;
+
   box-shadow:
     0 8px 20px
     rgba(232,61,148,.25);
@@ -1646,10 +1997,15 @@ const styles = `
 .top-nav button {
   border: 0;
   background: transparent;
+
   padding: 10px 14px;
+
   border-radius: 9px;
+
   cursor: pointer;
+
   color: #666;
+
   font-weight: 700;
 }
 
@@ -1667,9 +2023,13 @@ const styles = `
 .wallet,
 .account {
   border: 0;
+
   border-radius: 9px;
+
   padding: 9px 12px;
+
   cursor: pointer;
+
   font-weight: 700;
 }
 
@@ -1683,10 +2043,16 @@ const styles = `
   color: white;
 }
 
+/* =========================================================
+   HERO
+   ========================================================= */
+
 .hero {
   min-height: 155px;
+
   display: flex;
   align-items: center;
+
   background:
     linear-gradient(
       110deg,
@@ -1694,57 +2060,258 @@ const styles = `
       #ffeef8 48%,
       #eee4ff 100%
     );
-  border-bottom: 1px solid #f1dbe8;
+
+  border-bottom:
+    1px solid #f1dbe8;
 }
 
 .hero > div {
   width: 1220px;
+
   margin: auto;
+
   padding: 28px 18px;
 }
 
 .hero-badge {
   display: inline-block;
+
   background: white;
   color: #e23a91;
+
   padding: 6px 11px;
+
   border-radius: 999px;
+
   font-size: 11px;
   font-weight: 900;
+
   margin-bottom: 8px;
 }
 
 .hero h1 {
   margin: 0;
+
   font-size: 30px;
   font-weight: 900;
 }
 
 .hero p {
   margin: 7px 0 0;
+
   color: #777;
 }
 
+/* =========================================================
+   BANNER
+   ========================================================= */
+
+.banner-section {
+  width: 100%;
+
+  padding:
+    18px
+    18px
+    4px;
+}
+
+.banner-container {
+  width: 100%;
+  max-width: 1220px;
+
+  margin: auto;
+}
+
+.banner-slider {
+  width: 100%;
+
+  position: relative;
+
+  overflow: hidden;
+
+  border-radius: 18px;
+
+  background:
+    linear-gradient(
+      135deg,
+      #f9d7eb,
+      #eee4ff
+    );
+
+  box-shadow:
+    0 14px 40px
+    rgba(50,30,70,.10);
+
+  aspect-ratio: 1200 / 320;
+}
+
+.banner-image {
+  width: 100%;
+  height: 100%;
+
+  display: block;
+
+  object-fit: cover;
+
+  animation:
+    bannerFade
+    .45s
+    ease;
+}
+
+@keyframes bannerFade {
+  from {
+    opacity: .45;
+    transform:
+      scale(1.015);
+  }
+
+  to {
+    opacity: 1;
+    transform:
+      scale(1);
+  }
+}
+
+.banner-arrow {
+  position: absolute;
+
+  top: 50%;
+
+  transform:
+    translateY(-50%);
+
+  width: 38px;
+  height: 38px;
+
+  border: 0;
+
+  border-radius: 50%;
+
+  background:
+    rgba(255,255,255,.82);
+
+  color: #e83d94;
+
+  font-size: 30px;
+  line-height: 1;
+
+  display: grid;
+  place-items: center;
+
+  cursor: pointer;
+
+  opacity: .85;
+
+  transition:
+    .2s;
+}
+
+.banner-arrow:hover {
+  opacity: 1;
+
+  background: white;
+
+  transform:
+    translateY(-50%)
+    scale(1.06);
+}
+
+.banner-prev {
+  left: 12px;
+}
+
+.banner-next {
+  right: 12px;
+}
+
+.banner-dots {
+  position: absolute;
+
+  left: 50%;
+  bottom: 10px;
+
+  transform:
+    translateX(-50%);
+
+  display: flex;
+
+  gap: 6px;
+
+  padding:
+    6px 9px;
+
+  border-radius: 999px;
+
+  background:
+    rgba(0,0,0,.20);
+
+  backdrop-filter:
+    blur(5px);
+}
+
+.banner-dot {
+  width: 7px;
+  height: 7px;
+
+  padding: 0;
+
+  border: 0;
+
+  border-radius: 50%;
+
+  background:
+    rgba(255,255,255,.60);
+
+  cursor: pointer;
+
+  transition:
+    .2s;
+}
+
+.banner-dot.active {
+  width: 20px;
+
+  border-radius: 999px;
+
+  background: white;
+}
+
+/* =========================================================
+   CONTAINER
+   ========================================================= */
+
 .container {
   max-width: 1220px;
+
   margin: auto;
+
   padding: 18px;
 }
 
 .breadcrumb {
   display: flex;
+
   gap: 8px;
+
   align-items: center;
+
   font-size: 13px;
+
   color: #999;
+
   margin-bottom: 18px;
 }
 
 .breadcrumb button {
   border: 0;
+
   background: transparent;
+
   cursor: pointer;
+
   color: #777;
+
   padding: 0;
 }
 
@@ -1752,65 +2319,104 @@ const styles = `
   color: #e83d94;
 }
 
+/* =========================================================
+   HEADINGS
+   ========================================================= */
+
 .section-heading,
 .products-heading {
   display: flex;
+
   align-items: flex-end;
-  justify-content: space-between;
+
+  justify-content:
+    space-between;
+
   gap: 15px;
+
   margin-bottom: 18px;
 }
 
 .section-heading h2,
 .products-heading h2 {
   margin: 7px 0 0;
+
   font-size: 23px;
+
   font-weight: 900;
 }
 
 .section-heading p,
 .products-heading p {
   margin: 5px 0 0;
+
   color: #999;
+
   font-size: 12px;
 }
 
 .count-badge {
   background: white;
+
   border: 1px solid #eee;
+
   border-radius: 999px;
+
   padding: 8px 12px;
+
   color: #e83d94;
+
   font-size: 11px;
+
   font-weight: 850;
 }
 
 .back-link {
   border: 0;
+
   background: transparent;
+
   padding: 0;
+
   color: #e83d94;
+
   cursor: pointer;
+
   font-size: 11px;
+
   font-weight: 850;
 }
 
+/* =========================================================
+   CATEGORIES
+   ========================================================= */
+
 .parent-grid {
   display: grid;
+
   grid-template-columns:
     repeat(2, minmax(0, 1fr));
+
   gap: 18px;
 }
 
 .parent-card {
   width: 100%;
+
   border: 1px solid #eee;
+
   padding: 0;
+
   overflow: hidden;
+
   background: white;
+
   border-radius: 18px;
+
   text-align: left;
+
   cursor: pointer;
+
   transition:
     transform .2s,
     box-shadow .2s,
@@ -1818,8 +2424,12 @@ const styles = `
 }
 
 .parent-card:hover {
-  transform: translateY(-4px);
-  border-color: #f2bddb;
+  transform:
+    translateY(-4px);
+
+  border-color:
+    #f2bddb;
+
   box-shadow:
     0 18px 45px
     rgba(40,20,60,.10);
@@ -1827,14 +2437,18 @@ const styles = `
 
 .category-media {
   width: 100%;
+
   height: 95px;
+
   background:
     linear-gradient(
       135deg,
       #f7edf4,
       #eeeafd
     );
+
   position: relative;
+
   overflow: hidden;
 }
 
@@ -1846,28 +2460,42 @@ const styles = `
 .category-media video {
   width: 100%;
   height: 100%;
+
   object-fit: cover;
+
   display: block;
 }
 
 .category-video-badge {
   position: absolute;
+
   top: 10px;
   left: 10px;
+
   padding: 5px 8px;
+
   border-radius: 7px;
-  background: rgba(0,0,0,.62);
+
+  background:
+    rgba(0,0,0,.62);
+
   color: white;
+
   font-size: 9px;
+
   font-weight: 900;
 }
 
 .category-empty {
   display: flex;
+
   flex-direction: column;
+
   justify-content: center;
   align-items: center;
+
   color: #aaa;
+
   gap: 6px;
 }
 
@@ -1887,82 +2515,124 @@ const styles = `
 .parent-card-title-row,
 .child-card-title-row {
   display: flex;
+
   align-items: center;
-  justify-content: space-between;
+
+  justify-content:
+    space-between;
+
   gap: 10px;
 }
 
 .parent-card h3,
 .child-card h3 {
   margin: 0;
+
   color: #222;
+
   font-size: 17px;
+
   font-weight: 900;
 }
 
 .parent-card-body p,
 .child-card-body p {
   margin: 7px 0;
+
   color: #888;
+
   font-size: 11px;
+
   line-height: 1.5;
 }
 
 .circle-arrow {
   width: 31px;
   height: 31px;
+
   flex-shrink: 0;
+
   display: grid;
+
   place-items: center;
+
   border-radius: 50%;
+
   background: #fff0f7;
+
   color: #e83d94;
+
   font-weight: 900;
 }
 
 .parent-meta {
   display: flex;
+
   gap: 7px;
+
   flex-wrap: wrap;
+
   margin-top: 11px;
 }
 
 .parent-meta span,
 .child-meta {
   padding: 6px 8px;
+
   border-radius: 7px;
+
   background: #f7f7fa;
+
   color: #888;
+
   font-size: 9px;
+
   font-weight: 750;
 }
 
 .view-all {
   margin-top: 13px;
+
   display: flex;
+
   align-items: center;
-  justify-content: space-between;
+
+  justify-content:
+    space-between;
+
   color: #e83d94;
+
   font-size: 10px;
+
   font-weight: 900;
 }
 
 .child-grid {
   display: grid;
+
   grid-template-columns:
     repeat(2, minmax(0, 1fr));
+
   gap: 18px;
 }
 
 .child-card {
   width: 100%;
+
   border: 1px solid #eee;
+
   padding: 0;
+
   overflow: hidden;
+
   background: white;
+
   border-radius: 18px;
+
   text-align: left;
+
   cursor: pointer;
+
   transition:
     transform .2s,
     box-shadow .2s,
@@ -1970,64 +2640,100 @@ const styles = `
 }
 
 .child-card:hover {
-  transform: translateY(-4px);
-  border-color: #f2bddb;
+  transform:
+    translateY(-4px);
+
+  border-color:
+    #f2bddb;
+
   box-shadow:
     0 18px 45px
     rgba(40,20,60,.10);
 }
 
+/* =========================================================
+   TOOLS
+   ========================================================= */
+
 .tools {
   display: flex;
+
   gap: 8px;
 }
 
 .search {
   width: 210px;
   height: 38px;
+
   background: white;
+
   border: 1px solid #eee;
+
   border-radius: 9px;
+
   display: flex;
+
   align-items: center;
+
   padding: 0 10px;
+
   gap: 6px;
 }
 
 .search input {
   width: 100%;
+
   border: 0;
+
   outline: 0;
+
   font-size: 12px;
 }
 
 .tools select {
-  border: 1px solid #eee;
+  border:
+    1px solid #eee;
+
   background: white;
+
   border-radius: 9px;
+
   padding: 0 10px;
+
   outline: 0;
 }
 
+/* =========================================================
+   PRODUCTS
+   ========================================================= */
+
 .product-grid {
   display: grid;
+
   grid-template-columns:
     repeat(4, minmax(0,1fr));
+
   gap: 14px;
 }
 
 .product-card {
   background: white;
+
   border: 1px solid #eee;
+
   border-radius: 13px;
+
   overflow: hidden;
+
   transition:
     transform .18s,
     box-shadow .18s;
 }
 
 .product-card:hover {
-  transform: translateY(-3px);
+  transform:
+    translateY(-3px);
+
   box-shadow:
     0 15px 35px
     rgba(40,20,60,.10);
@@ -2035,35 +2741,48 @@ const styles = `
 
 .cover {
   height: 150px;
+
   background: #f0f1f6;
+
   position: relative;
+
   overflow: hidden;
 }
 
 .product-media {
   width: 100%;
   height: 100%;
+
   display: block;
+
   object-fit: cover;
 }
 
 .stock {
   position: absolute;
+
   right: 8px;
   top: 8px;
+
   padding: 4px 7px;
+
   border-radius: 999px;
+
   font-size: 9px;
+
   font-weight: 900;
 }
 
 .stock.available {
-  background: rgba(255,255,255,.94);
+  background:
+    rgba(255,255,255,.94);
+
   color: #22a05a;
 }
 
 .stock.soldout {
   background: #222;
+
   color: white;
 }
 
@@ -2073,57 +2792,86 @@ const styles = `
 
 .product-category {
   color: #e83d94;
+
   font-size: 9px;
+
   font-weight: 900;
+
   text-transform: uppercase;
+
   margin-bottom: 5px;
+
   white-space: nowrap;
+
   overflow: hidden;
+
   text-overflow: ellipsis;
 }
 
 .product-body h3 {
   margin: 0;
+
   font-size: 14px;
+
   line-height: 1.35;
 }
 
 .description {
   margin: 6px 0;
+
   color: #888;
+
   font-size: 10px;
+
   line-height: 1.45;
+
   min-height: 28px;
 }
 
 .duration {
   color: #888;
+
   font-size: 10px;
+
   margin-top: 5px;
 }
 
 .product-bottom {
   margin-top: 11px;
+
   display: flex;
+
   align-items: center;
-  justify-content: space-between;
+
+  justify-content:
+    space-between;
+
   gap: 7px;
 }
 
 .price {
   color: #e52f8d;
+
   font-size: 15px;
+
   white-space: nowrap;
 }
 
 .buy-button {
   border: 0;
+
   border-radius: 7px;
+
   padding: 8px 9px;
+
   background: #e83d94;
+
   color: white;
+
   font-size: 9px;
+
   font-weight: 900;
+
   cursor: pointer;
 }
 
@@ -2133,19 +2881,33 @@ const styles = `
 
 .buy-button:disabled {
   background: #bbb;
+
   cursor: not-allowed;
 }
 
+/* =========================================================
+   EMPTY / MESSAGE
+   ========================================================= */
+
 .empty {
   min-height: 300px;
+
   background: white;
+
   border: 1px solid #eee;
+
   border-radius: 14px;
+
   display: flex;
+
   flex-direction: column;
+
   align-items: center;
+
   justify-content: center;
+
   color: #999;
+
   text-align: center;
 }
 
@@ -2155,78 +2917,127 @@ const styles = `
 
 .empty h3 {
   color: #555;
+
   margin: 10px 0 4px;
 }
 
 .empty p {
   margin: 0;
+
   font-size: 12px;
 }
 
 .error-box,
 .message-box {
   padding: 12px 14px;
+
   border-radius: 10px;
+
   margin-bottom: 13px;
+
   font-size: 12px;
 }
 
 .error-box {
   background: #fff0f0;
+
   color: #c33;
 }
 
 .message-box {
   background: #fff4d9;
+
   color: #8a6200;
+
   display: flex;
-  justify-content: space-between;
+
+  justify-content:
+    space-between;
 }
 
 .message-box button {
   border: 0;
+
   background: transparent;
+
   cursor: pointer;
 }
 
+/* =========================================================
+   ADMIN
+   ========================================================= */
+
 .floating-admin {
   position: fixed;
+
   right: 18px;
   bottom: 18px;
-  z-index: 50;
+
+  z-index: 90;
+
   background: #e83d94;
+
   color: white;
+
   text-decoration: none;
+
   border-radius: 999px;
+
   padding: 11px 15px;
+
   display: flex;
+
   align-items: center;
+
   gap: 7px;
+
   font-size: 12px;
+
   font-weight: 900;
+
   box-shadow:
     0 8px 25px
     rgba(232,61,148,.3);
 }
 
+/* =========================================================
+   MODAL
+   ========================================================= */
+
 .modal-overlay {
   position: fixed;
+
   inset: 0;
+
   z-index: 500;
-  background: rgba(20,15,25,.55);
+
+  background:
+    rgba(20,15,25,.55);
+
   display: flex;
+
   align-items: center;
+
   justify-content: center;
+
   padding: 18px;
-  backdrop-filter: blur(4px);
+
+  backdrop-filter:
+    blur(4px);
 }
 
 .modal {
   position: relative;
-  width: min(420px,100%);
+
+  width:
+    min(420px,100%);
+
   background: white;
+
   border-radius: 18px;
+
   padding: 25px;
+
   box-shadow:
     0 30px 80px
     rgba(0,0,0,.25);
@@ -2234,14 +3045,21 @@ const styles = `
 
 .close {
   position: absolute;
+
   right: 15px;
   top: 13px;
+
   border: 0;
+
   background: #f4f4f4;
+
   width: 30px;
   height: 30px;
+
   border-radius: 50%;
+
   cursor: pointer;
+
   font-size: 18px;
 }
 
@@ -2249,36 +3067,53 @@ const styles = `
 .success-icon {
   width: 55px;
   height: 55px;
+
   margin: auto;
+
   border-radius: 16px;
+
   display: grid;
+
   place-items: center;
+
   font-size: 25px;
+
   background: #fff0f7;
 }
 
 .success-icon {
   background: #e9fff1;
+
   color: #19a758;
+
   font-weight: 900;
 }
 
 .modal h2 {
   text-align: center;
+
   margin: 13px 0 5px;
 }
 
 .modal-product {
   text-align: center;
+
   color: #e83d94;
+
   font-weight: 800;
 }
 
 .confirm-row {
   display: flex;
-  justify-content: space-between;
-  border-bottom: 1px solid #eee;
+
+  justify-content:
+    space-between;
+
+  border-bottom:
+    1px solid #eee;
+
   padding: 11px 0;
+
   font-size: 13px;
 }
 
@@ -2288,17 +3123,25 @@ const styles = `
 
 .modal-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+
+  grid-template-columns:
+    1fr 1fr;
+
   gap: 8px;
+
   margin-top: 18px;
 }
 
 .cancel-button,
 .confirm-button {
   border: 0;
+
   border-radius: 9px;
+
   padding: 11px;
+
   cursor: pointer;
+
   font-weight: 900;
 }
 
@@ -2308,79 +3151,121 @@ const styles = `
 
 .confirm-button {
   background: #e83d94;
+
   color: white;
 }
 
 .confirm-button:disabled {
   opacity: .6;
+
   cursor: not-allowed;
 }
 
 .confirm-button.full {
   width: 100%;
+
   margin-top: 15px;
 }
 
 .key-box {
   margin-top: 15px;
+
   padding: 14px;
+
   background: #f7f7fa;
+
   border-radius: 10px;
+
   text-align: center;
 }
 
 .key-box span {
   display: block;
+
   color: #999;
+
   font-size: 10px;
+
   margin-bottom: 7px;
 }
 
 .key-box strong {
   display: block;
+
   word-break: break-all;
+
   font-size: 15px;
+
   color: #e83d94;
 }
 
 .key-box button {
   margin-top: 10px;
-  border: 1px solid #eee;
+
+  border:
+    1px solid #eee;
+
   background: white;
+
   border-radius: 7px;
+
   padding: 7px 10px;
+
   cursor: pointer;
 }
 
+/* =========================================================
+   LOADING
+   ========================================================= */
+
 .loading-screen {
   min-height: 100vh;
+
   background: #f7f8fc;
+
   display: grid;
+
   place-items: center;
 }
 
 .loading-box {
   text-align: center;
+
   color: #888;
 }
 
 .loader {
   width: 40px;
   height: 40px;
-  border: 4px solid #eee;
-  border-top-color: #e83d94;
+
+  border:
+    4px solid #eee;
+
+  border-top-color:
+    #e83d94;
+
   border-radius: 50%;
-  animation: spin .8s linear infinite;
+
+  animation:
+    spin .8s
+    linear infinite;
+
   margin: auto;
 }
 
 @keyframes spin {
   to {
-    transform: rotate(360deg);
+    transform:
+      rotate(360deg);
   }
 }
 
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+
 @media (max-width: 1050px) {
+
   .product-grid {
     grid-template-columns:
       repeat(3,minmax(0,1fr));
@@ -2421,6 +3306,48 @@ const styles = `
     font-size: 25px;
   }
 
+  .banner-section {
+    padding:
+      10px
+      10px
+      2px;
+  }
+
+  .banner-slider {
+    border-radius: 13px;
+  }
+
+  .banner-arrow {
+    width: 31px;
+    height: 31px;
+
+    font-size: 24px;
+  }
+
+  .banner-prev {
+    left: 7px;
+  }
+
+  .banner-next {
+    right: 7px;
+  }
+
+  .banner-dots {
+    bottom: 6px;
+
+    padding:
+      5px 7px;
+  }
+
+  .banner-dot {
+    width: 6px;
+    height: 6px;
+  }
+
+  .banner-dot.active {
+    width: 16px;
+  }
+
   .container {
     padding: 12px;
   }
@@ -2429,6 +3356,7 @@ const styles = `
   .child-grid {
     grid-template-columns:
       repeat(2,minmax(0,1fr));
+
     gap: 9px;
   }
 
@@ -2457,6 +3385,7 @@ const styles = `
 
   .parent-meta span {
     display: block;
+
     margin-top: 4px;
   }
 
@@ -2467,22 +3396,28 @@ const styles = `
   .circle-arrow {
     width: 25px;
     height: 25px;
+
     font-size: 11px;
   }
 
   .section-heading,
   .products-heading {
-    align-items: flex-start;
+    align-items:
+      flex-start;
   }
 
   .count-badge {
     font-size: 9px;
-    padding: 6px 8px;
+
+    padding:
+      6px 8px;
   }
 
   .tools {
     margin-top: 10px;
+
     display: grid;
+
     grid-template-columns:
       1fr 125px;
   }
@@ -2494,6 +3429,7 @@ const styles = `
   .product-grid {
     grid-template-columns:
       repeat(2,minmax(0,1fr));
+
     gap: 9px;
   }
 
@@ -2515,17 +3451,24 @@ const styles = `
 
   .buy-button {
     padding: 7px;
+
     font-size: 8px;
   }
 
   .floating-admin {
     right: 12px;
     bottom: 12px;
-    padding: 10px 12px;
+
+    padding:
+      10px 12px;
   }
 
   .floating-admin span {
     display: none;
+  }
+
+  .rose-petal {
+    opacity: .38;
   }
 }
 
@@ -2554,6 +3497,15 @@ const styles = `
 
   .buy-button {
     padding: 6px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .rose-petal,
+  .banner-image,
+  .loader {
+    animation: none !important;
   }
 }
 `;
