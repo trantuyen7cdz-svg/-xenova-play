@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 
-const ZALO_ADMIN = "https://zalo.me/0987654321";
+const ZALO_ADMIN = "https://zalo.me/84365717262";
 
 const DEFAULT_SETTINGS = {
   logo_url: "",
@@ -81,6 +81,10 @@ export default function ShopPage() {
   const [buying, setBuying] = useState(false);
   const [bannerIndex, setBannerIndex] = useState(0);
 
+  /* =========================
+     USER
+  ========================= */
+
   useEffect(() => {
     let mounted = true;
 
@@ -110,6 +114,10 @@ export default function ShopPage() {
       subscription.unsubscribe();
     };
   }, []);
+
+  /* =========================
+     SHOP SETTINGS
+  ========================= */
 
   async function loadSettings() {
     try {
@@ -149,6 +157,10 @@ export default function ShopPage() {
   useEffect(() => {
     loadSettings();
   }, []);
+
+  /* =========================
+     BANNER
+  ========================= */
 
   const activeBanners = useMemo(() => {
     const banners = Array.isArray(
@@ -212,6 +224,10 @@ export default function ShopPage() {
         activeBanners.length
     );
   }
+
+  /* =========================
+     LOAD SHOP
+  ========================= */
 
   async function loadShop() {
     try {
@@ -283,6 +299,10 @@ export default function ShopPage() {
     loadShop();
   }, []);
 
+  /* =========================
+     WALLET
+  ========================= */
+
   useEffect(() => {
     if (!user) {
       setWallet(0);
@@ -324,6 +344,10 @@ export default function ShopPage() {
       mounted = false;
     };
   }, [user]);
+
+  /* =========================
+     CATEGORY
+  ========================= */
 
   const parentCategories =
     useMemo(() => {
@@ -422,6 +446,10 @@ export default function ShopPage() {
     );
   }
 
+  /* =========================
+     STOCK
+  ========================= */
+
   function getStock(productId) {
     const value =
       stockMap?.[productId] ??
@@ -445,6 +473,10 @@ export default function ShopPage() {
 
     return Number(value || 0);
   }
+
+  /* =========================
+     FILTER
+  ========================= */
 
   const filteredProducts =
     useMemo(() => {
@@ -540,6 +572,10 @@ export default function ShopPage() {
       sort,
     ]);
 
+  /* =========================
+     MEDIA
+  ========================= */
+
   function ProductMedia({ product }) {
     if (
       product?.media_type ===
@@ -561,7 +597,10 @@ export default function ShopPage() {
     return (
       <img
         src={getProductImage(product)}
-        alt={product?.name || "Product"}
+        alt={
+          product?.name ||
+          "Product"
+        }
         className="product-media"
       />
     );
@@ -614,6 +653,10 @@ export default function ShopPage() {
       </div>
     );
   }
+
+  /* =========================
+     BUY
+  ========================= */
 
   async function handleBuy() {
     if (!buyModal) return;
@@ -746,11 +789,16 @@ export default function ShopPage() {
     }
   }
 
+  /* =========================
+     LOADING
+  ========================= */
+
   if (loading) {
     return (
       <>
         <div className="loading">
           <div className="spinner" />
+
           <p>
             Đang tải cửa hàng...
           </p>
@@ -851,7 +899,6 @@ export default function ShopPage() {
           </nav>
 
           <div className="account">
-            {/* ẨN SỐ DƯ Ở TOPBAR */}
             {user ? (
               <button
                 className="account-button"
@@ -952,7 +999,7 @@ export default function ShopPage() {
 
       <div className="container">
 
-        {/* CHỈ HIỆN BREADCRUMB KHI ĐÃ ĐI VÀO DANH MỤC */}
+        {/* BREADCRUMB */}
         {view !== "parents" && (
           <div className="breadcrumb">
 
@@ -1338,6 +1385,7 @@ export default function ShopPage() {
                                 setMessage(
                                   ""
                                 );
+
                                 setBuyModal(
                                   product
                                 );
@@ -1362,9 +1410,13 @@ export default function ShopPage() {
       {/* ZALO */}
       <a
         href={ZALO_ADMIN}
-        target="_blank"
-        rel="noreferrer"
         className="zalo"
+        onClick={(event) => {
+          event.preventDefault();
+
+          window.location.href =
+            ZALO_ADMIN;
+        }}
       >
         💬
         <span>
@@ -1513,49 +1565,8 @@ export default function ShopPage() {
         </div>
       )}
 
-      {/* THANH CÔNG CỤ DƯỚI */}
-      <nav className="bottom-toolbar">
-
-        <button
-          className="bottom-wallet"
-          onClick={() =>
-            router.push("/deposit")
-          }
-        >
-          <span>💰</span>
-          <small>Số dư</small>
-          <strong>
-            {formatPrice(wallet)}
-          </strong>
-        </button>
-
-        <button
-          onClick={() =>
-            router.push(
-              user
-                ? "/account"
-                : "/login"
-            )
-          }
-          aria-label="Tài khoản"
-        >
-          <span className="bottom-icon">
-            👤
-          </span>
-        </button>
-
-        <button
-          onClick={() =>
-            router.push("/keys")
-          }
-          aria-label="Kho KEY"
-        >
-          <span className="bottom-icon">
-            🔑
-          </span>
-        </button>
-
-      </nav>
+      {/* KHÔNG CÒN BOTTOM-TOOLBAR Ở FILE NÀY.
+          Thanh dưới được quản lý bởi Menu.js */}
 
       <style jsx>{styles}</style>
     </main>
@@ -1570,7 +1581,9 @@ function Empty({
   return (
     <div className="empty">
       <div>{icon}</div>
+
       <h3>{title}</h3>
+
       <p>{text}</p>
     </div>
   );
@@ -1583,7 +1596,10 @@ function InfoRow({
   return (
     <div className="info-row">
       <span>{label}</span>
-      <strong>{value}</strong>
+
+      <strong>
+        {value}
+      </strong>
     </div>
   );
 }
@@ -1612,7 +1628,7 @@ const styles = `
     Arial,
     Helvetica,
     sans-serif;
-  padding-bottom: 105px;
+  padding-bottom: 90px;
 }
 
 /* =========================
@@ -2494,84 +2510,6 @@ const styles = `
 }
 
 /* =========================
-   THANH DƯỚI
-========================= */
-
-.bottom-toolbar {
-  position: fixed;
-  left: 50%;
-  bottom: 10px;
-  transform:
-    translateX(-50%);
-  z-index: 200;
-  width:
-    min(360px, calc(100vw - 24px));
-  height: 58px;
-  display: grid;
-  grid-template-columns:
-    1.4fr .8fr .8fr;
-  gap: 5px;
-  padding: 5px;
-  border:
-    1px solid rgba(255,255,255,.12);
-  border-radius: 18px;
-  background:
-    rgba(20,20,27,.94);
-  box-shadow:
-    0 15px 40px
-    rgba(0,0,0,.28);
-  backdrop-filter:
-    blur(16px);
-}
-
-.bottom-toolbar button {
-  border: 0;
-  border-radius: 13px;
-  background: transparent;
-  color: white;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  transition:
-    background .15s,
-    transform .15s;
-}
-
-.bottom-toolbar button:hover {
-  background:
-    rgba(255,255,255,.08);
-}
-
-.bottom-toolbar button:active {
-  transform: scale(.96);
-}
-
-.bottom-wallet {
-  flex-direction: column;
-  line-height: 1;
-}
-
-.bottom-wallet > span {
-  font-size: 13px;
-}
-
-.bottom-wallet small {
-  font-size: 8px;
-  color: #aaa;
-}
-
-.bottom-wallet strong {
-  font-size: 10px;
-  color: #ff55a5;
-}
-
-.bottom-icon {
-  font-size: 20px;
-}
-
-/* =========================
    LOADING
 ========================= */
 
@@ -2722,13 +2660,6 @@ const styles = `
   .zalo span {
     display: none;
   }
-
-  .bottom-toolbar {
-    bottom: 8px;
-    height: 56px;
-    width:
-      calc(100vw - 20px);
-  }
 }
 
 @media (max-width: 390px) {
@@ -2748,11 +2679,6 @@ const styles = `
 
   .price {
     font-size: 12px;
-  }
-
-  .bottom-toolbar {
-    width:
-      calc(100vw - 16px);
   }
 }
 
