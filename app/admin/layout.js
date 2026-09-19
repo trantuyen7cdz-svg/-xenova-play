@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 
+const ADMIN_EMAIL = "trantuyenzzz598@gmail.com";
+
 export default function AdminLayout({ children }) {
   const router = useRouter();
 
@@ -17,26 +19,18 @@ export default function AdminLayout({ children }) {
       try {
         const {
           data: { user },
-          error: userError,
+          error,
         } = await supabase.auth.getUser();
 
-        if (userError || !user) {
+        if (error || !user) {
           router.replace("/login");
           return;
         }
 
-        const { data: profile, error: profileError } =
-          await supabase
-            .from("profiles")
-            .select("id, email, role")
-            .eq("id", user.id)
-            .maybeSingle();
+        const email =
+          String(user.email || "").trim().toLowerCase();
 
-        if (
-          profileError ||
-          !profile ||
-          profile.role !== "admin"
-        ) {
+        if (email !== ADMIN_EMAIL.toLowerCase()) {
           router.replace("/dashboard");
           return;
         }
