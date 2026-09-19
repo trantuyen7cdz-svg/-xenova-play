@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 function formatPrice(value) {
@@ -20,7 +20,6 @@ function MenuLink({ href, icon, children, onClick }) {
 }
 
 export default function Menu() {
-  const pathname = usePathname();
   const router = useRouter();
 
   const [open, setOpen] = useState(false);
@@ -116,9 +115,15 @@ export default function Menu() {
         handleWalletUpdated
       );
 
-      window.removeEventListener("xenova-open-menu", handleOpenMenu);
+      window.removeEventListener(
+        "xenova-open-menu",
+        handleOpenMenu
+      );
 
-      document.removeEventListener("visibilitychange", handleVisibility);
+      document.removeEventListener(
+        "visibilitychange",
+        handleVisibility
+      );
     };
   }, []);
 
@@ -138,9 +143,11 @@ export default function Menu() {
 
   async function logout() {
     await supabase.auth.signOut();
+
     setOpen(false);
     setUser(null);
     setBalance(0);
+
     router.push("/login");
   }
 
@@ -154,7 +161,10 @@ export default function Menu() {
 
   return (
     <>
-      {/* GÓC PHẢI: CHỈ MENU + ĐỔI MÀU */}
+      {/* =====================================================
+          GÓC PHẢI TRÊN
+          CHỈ CÓ ĐỔI MÀU + MENU
+          ===================================================== */}
       <div className="global-menu-buttons">
         <button
           type="button"
@@ -175,7 +185,9 @@ export default function Menu() {
         </button>
       </div>
 
-      {/* DRAWER MENU */}
+      {/* =====================================================
+          MENU DRAWER
+          ===================================================== */}
       {open && (
         <div
           className="xenova-menu-overlay"
@@ -208,23 +220,43 @@ export default function Menu() {
             </div>
 
             <div className="xenova-menu-list">
-              <MenuLink href="/" icon="🏠" onClick={closeMenu}>
+              <MenuLink
+                href="/"
+                icon="🏠"
+                onClick={closeMenu}
+              >
                 Trang chủ
               </MenuLink>
 
-              <MenuLink href="/shop" icon="🛍️" onClick={closeMenu}>
+              <MenuLink
+                href="/shop"
+                icon="🛍️"
+                onClick={closeMenu}
+              >
                 Cửa hàng
               </MenuLink>
 
-              <MenuLink href="/deposit" icon="💰" onClick={closeMenu}>
+              <MenuLink
+                href="/deposit"
+                icon="💰"
+                onClick={closeMenu}
+              >
                 Nạp tiền
               </MenuLink>
 
-              <MenuLink href="/keys" icon="🔑" onClick={closeMenu}>
+              <MenuLink
+                href="/keys"
+                icon="🔑"
+                onClick={closeMenu}
+              >
                 KEY của tôi
               </MenuLink>
 
-              <MenuLink href="/orders" icon="📦" onClick={closeMenu}>
+              <MenuLink
+                href="/orders"
+                icon="📦"
+                onClick={closeMenu}
+              >
                 Đơn hàng
               </MenuLink>
 
@@ -236,7 +268,11 @@ export default function Menu() {
                 Tài khoản
               </MenuLink>
 
-              <MenuLink href="/settings" icon="⚙️" onClick={closeMenu}>
+              <MenuLink
+                href="/settings"
+                icon="⚙️"
+                onClick={closeMenu}
+              >
                 Cài đặt
               </MenuLink>
             </div>
@@ -278,11 +314,20 @@ export default function Menu() {
         </div>
       )}
 
-      {/* THANH CÔNG CỤ DƯỚI */}
+      {/* =====================================================
+          THANH CÔNG CỤ DƯỚI
+          GIỮ NGUYÊN 3 CHỨC NĂNG
+          NHƯNG GỌN HƠN
+          ===================================================== */}
       <div className="xenova-bottom-toolbar">
         {/* SỐ DƯ */}
-        <Link href="/deposit" className="xenova-bottom-item">
-          <span className="xenova-bottom-icon">💰</span>
+        <Link
+          href="/deposit"
+          className="xenova-bottom-item"
+        >
+          <span className="xenova-bottom-icon">
+            💰
+          </span>
 
           <span className="xenova-bottom-text">
             <small>SỐ DƯ</small>
@@ -295,17 +340,26 @@ export default function Menu() {
           href={user ? "/dashboard" : "/login"}
           className="xenova-bottom-item xenova-account-bottom"
         >
-          <span className="xenova-avatar">🐰</span>
+          <span className="xenova-avatar">
+            🐰
+          </span>
 
           <span className="xenova-bottom-text">
             <small>TÀI KHOẢN</small>
-            <strong>{user ? "Tài khoản" : "Đăng nhập"}</strong>
+            <strong>
+              {user ? "Tài khoản" : "Đăng nhập"}
+            </strong>
           </span>
         </Link>
 
-        {/* KEY */}
-        <Link href="/keys" className="xenova-bottom-item">
-          <span className="xenova-bottom-icon">🔑</span>
+        {/* KHO KEY */}
+        <Link
+          href="/keys"
+          className="xenova-bottom-item"
+        >
+          <span className="xenova-bottom-icon">
+            🔑
+          </span>
 
           <span className="xenova-bottom-text">
             <small>KHO KEY</small>
