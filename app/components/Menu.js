@@ -12,8 +12,15 @@ function formatPrice(value) {
 
 function MenuLink({ href, icon, children, onClick }) {
   return (
-    <Link href={href} className="xenova-menu-link" onClick={onClick}>
-      <span className="xenova-menu-icon">{icon}</span>
+    <Link
+      href={href}
+      className="xenova-menu-link"
+      onClick={onClick}
+    >
+      <span className="xenova-menu-icon">
+        {icon}
+      </span>
+
       <span>{children}</span>
     </Link>
   );
@@ -58,14 +65,19 @@ export default function Menu() {
   }
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem("xenova-theme");
+    const savedTheme =
+      localStorage.getItem("xenova-theme");
 
     if (savedTheme === "dark") {
       setDark(true);
-      document.documentElement.classList.add("dark");
+      document.documentElement.classList.add(
+        "dark"
+      );
     } else {
       setDark(false);
-      document.documentElement.classList.remove("dark");
+      document.documentElement.classList.remove(
+        "dark"
+      );
     }
 
     setThemeReady(true);
@@ -74,15 +86,17 @@ export default function Menu() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, currentUser) => {
-      setUser(currentUser || null);
+    } = supabase.auth.onAuthStateChange(
+      async (_event, currentUser) => {
+        setUser(currentUser || null);
 
-      if (currentUser) {
-        await loadWallet(currentUser);
-      } else {
-        setBalance(0);
+        if (currentUser) {
+          await loadWallet(currentUser);
+        } else {
+          setBalance(0);
+        }
       }
-    });
+    );
 
     const handleWalletUpdated = () => {
       loadUser();
@@ -93,7 +107,10 @@ export default function Menu() {
     };
 
     const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
+      if (
+        document.visibilityState ===
+        "visible"
+      ) {
         loadUser();
       }
     };
@@ -103,9 +120,15 @@ export default function Menu() {
       handleWalletUpdated
     );
 
-    window.addEventListener("xenova-open-menu", handleOpenMenu);
+    window.addEventListener(
+      "xenova-open-menu",
+      handleOpenMenu
+    );
 
-    document.addEventListener("visibilitychange", handleVisibility);
+    document.addEventListener(
+      "visibilitychange",
+      handleVisibility
+    );
 
     return () => {
       subscription?.unsubscribe();
@@ -133,11 +156,23 @@ export default function Menu() {
     setDark(nextDark);
 
     if (nextDark) {
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("xenova-theme", "dark");
+      document.documentElement.classList.add(
+        "dark"
+      );
+
+      localStorage.setItem(
+        "xenova-theme",
+        "dark"
+      );
     } else {
-      document.documentElement.classList.remove("dark");
-      localStorage.setItem("xenova-theme", "light");
+      document.documentElement.classList.remove(
+        "dark"
+      );
+
+      localStorage.setItem(
+        "xenova-theme",
+        "light"
+      );
     }
   }
 
@@ -161,10 +196,10 @@ export default function Menu() {
 
   return (
     <>
-      {/* =====================================================
+      {/* =========================
           GÓC PHẢI TRÊN
-          CHỈ CÓ ĐỔI MÀU + MENU
-          ===================================================== */}
+      ========================= */}
+
       <div className="global-menu-buttons">
         <button
           type="button"
@@ -185,9 +220,10 @@ export default function Menu() {
         </button>
       </div>
 
-      {/* =====================================================
+      {/* =========================
           MENU DRAWER
-          ===================================================== */}
+      ========================= */}
+
       {open && (
         <div
           className="xenova-menu-overlay"
@@ -195,17 +231,21 @@ export default function Menu() {
         >
           <aside
             className="xenova-menu-drawer"
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) =>
+              e.stopPropagation()
+            }
           >
             <div className="xenova-menu-header">
               <div>
                 <div className="xenova-menu-brand">
-                  XENOVA <span>PLAY</span>
+                  XENOVA{" "}
+                  <span>PLAY</span>
                 </div>
 
                 <div className="xenova-menu-user">
                   {user
-                    ? user.email || "Tài khoản"
+                    ? user.email ||
+                      "Tài khoản"
                     : "Bạn chưa đăng nhập"}
                 </div>
               </div>
@@ -261,7 +301,11 @@ export default function Menu() {
               </MenuLink>
 
               <MenuLink
-                href={user ? "/dashboard" : "/login"}
+                href={
+                  user
+                    ? "/dashboard"
+                    : "/login"
+                }
                 icon="👤"
                 onClick={closeMenu}
               >
@@ -284,7 +328,8 @@ export default function Menu() {
                 onClick={toggleTheme}
               >
                 <span>
-                  {dark ? "☀️" : "🌙"} Giao diện
+                  {dark ? "☀️" : "🌙"}{" "}
+                  Giao diện
                 </span>
 
                 <span>
@@ -314,56 +359,28 @@ export default function Menu() {
         </div>
       )}
 
-      {/* =====================================================
+      {/* =========================
           THANH CÔNG CỤ DƯỚI
-          GIỮ NGUYÊN 3 CHỨC NĂNG
-          NHƯNG GỌN HƠN
-          ===================================================== */}
+          
+          CHỈ CÒN AVATAR
+          KHÔNG SỐ DƯ
+          KHÔNG CHỮ TÀI KHOẢN
+          KHÔNG KHO KEY
+          KHÔNG XEM KEY
+      ========================= */}
+
       <div className="xenova-bottom-toolbar">
-        {/* SỐ DƯ */}
         <Link
-          href="/deposit"
-          className="xenova-bottom-item"
-        >
-          <span className="xenova-bottom-icon">
-            💰
-          </span>
-
-          <span className="xenova-bottom-text">
-            <small>SỐ DƯ</small>
-            <strong>{formatPrice(balance)}</strong>
-          </span>
-        </Link>
-
-        {/* TÀI KHOẢN */}
-        <Link
-          href={user ? "/dashboard" : "/login"}
-          className="xenova-bottom-item xenova-account-bottom"
+          href={
+            user
+              ? "/dashboard"
+              : "/login"
+          }
+          className="xenova-bottom-avatar"
+          aria-label="Tài khoản"
         >
           <span className="xenova-avatar">
             🐰
-          </span>
-
-          <span className="xenova-bottom-text">
-            <small>TÀI KHOẢN</small>
-            <strong>
-              {user ? "Tài khoản" : "Đăng nhập"}
-            </strong>
-          </span>
-        </Link>
-
-        {/* KHO KEY */}
-        <Link
-          href="/keys"
-          className="xenova-bottom-item"
-        >
-          <span className="xenova-bottom-icon">
-            🔑
-          </span>
-
-          <span className="xenova-bottom-text">
-            <small>KHO KEY</small>
-            <strong>Xem KEY</strong>
           </span>
         </Link>
       </div>
