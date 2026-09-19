@@ -7,7 +7,11 @@ import { supabase } from "../../lib/supabase";
 const ZALO_ADMIN = "https://zalo.me/0987654321";
 
 function formatPrice(value) {
-  return new Intl.NumberFormat("vi-VN").format(Number(value || 0)) + "đ";
+  return (
+    new Intl.NumberFormat("vi-VN").format(
+      Number(value || 0)
+    ) + "đ"
+  );
 }
 
 function normalize(value) {
@@ -25,61 +29,82 @@ function getProductImage(product) {
   );
 }
 
-function getCategoryName(categoryId, categories) {
-  const category = categories.find(
-    (item) => Number(item.id) === Number(categoryId)
+function getCategoryImage(category) {
+  return (
+    category?.image_url ||
+    category?.demo_image_url ||
+    ""
   );
-
-  return category?.name || "Chưa phân loại";
-}
-
-function getCategoryChain(categoryId, categories) {
-  const current = categories.find(
-    (item) => Number(item.id) === Number(categoryId)
-  );
-
-  if (!current) return [];
-
-  const result = [current];
-
-  if (current.parent_id) {
-    const parent = categories.find(
-      (item) => Number(item.id) === Number(current.parent_id)
-    );
-
-    if (parent) result.unshift(parent);
-  }
-
-  return result;
 }
 
 export default function ShopPage() {
   const router = useRouter();
 
   const [user, setUser] = useState(null);
+
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [stockMap, setStockMap] = useState({});
+
   const [wallet, setWallet] = useState(0);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const [selectedParent, setSelectedParent] = useState(null);
-  const [selectedChild, setSelectedChild] = useState(null);
+  /*
+  ==================================================
+  SHOP NAVIGATION
+
+  parents
+  ↓
+  children
+  ↓
+  products
+  ==================================================
+  */
+
+  const [selectedParent, setSelectedParent] =
+    useState(null);
+
+  const [selectedChild, setSelectedChild] =
+    useState(null);
+
+  const [view, setView] =
+    useState("parents");
+
+  /*
+  ==================================================
+  SEARCH / SORT
+  ==================================================
+  */
 
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState("default");
+  const [sort, setSort] =
+    useState("default");
 
-  const [openParents, setOpenParents] = useState({});
-  const [buyModal, setBuyModal] = useState(null);
-  const [successModal, setSuccessModal] = useState(null);
-  const [buying, setBuying] = useState(false);
-  const [message, setMessage] = useState("");
+  /*
+  ==================================================
+  BUY
+  ==================================================
+  */
 
-  // =========================
-  // AUTH
-  // =========================
+  const [buyModal, setBuyModal] =
+    useState(null);
+
+  const [successModal, setSuccessModal] =
+    useState(null);
+
+  const [buying, setBuying] =
+    useState(false);
+
+  const [message, setMessage] =
+    useState("");
+
+  /*
+  ==================================================
+  AUTH
+  ==================================================
+  */
 
   useEffect(() => {
     let mounted = true;
@@ -89,7 +114,9 @@ export default function ShopPage() {
         data: { user },
       } = await supabase.auth.getUser();
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setUser(user || null);
     }
@@ -98,9 +125,14 @@ export default function ShopPage() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user || null);
-    });
+    } =
+      supabase.auth.onAuthStateChange(
+        (_event, session) => {
+          setUser(
+            session?.user || null
+          );
+        }
+      );
 
     return () => {
       mounted = false;
@@ -108,42 +140,70 @@ export default function ShopPage() {
     };
   }, []);
 
-  // =========================
-  // LOAD SHOP
-  // =========================
+  /*
+  ==================================================
+  LOAD SHOP
+  ==================================================
+  */
 
   async function loadShop() {
     try {
       setLoading(true);
       setError("");
 
-      const [catalogResponse, stockResponse] = await Promise.all([
+      const [
+        catalogResponse,
+        stockResponse,
+      ] = await Promise.all([
         fetch("/api/shop/catalog", {
           cache: "no-store",
         }),
+
         fetch("/api/shop/stock", {
           cache: "no-store",
         }),
       ]);
 
-      const catalog = await catalogResponse.json();
-      const stock = await stockResponse.json();
+      const catalog =
+        await catalogResponse.json();
 
-      if (!catalogResponse.ok || !catalog.success) {
-        throw new Error(catalog.error || "Không tải được sản phẩm");
+      const stock =
+        await stockResponse.json();
+
+      if (
+        !catalogResponse.ok ||
+        !catalog.success
+      ) {
+        throw new Error(
+          catalog.error ||
+            "Không tải được cửa hàng"
+        );
       }
 
-      setCategories(catalog.categories || []);
-      setProducts(catalog.products || []);
+      setCategories(
+        catalog.categories || []
+      );
+
+      setProducts(
+        catalog.products || []
+      );
 
       if (stock?.success) {
-        setStockMap(stock.stock || stock.stockMap || {});
+        setStockMap(
+          stock.stock ||
+            stock.stockMap ||
+            {}
+        );
       } else {
         setStockMap({});
       }
     } catch (err) {
       console.error(err);
-      setError(err.message || "Không thể tải cửa hàng");
+
+      setError(
+        err.message ||
+          "Không thể tải cửa hàng"
+      );
     } finally {
       setLoading(false);
     }
@@ -153,9 +213,11 @@ export default function ShopPage() {
     loadShop();
   }, []);
 
-  // =========================
-  // LOAD WALLET
-  // =========================
+  /*
+  ==================================================
+  LOAD WALLET
+  ==================================================
+  */
 
   useEffect(() => {
     if (!user) {
@@ -164,178 +226,539 @@ export default function ShopPage() {
     }
 
     async function loadWallet() {
-      const { data, error } = await supabase
+      const {
+        data,
+        error,
+      } = await supabase
         .from("profiles")
-        .select("wallet_balance,balance")
+        .select(
+          "wallet_balance,balance"
+        )
         .eq("id", user.id)
         .maybeSingle();
 
       if (error) {
-        console.error("WALLET ERROR:", error);
+        console.error(
+          "WALLET ERROR:",
+          error
+        );
+
         return;
       }
 
       setWallet(
-        Number(data?.wallet_balance ?? data?.balance ?? 0)
+        Number(
+          data?.wallet_balance ??
+            data?.balance ??
+            0
+        )
       );
     }
 
     loadWallet();
   }, [user]);
 
-  // =========================
-  // CATEGORY TREE
-  // =========================
+  /*
+  ==================================================
+  CATEGORY DATA
+  ==================================================
+  */
 
-  const parentCategories = useMemo(() => {
-    return categories.filter(
-      (category) => !category.parent_id
-    );
-  }, [categories]);
+  const parentCategories =
+    useMemo(() => {
+      return categories.filter(
+        (category) =>
+          category.parent_id ===
+            null ||
+          category.parent_id ===
+            undefined
+      );
+    }, [categories]);
 
-  function getChildren(parentId) {
+  function getChildren(
+    parentId
+  ) {
     return categories.filter(
       (category) =>
-        Number(category.parent_id) === Number(parentId)
+        Number(
+          category.parent_id
+        ) === Number(parentId)
     );
   }
 
-  // =========================
-  // FILTER PRODUCTS
-  // =========================
+  function getProductsByCategory(
+    categoryId
+  ) {
+    return products.filter(
+      (product) =>
+        Number(
+          product.category_id
+        ) === Number(categoryId)
+    );
+  }
 
-  const filteredProducts = useMemo(() => {
-    let result = [...products];
+  function getParentProductCount(
+    parentId
+  ) {
+    const children =
+      getChildren(parentId);
 
-    if (selectedChild) {
-      result = result.filter(
-        (product) =>
-          Number(product.category_id) ===
-          Number(selectedChild)
-      );
-    } else if (selectedParent) {
-      const children = getChildren(selectedParent);
+    const allowedIds = [
+      Number(parentId),
+      ...children.map((item) =>
+        Number(item.id)
+      ),
+    ];
 
-      const allowedIds = [
-        Number(selectedParent),
-        ...children.map((item) => Number(item.id)),
-      ];
-
-      result = result.filter((product) =>
-        allowedIds.includes(Number(product.category_id))
-      );
-    }
-
-    const keyword = normalize(search);
-
-    if (keyword) {
-      result = result.filter((product) => {
-        const categoryName = getCategoryName(
-          product.category_id,
-          categories
-        );
-
-        return (
-          normalize(product.name).includes(keyword) ||
-          normalize(product.description).includes(keyword) ||
-          normalize(categoryName).includes(keyword)
-        );
-      });
-    }
-
-    if (sort === "price-asc") {
-      result.sort(
-        (a, b) =>
-          Number(a.price || 0) -
-          Number(b.price || 0)
-      );
-    }
-
-    if (sort === "price-desc") {
-      result.sort(
-        (a, b) =>
-          Number(b.price || 0) -
-          Number(a.price || 0)
-      );
-    }
-
-    if (sort === "name") {
-      result.sort((a, b) =>
-        String(a.name || "").localeCompare(
-          String(b.name || ""),
-          "vi"
+    return products.filter(
+      (product) =>
+        allowedIds.includes(
+          Number(product.category_id)
         )
-      );
-    }
+    ).length;
+  }
 
-    return result;
-  }, [
-    products,
-    categories,
-    selectedParent,
-    selectedChild,
-    search,
-    sort,
-  ]);
+  /*
+  ==================================================
+  SELECT PARENT
+  ==================================================
+  */
 
-  // =========================
-  // CATEGORY CLICK
-  // =========================
-
-  function selectParent(id) {
-    setSelectedParent(id);
+  function openParent(parent) {
+    setSelectedParent(parent);
     setSelectedChild(null);
 
-    setOpenParents((prev) => ({
-      ...prev,
-      [id]: !prev[id],
-    }));
+    const children =
+      getChildren(parent.id);
+
+    /*
+    ----------------------------------------------
+    Nếu có thư mục con:
+    Parent → Child
+    ----------------------------------------------
+    */
+
+    if (children.length > 0) {
+      setView("children");
+      return;
+    }
+
+    /*
+    ----------------------------------------------
+    Nếu parent chưa có child:
+    Parent → Product
+    ----------------------------------------------
+    */
+
+    setView("products");
   }
 
-  function selectChild(parentId, childId) {
-    setSelectedParent(parentId);
-    setSelectedChild(childId);
+  /*
+  ==================================================
+  SELECT CHILD
+  ==================================================
+  */
+
+  function openChild(child) {
+    setSelectedChild(child);
+    setView("products");
   }
 
-  function selectAll() {
+  /*
+  ==================================================
+  BACK
+  ==================================================
+  */
+
+  function goHome() {
     setSelectedParent(null);
     setSelectedChild(null);
+    setView("parents");
+    setSearch("");
   }
 
-  // =========================
-  // STOCK
-  // =========================
+  function goParent() {
+    if (!selectedParent) {
+      goHome();
+      return;
+    }
+
+    setSelectedChild(null);
+
+    const children =
+      getChildren(
+        selectedParent.id
+      );
+
+    if (children.length > 0) {
+      setView("children");
+    } else {
+      setView("products");
+    }
+  }
+
+  /*
+  ==================================================
+  STOCK
+  ==================================================
+  */
 
   function getStock(productId) {
     const value =
       stockMap?.[productId] ??
-      stockMap?.[String(productId)] ??
+      stockMap?.[
+        String(productId)
+      ] ??
       0;
 
     return Number(value || 0);
   }
 
-  // =========================
-  // BUY
-  // =========================
+  /*
+  ==================================================
+  FILTER PRODUCTS
+  ==================================================
+  */
+
+  const filteredProducts =
+    useMemo(() => {
+      let result = [
+        ...products,
+      ];
+
+      if (selectedChild) {
+        result =
+          result.filter(
+            (product) =>
+              Number(
+                product.category_id
+              ) ===
+              Number(
+                selectedChild.id
+              )
+          );
+      } else if (
+        selectedParent
+      ) {
+        const children =
+          getChildren(
+            selectedParent.id
+          );
+
+        const allowedIds = [
+          Number(
+            selectedParent.id
+          ),
+          ...children.map(
+            (item) =>
+              Number(item.id)
+          ),
+        ];
+
+        result =
+          result.filter(
+            (product) =>
+              allowedIds.includes(
+                Number(
+                  product.category_id
+                )
+              )
+          );
+      }
+
+      const keyword =
+        normalize(search);
+
+      if (keyword) {
+        result =
+          result.filter(
+            (product) => {
+              return (
+                normalize(
+                  product.name
+                ).includes(
+                  keyword
+                ) ||
+                normalize(
+                  product.description
+                ).includes(
+                  keyword
+                )
+              );
+            }
+          );
+      }
+
+      if (
+        sort ===
+        "price-asc"
+      ) {
+        result.sort(
+          (a, b) =>
+            Number(
+              a.price || 0
+            ) -
+            Number(
+              b.price || 0
+            )
+        );
+      }
+
+      if (
+        sort ===
+        "price-desc"
+      ) {
+        result.sort(
+          (a, b) =>
+            Number(
+              b.price || 0
+            ) -
+            Number(
+              a.price || 0
+            )
+        );
+      }
+
+      if (
+        sort === "name"
+      ) {
+        result.sort(
+          (a, b) =>
+            String(
+              a.name || ""
+            ).localeCompare(
+              String(
+                b.name || ""
+              ),
+              "vi"
+            )
+        );
+      }
+
+      return result;
+    }, [
+      products,
+      categories,
+      selectedParent,
+      selectedChild,
+      search,
+      sort,
+    ]);
+
+  /*
+  ==================================================
+  PRODUCT MEDIA
+  ==================================================
+  */
+
+  function ProductMedia({
+    product,
+  }) {
+    const image =
+      getProductImage(product);
+
+    if (
+      product.media_type ===
+        "video" &&
+      product.video_url
+    ) {
+      return (
+        <video
+          src={
+            product.video_url
+          }
+          className="product-media"
+          muted
+          loop
+          playsInline
+          autoPlay
+        />
+      );
+    }
+
+    if (
+      product.media_type ===
+        "both" &&
+      product.video_url
+    ) {
+      return (
+        <div className="media-wrap">
+          <img
+            src={image}
+            alt={
+              product.name
+            }
+            className="product-media"
+          />
+
+          <span className="video-badge">
+            ▶ VIDEO
+          </span>
+        </div>
+      );
+    }
+
+    return (
+      <img
+        src={image}
+        alt={
+          product.name
+        }
+        className="product-media"
+      />
+    );
+  }
+
+  /*
+  ==================================================
+  CATEGORY MEDIA
+  ==================================================
+  */
+
+  function CategoryMedia({
+    category,
+    large = false,
+  }) {
+    const image =
+      getCategoryImage(
+        category
+      );
+
+    const type =
+      category?.media_type ||
+      (category?.video_url
+        ? "video"
+        : "image");
+
+    /*
+    ----------------------------------------------
+    VIDEO
+    ----------------------------------------------
+    */
+
+    if (
+      type === "video" &&
+      category?.video_url
+    ) {
+      return (
+        <div
+          className={
+            large
+              ? "category-media large"
+              : "category-media"
+          }
+        >
+          <video
+            src={
+              category.video_url
+            }
+            muted
+            loop
+            playsInline
+            autoPlay
+          />
+
+          <span className="category-video-badge">
+            ▶ VIDEO
+          </span>
+        </div>
+      );
+    }
+
+    /*
+    ----------------------------------------------
+    IMAGE
+    ----------------------------------------------
+    */
+
+    if (image) {
+      return (
+        <div
+          className={
+            large
+              ? "category-media large"
+              : "category-media"
+          }
+        >
+          <img
+            src={image}
+            alt={
+              category?.name ||
+              "Category"
+            }
+          />
+        </div>
+      );
+    }
+
+    /*
+    ----------------------------------------------
+    NO MEDIA
+    ----------------------------------------------
+    */
+
+    return (
+      <div
+        className={
+          large
+            ? "category-media large category-empty"
+            : "category-media category-empty"
+        }
+      >
+        <span>
+          📁
+        </span>
+
+        <small>
+          {category?.name ||
+            "Danh mục"}
+        </small>
+      </div>
+    );
+  }
+
+  /*
+  ==================================================
+  BUY
+  ==================================================
+  */
 
   async function handleBuy() {
-    if (!buyModal) return;
+    if (!buyModal) {
+      return;
+    }
 
     if (!user) {
-      router.push("/login");
+      router.push(
+        "/login"
+      );
+
       return;
     }
 
-    const stock = getStock(buyModal.id);
+    const stock =
+      getStock(
+        buyModal.id
+      );
 
     if (stock <= 0) {
-      setMessage("Sản phẩm hiện đã hết hàng.");
+      setMessage(
+        "Sản phẩm hiện đã hết hàng."
+      );
+
       return;
     }
 
-    if (wallet < Number(buyModal.price || 0)) {
-      setMessage("Số dư không đủ. Vui lòng nạp tiền.");
+    if (
+      wallet <
+      Number(
+        buyModal.price || 0
+      )
+    ) {
+      setMessage(
+        "Số dư không đủ. Vui lòng nạp tiền."
+      );
+
       return;
     }
 
@@ -344,28 +767,52 @@ export default function ShopPage() {
       setMessage("");
 
       const {
-        data: { session },
-      } = await supabase.auth.getSession();
+        data: {
+          session,
+        },
+      } =
+        await supabase.auth.getSession();
 
-      if (!session?.access_token) {
-        router.push("/login");
+      if (
+        !session?.access_token
+      ) {
+        router.push(
+          "/login"
+        );
+
         return;
       }
 
-      const response = await fetch("/api/buy-key", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          product_id: Number(buyModal.id),
-        }),
-      });
+      const response =
+        await fetch(
+          "/api/buy-key",
+          {
+            method: "POST",
 
-      const data = await response.json();
+            headers: {
+              "Content-Type":
+                "application/json",
 
-      if (!response.ok || data?.success === false) {
+              Authorization:
+                `Bearer ${session.access_token}`,
+            },
+
+            body: JSON.stringify({
+              product_id:
+                Number(
+                  buyModal.id
+                ),
+            }),
+          }
+        );
+
+      const data =
+        await response.json();
+
+      if (
+        !response.ok ||
+        data?.success === false
+      ) {
         throw new Error(
           data?.error ||
             data?.message ||
@@ -380,21 +827,38 @@ export default function ShopPage() {
         data?.data?.key_code ||
         "";
 
-      setBuyModal(null);
+      setBuyModal(
+        null
+      );
 
       setSuccessModal({
-        product: buyModal,
+        product:
+          buyModal,
+
         key,
       });
 
       await loadShop();
 
-      // cập nhật số dư
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("wallet_balance,balance")
-        .eq("id", user.id)
-        .maybeSingle();
+      /*
+      --------------------------------------------
+      CẬP NHẬT SỐ DƯ
+      --------------------------------------------
+      */
+
+      const {
+        data: profile,
+      } =
+        await supabase
+          .from("profiles")
+          .select(
+            "wallet_balance,balance"
+          )
+          .eq(
+            "id",
+            user.id
+          )
+          .maybeSingle();
 
       if (profile) {
         setWallet(
@@ -407,92 +871,61 @@ export default function ShopPage() {
       }
     } catch (err) {
       console.error(err);
+
       setMessage(
-        err.message || "Mua sản phẩm thất bại"
+        err.message ||
+          "Mua sản phẩm thất bại"
       );
     } finally {
       setBuying(false);
     }
   }
 
-  // =========================
-  // MEDIA
-  // =========================
-
-  function ProductMedia({ product }) {
-    const image = getProductImage(product);
-
-    if (
-      product.media_type === "video" &&
-      product.video_url
-    ) {
-      return (
-        <video
-          src={product.video_url}
-          className="product-media"
-          muted
-          loop
-          playsInline
-          autoPlay
-        />
-      );
-    }
-
-    if (
-      product.media_type === "both" &&
-      product.video_url
-    ) {
-      return (
-        <div className="media-wrap">
-          <img
-            src={image}
-            alt={product.name}
-            className="product-media"
-          />
-
-          <span className="video-badge">
-            ▶ VIDEO
-          </span>
-        </div>
-      );
-    }
-
-    return (
-      <img
-        src={image}
-        alt={product.name}
-        className="product-media"
-      />
-    );
-  }
-
-  // =========================
-  // LOADING
-  // =========================
+  /*
+  ==================================================
+  LOADING
+  ==================================================
+  */
 
   if (loading) {
     return (
       <div className="loading-screen">
         <div className="loading-box">
           <div className="loader" />
-          <p>Đang tải cửa hàng...</p>
+
+          <p>
+            Đang tải cửa hàng...
+          </p>
         </div>
 
-        <style jsx>{styles}</style>
+        <style jsx>
+          {styles}
+        </style>
       </div>
     );
   }
 
+  /*
+  ==================================================
+  MAIN
+  ==================================================
+  */
+
   return (
     <main className="page">
 
-      {/* HEADER */}
+      {/* ========================================
+          HEADER
+      ======================================== */}
+
       <header className="topbar">
         <div className="topbar-inner">
 
           <button
             className="logo"
-            onClick={() => router.push("/")}
+            onClick={() =>
+              router.push("/")
+            }
           >
             <span className="logo-x">
               X
@@ -500,13 +933,19 @@ export default function ShopPage() {
 
             <span>
               XENOVA
-              <small> PLAY</small>
+              <small>
+                {" "}
+                PLAY
+              </small>
             </span>
           </button>
 
           <nav className="top-nav">
+
             <button
-              onClick={() => router.push("/")}
+              onClick={() =>
+                router.push("/")
+              }
             >
               Trang chủ
             </button>
@@ -516,48 +955,79 @@ export default function ShopPage() {
             </button>
 
             <button
-              onClick={() => router.push("/keys")}
+              onClick={() =>
+                router.push(
+                  "/keys"
+                )
+              }
             >
               Kho KEY
             </button>
 
             <button
-              onClick={() => router.push("/orders")}
+              onClick={() =>
+                router.push(
+                  "/orders"
+                )
+              }
             >
               Đơn hàng
             </button>
+
           </nav>
 
           <div className="account-area">
+
             <button
               className="wallet"
-              onClick={() => router.push("/deposit")}
+              onClick={() =>
+                router.push(
+                  "/deposit"
+                )
+              }
             >
-              💰 {formatPrice(wallet)}
+              💰{" "}
+              {formatPrice(
+                wallet
+              )}
             </button>
 
             {user ? (
               <button
                 className="account"
-                onClick={() => router.push("/account")}
+                onClick={() =>
+                  router.push(
+                    "/account"
+                  )
+                }
               >
                 👤 Tài khoản
               </button>
             ) : (
               <button
                 className="account"
-                onClick={() => router.push("/login")}
+                onClick={() =>
+                  router.push(
+                    "/login"
+                  )
+                }
               >
                 Đăng nhập
               </button>
             )}
+
           </div>
+
         </div>
       </header>
 
-      {/* HERO */}
+      {/* ========================================
+          HERO
+      ======================================== */}
+
       <section className="hero">
         <div>
+
           <div className="hero-badge">
             XENOVA PLAY
           </div>
@@ -569,210 +1039,421 @@ export default function ShopPage() {
           <p>
             Kho sản phẩm XENOVA PLAY
           </p>
+
         </div>
       </section>
 
       <div className="container">
 
-        {/* BREADCRUMB */}
+        {/* ======================================
+            BREADCRUMB
+        ====================================== */}
+
         <div className="breadcrumb">
-          <button onClick={selectAll}>
+
+          <button
+            onClick={goHome}
+          >
             Cửa hàng
           </button>
 
           {selectedParent && (
             <>
-              <span>/</span>
+              <span>
+                /
+              </span>
 
               <button
-                onClick={() => {
-                  setSelectedChild(null);
-                }}
+                onClick={
+                  goParent
+                }
               >
-                {getCategoryName(
-                  selectedParent,
-                  categories
-                )}
+                {
+                  selectedParent.name
+                }
               </button>
             </>
           )}
 
           {selectedChild && (
             <>
-              <span>/</span>
+              <span>
+                /
+              </span>
 
               <strong>
-                {getCategoryName(
-                  selectedChild,
-                  categories
-                )}
+                {
+                  selectedChild.name
+                }
               </strong>
             </>
           )}
+
         </div>
 
-        <div className="layout">
+        {/* ======================================
+            ERROR
+        ====================================== */}
 
-          {/* SIDEBAR */}
-          <aside className="sidebar">
+        {error && (
+          <div className="error-box">
+            ⚠️ {error}
+          </div>
+        )}
 
-            <div className="sidebar-title">
-              <span>☰</span>
-              DANH MỤC
-            </div>
+        {message && (
+          <div className="message-box">
+
+            <span>
+              {message}
+            </span>
 
             <button
-              className={
-                !selectedParent
-                  ? "category-all selected"
-                  : "category-all"
+              onClick={() =>
+                setMessage("")
               }
-              onClick={selectAll}
             >
-              <span>🏠</span>
-              Tất cả sản phẩm
+              ×
             </button>
 
-            <div className="category-tree">
+          </div>
+        )}
 
-              {parentCategories.map((parent) => {
-                const children =
-                  getChildren(parent.id);
+        {/* ======================================
+            VIEW: PARENTS
+        ====================================== */}
 
-                const isOpen =
-                  !!openParents[parent.id];
+        {view ===
+          "parents" && (
+          <section>
 
-                const isSelected =
-                  Number(selectedParent) ===
-                  Number(parent.id);
-
-                return (
-                  <div
-                    className="category-group"
-                    key={parent.id}
-                  >
-
-                    <button
-                      className={
-                        isSelected
-                          ? "parent-category selected"
-                          : "parent-category"
-                      }
-                      onClick={() =>
-                        selectParent(parent.id)
-                      }
-                    >
-                      <span className="category-left">
-                        <span className="folder">
-                          📁
-                        </span>
-
-                        <span>
-                          {parent.name}
-                        </span>
-                      </span>
-
-                      {children.length > 0 && (
-                        <span
-                          className={
-                            isOpen
-                              ? "arrow rotate"
-                              : "arrow"
-                          }
-                        >
-                          ›
-                        </span>
-                      )}
-                    </button>
-
-                    {isOpen &&
-                      children.length > 0 && (
-                        <div className="children">
-
-                          {children.map((child) => (
-                            <button
-                              key={child.id}
-                              className={
-                                Number(
-                                  selectedChild
-                                ) ===
-                                Number(child.id)
-                                  ? "child-category selected"
-                                  : "child-category"
-                              }
-                              onClick={() =>
-                                selectChild(
-                                  parent.id,
-                                  child.id
-                                )
-                              }
-                            >
-                              <span>
-                                └─
-                              </span>
-
-                              <span>
-                                {child.name}
-                              </span>
-                            </button>
-                          ))}
-
-                        </div>
-                      )}
-
-                  </div>
-                );
-              })}
-
-            </div>
-
-            <div className="sidebar-support">
-              <div className="support-icon">
-                💬
-              </div>
-
-              <strong>
-                Cần hỗ trợ?
-              </strong>
-
-              <p>
-                Liên hệ Admin để được hỗ trợ.
-              </p>
-
-              <a
-                href={ZALO_ADMIN}
-                target="_blank"
-                rel="noreferrer"
-              >
-                CHAT ADMIN
-              </a>
-            </div>
-
-          </aside>
-
-          {/* CONTENT */}
-          <section className="shop-content">
-
-            <div className="toolbar">
+            <div className="section-heading">
 
               <div>
                 <h2>
-                  {selectedChild
-                    ? getCategoryName(
-                        selectedChild,
-                        categories
-                      )
-                    : selectedParent
-                    ? getCategoryName(
-                        selectedParent,
-                        categories
-                      )
-                    : "Tất cả sản phẩm"}
+                  Danh mục sản phẩm
                 </h2>
 
-                <span>
-                  {filteredProducts.length} sản phẩm
-                </span>
+                <p>
+                  Chọn thư mục để xem sản phẩm
+                </p>
+              </div>
+
+              <span className="count-badge">
+                {
+                  parentCategories.length
+                }{" "}
+                danh mục
+              </span>
+
+            </div>
+
+            {parentCategories.length ===
+            0 ? (
+              <div className="empty">
+
+                <div>
+                  📁
+                </div>
+
+                <h3>
+                  Chưa có danh mục
+                </h3>
+
+                <p>
+                  Admin chưa tạo thư mục sản phẩm.
+                </p>
+
+              </div>
+            ) : (
+              /*
+              ====================================
+              QUAN TRỌNG:
+              ĐÚNG 2 Ô MỖI HÀNG
+              ====================================
+              */
+
+              <div className="parent-grid">
+
+                {parentCategories.map(
+                  (parent) => {
+                    const children =
+                      getChildren(
+                        parent.id
+                      );
+
+                    const productCount =
+                      getParentProductCount(
+                        parent.id
+                      );
+
+                    return (
+                      <button
+                        className="parent-card"
+                        key={
+                          parent.id
+                        }
+                        onClick={() =>
+                          openParent(
+                            parent
+                          )
+                        }
+                      >
+
+                        <CategoryMedia
+                          category={
+                            parent
+                          }
+                          large
+                        />
+
+                        <div className="parent-card-body">
+
+                          <div className="parent-card-title-row">
+
+                            <h3>
+                              {
+                                parent.name
+                              }
+                            </h3>
+
+                            <span className="circle-arrow">
+                              →
+                            </span>
+
+                          </div>
+
+                          {parent.description && (
+                            <p>
+                              {
+                                parent.description
+                              }
+                            </p>
+                          )}
+
+                          <div className="parent-meta">
+
+                            <span>
+                              📁{" "}
+                              {
+                                children.length
+                              }{" "}
+                              thư mục con
+                            </span>
+
+                            <span>
+                              🛒{" "}
+                              {
+                                productCount
+                              }{" "}
+                              sản phẩm
+                            </span>
+
+                          </div>
+
+                          <div className="view-all">
+                            XEM TẤT CẢ
+                            <span>
+                              →
+                            </span>
+                          </div>
+
+                        </div>
+
+                      </button>
+                    );
+                  }
+                )}
+
+              </div>
+            )}
+
+          </section>
+        )}
+
+        {/* ======================================
+            VIEW: CHILDREN
+        ====================================== */}
+
+        {view ===
+          "children" &&
+          selectedParent && (
+          <section>
+
+            <div className="section-heading">
+
+              <div>
+
+                <button
+                  className="back-link"
+                  onClick={goHome}
+                >
+                  ← Tất cả danh mục
+                </button>
+
+                <h2>
+                  {
+                    selectedParent.name
+                  }
+                </h2>
+
+                <p>
+                  Chọn thư mục con để xem sản phẩm
+                </p>
+
+              </div>
+
+              <span className="count-badge">
+                {
+                  getChildren(
+                    selectedParent.id
+                  ).length
+                }{" "}
+                thư mục
+              </span>
+
+            </div>
+
+            {getChildren(
+              selectedParent.id
+            ).length === 0 ? (
+              <div className="empty">
+
+                <div>
+                  📦
+                </div>
+
+                <h3>
+                  Chưa có thư mục con
+                </h3>
+
+                <p>
+                  Danh mục này chưa có sản phẩm.
+                </p>
+
+              </div>
+            ) : (
+              <div className="child-grid">
+
+                {getChildren(
+                  selectedParent.id
+                ).map(
+                  (child) => {
+                    const productCount =
+                      getProductsByCategory(
+                        child.id
+                      ).length;
+
+                    return (
+                      <button
+                        className="child-card"
+                        key={
+                          child.id
+                        }
+                        onClick={() =>
+                          openChild(
+                            child
+                          )
+                        }
+                      >
+
+                        <CategoryMedia
+                          category={
+                            child
+                          }
+                          large
+                        />
+
+                        <div className="child-card-body">
+
+                          <div className="child-card-title-row">
+
+                            <h3>
+                              {
+                                child.name
+                              }
+                            </h3>
+
+                            <span className="circle-arrow">
+                              →
+                            </span>
+
+                          </div>
+
+                          {child.description && (
+                            <p>
+                              {
+                                child.description
+                              }
+                            </p>
+                          )}
+
+                          <div className="child-meta">
+                            🛒{" "}
+                            {
+                              productCount
+                            }{" "}
+                            sản phẩm
+                          </div>
+
+                          <div className="view-all">
+                            XEM SẢN PHẨM
+                            <span>
+                              →
+                            </span>
+                          </div>
+
+                        </div>
+
+                      </button>
+                    );
+                  }
+                )}
+
+              </div>
+            )}
+
+          </section>
+        )}
+
+        {/* ======================================
+            VIEW: PRODUCTS
+        ====================================== */}
+
+        {view ===
+          "products" && (
+          <section>
+
+            <div className="products-heading">
+
+              <div>
+
+                <button
+                  className="back-link"
+                  onClick={
+                    selectedParent
+                      ? goParent
+                      : goHome
+                  }
+                >
+                  ← Quay lại
+                </button>
+
+                <h2>
+                  {selectedChild
+                    ? selectedChild.name
+                    : selectedParent
+                    ? selectedParent.name
+                    : "Sản phẩm"}
+                </h2>
+
+                <p>
+                  {
+                    filteredProducts.length
+                  }{" "}
+                  sản phẩm
+                </p>
+
               </div>
 
               <div className="tools">
@@ -782,8 +1463,10 @@ export default function ShopPage() {
 
                   <input
                     value={search}
-                    onChange={(e) =>
-                      setSearch(e.target.value)
+                    onChange={(event) =>
+                      setSearch(
+                        event.target.value
+                      )
                     }
                     placeholder="Tìm sản phẩm..."
                   />
@@ -791,8 +1474,10 @@ export default function ShopPage() {
 
                 <select
                   value={sort}
-                  onChange={(e) =>
-                    setSort(e.target.value)
+                  onChange={(event) =>
+                    setSort(
+                      event.target.value
+                    )
                   }
                 >
                   <option value="default">
@@ -813,31 +1498,13 @@ export default function ShopPage() {
                 </select>
 
               </div>
+
             </div>
 
-            {error && (
-              <div className="error-box">
-                ⚠️ {error}
-              </div>
-            )}
-
-            {message && (
-              <div className="message-box">
-                {message}
-
-                <button
-                  onClick={() =>
-                    setMessage("")
-                  }
-                >
-                  ×
-                </button>
-              </div>
-            )}
-
-            {/* PRODUCTS */}
-            {filteredProducts.length === 0 ? (
+            {filteredProducts.length ===
+            0 ? (
               <div className="empty">
+
                 <div>
                   🛒
                 </div>
@@ -849,6 +1516,7 @@ export default function ShopPage() {
                 <p>
                   Danh mục này hiện chưa có sản phẩm.
                 </p>
+
               </div>
             ) : (
               <div className="product-grid">
@@ -856,28 +1524,30 @@ export default function ShopPage() {
                 {filteredProducts.map(
                   (product) => {
                     const stock =
-                      getStock(product.id);
-
-                    const chain =
-                      getCategoryChain(
-                        product.category_id,
-                        categories
+                      getStock(
+                        product.id
                       );
 
                     return (
                       <article
                         className="product-card"
-                        key={product.id}
+                        key={
+                          product.id
+                        }
                       >
 
                         <div className="cover">
+
                           <ProductMedia
-                            product={product}
+                            product={
+                              product
+                            }
                           />
 
                           {stock > 0 ? (
                             <span className="stock available">
-                              Còn {stock}
+                              Còn{" "}
+                              {stock}
                             </span>
                           ) : (
                             <span className="stock soldout">
@@ -891,35 +1561,39 @@ export default function ShopPage() {
                               VIDEO
                             </span>
                           )}
+
                         </div>
 
                         <div className="product-body">
 
                           <div className="product-category">
-                            {chain.length > 0
-                              ? chain
-                                  .map(
-                                    (item) =>
-                                      item.name
-                                  )
-                                  .join(" / ")
+                            {selectedChild
+                              ? selectedChild.name
+                              : selectedParent
+                              ? selectedParent.name
                               : "Sản phẩm"}
                           </div>
 
                           <h3>
-                            {product.name}
+                            {
+                              product.name
+                            }
                           </h3>
 
                           {product.description && (
                             <p className="description">
-                              {product.description}
+                              {
+                                product.description
+                              }
                             </p>
                           )}
 
                           {product.duration_days && (
                             <div className="duration">
                               ⏱ HSD{" "}
-                              {product.duration_days}{" "}
+                              {
+                                product.duration_days
+                              }{" "}
                               ngày
                             </div>
                           )}
@@ -933,13 +1607,19 @@ export default function ShopPage() {
                             </strong>
 
                             <button
-                              disabled={stock <= 0}
+                              disabled={
+                                stock <=
+                                0
+                              }
                               className="buy-button"
                               onClick={() =>
-                                setBuyModal(product)
+                                setBuyModal(
+                                  product
+                                )
                               }
                             >
-                              {stock > 0
+                              {stock >
+                              0
                                 ? "MUA NGAY"
                                 : "HẾT HÀNG"}
                             </button>
@@ -957,10 +1637,14 @@ export default function ShopPage() {
             )}
 
           </section>
-        </div>
+        )}
+
       </div>
 
-      {/* FLOATING ADMIN */}
+      {/* ========================================
+          FLOATING ADMIN
+      ======================================== */}
+
       <a
         href={ZALO_ADMIN}
         target="_blank"
@@ -973,20 +1657,26 @@ export default function ShopPage() {
         </span>
       </a>
 
-      {/* BUY MODAL */}
+      {/* ========================================
+          BUY MODAL
+      ======================================== */}
+
       {buyModal && (
         <div
           className="modal-overlay"
           onClick={() =>
-            !buying && setBuyModal(null)
+            !buying &&
+            setBuyModal(null)
           }
         >
+
           <div
             className="modal"
-            onClick={(e) =>
-              e.stopPropagation()
+            onClick={(event) =>
+              event.stopPropagation()
             }
           >
+
             <button
               className="close"
               onClick={() =>
@@ -1006,7 +1696,9 @@ export default function ShopPage() {
             </h2>
 
             <p className="modal-product">
-              {buyModal.name}
+              {
+                buyModal.name
+              }
             </p>
 
             <div className="confirm-row">
@@ -1027,7 +1719,9 @@ export default function ShopPage() {
               </span>
 
               <strong>
-                {formatPrice(wallet)}
+                {formatPrice(
+                  wallet
+                )}
               </strong>
             </div>
 
@@ -1037,7 +1731,9 @@ export default function ShopPage() {
                 className="cancel-button"
                 disabled={buying}
                 onClick={() =>
-                  setBuyModal(null)
+                  setBuyModal(
+                    null
+                  )
                 }
               >
                 Hủy
@@ -1046,7 +1742,9 @@ export default function ShopPage() {
               <button
                 className="confirm-button"
                 disabled={buying}
-                onClick={handleBuy}
+                onClick={
+                  handleBuy
+                }
               >
                 {buying
                   ? "ĐANG XỬ LÝ..."
@@ -1054,13 +1752,19 @@ export default function ShopPage() {
               </button>
 
             </div>
+
           </div>
+
         </div>
       )}
 
-      {/* SUCCESS MODAL */}
+      {/* ========================================
+          SUCCESS MODAL
+      ======================================== */}
+
       {successModal && (
         <div className="modal-overlay">
+
           <div className="modal success-modal">
 
             <div className="success-icon">
@@ -1072,17 +1776,24 @@ export default function ShopPage() {
             </h2>
 
             <p>
-              {successModal.product?.name}
+              {
+                successModal
+                  .product
+                  ?.name
+              }
             </p>
 
             {successModal.key && (
               <div className="key-box">
+
                 <span>
                   KEY CỦA BẠN
                 </span>
 
                 <strong>
-                  {successModal.key}
+                  {
+                    successModal.key
+                  }
                 </strong>
 
                 <button
@@ -1094,23 +1805,30 @@ export default function ShopPage() {
                 >
                   📋 Sao chép
                 </button>
+
               </div>
             )}
 
             <button
               className="confirm-button full"
               onClick={() =>
-                setSuccessModal(null)
+                setSuccessModal(
+                  null
+                )
               }
             >
               ĐÓNG
             </button>
 
           </div>
+
         </div>
       )}
 
-      <style jsx>{styles}</style>
+      <style jsx>
+        {styles}
+      </style>
+
     </main>
   );
 }
@@ -1123,14 +1841,27 @@ const styles = `
 .page {
   min-height: 100vh;
   background:
-    radial-gradient(circle at 10% 10%, rgba(255, 120, 190, .10), transparent 28%),
-    radial-gradient(circle at 90% 20%, rgba(150, 120, 255, .08), transparent 28%),
+    radial-gradient(
+      circle at 10% 10%,
+      rgba(255, 120, 190, .10),
+      transparent 28%
+    ),
+    radial-gradient(
+      circle at 90% 20%,
+      rgba(150, 120, 255, .08),
+      transparent 28%
+    ),
     #f7f8fc;
   color: #222;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family:
+    Arial,
+    Helvetica,
+    sans-serif;
 }
 
-/* HEADER */
+/* ============================================
+   HEADER
+============================================ */
 
 .topbar {
   height: 64px;
@@ -1176,10 +1907,17 @@ const styles = `
   border-radius: 11px;
   display: grid;
   place-items: center;
-  background: linear-gradient(135deg,#ff4ba6,#8d54ff);
+  background:
+    linear-gradient(
+      135deg,
+      #ff4ba6,
+      #8d54ff
+    );
   color: white;
   font-weight: 900;
-  box-shadow: 0 8px 20px rgba(232,61,148,.25);
+  box-shadow:
+    0 8px 20px
+    rgba(232,61,148,.25);
 }
 
 .top-nav {
@@ -1227,7 +1965,9 @@ const styles = `
   color: white;
 }
 
-/* HERO */
+/* ============================================
+   HERO
+============================================ */
 
 .hero {
   min-height: 155px;
@@ -1271,7 +2011,9 @@ const styles = `
   color: #777;
 }
 
-/* CONTAINER */
+/* ============================================
+   CONTAINER
+============================================ */
 
 .container {
   max-width: 1220px;
@@ -1285,7 +2027,7 @@ const styles = `
   align-items: center;
   font-size: 13px;
   color: #999;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 
 .breadcrumb button {
@@ -1293,169 +2035,265 @@ const styles = `
   background: transparent;
   cursor: pointer;
   color: #777;
+  padding: 0;
 }
 
 .breadcrumb strong {
   color: #e83d94;
 }
 
-/* LAYOUT */
+/* ============================================
+   SECTION
+============================================ */
 
-.layout {
-  display: grid;
-  grid-template-columns: 225px minmax(0,1fr);
-  gap: 20px;
+.section-heading,
+.products-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 15px;
+  margin-bottom: 18px;
 }
 
-/* SIDEBAR */
+.section-heading h2,
+.products-heading h2 {
+  margin: 7px 0 0;
+  font-size: 23px;
+  font-weight: 900;
+}
 
-.sidebar {
+.section-heading p,
+.products-heading p {
+  margin: 5px 0 0;
+  color: #999;
+  font-size: 12px;
+}
+
+.count-badge {
   background: white;
   border: 1px solid #eee;
-  border-radius: 15px;
-  padding: 14px;
-  height: fit-content;
-  box-shadow: 0 8px 30px rgba(30,20,50,.04);
+  border-radius: 999px;
+  padding: 8px 12px;
+  color: #e83d94;
+  font-size: 11px;
+  font-weight: 850;
 }
 
-.sidebar-title {
-  font-size: 12px;
-  font-weight: 900;
-  color: #999;
-  padding: 4px 6px 13px;
-  letter-spacing: .4px;
-}
-
-.category-all,
-.parent-category,
-.child-category {
-  width: 100%;
+.back-link {
   border: 0;
+  background: transparent;
+  padding: 0;
+  color: #e83d94;
   cursor: pointer;
-  text-align: left;
+  font-size: 11px;
+  font-weight: 850;
 }
 
-.category-all,
-.parent-category {
-  min-height: 42px;
-  border-radius: 9px;
-  background: transparent;
+/* ============================================
+   PARENT GRID
+   ĐÚNG 2 Ô MỖI HÀNG
+============================================ */
+
+.parent-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.parent-card {
+  width: 100%;
+  border: 1px solid #eee;
+  padding: 0;
+  overflow: hidden;
+  background: white;
+  border-radius: 18px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform .2s,
+    box-shadow .2s,
+    border-color .2s;
+}
+
+.parent-card:hover {
+  transform: translateY(-4px);
+  border-color: #f2bddb;
+  box-shadow:
+    0 18px 45px
+    rgba(40,20,60,.10);
+}
+
+/* ============================================
+   CATEGORY MEDIA
+============================================ */
+
+.category-media {
+  width: 100%;
+  height: 95px;
+  background:
+    linear-gradient(
+      135deg,
+      #f7edf4,
+      #eeeafd
+    );
+  position: relative;
+  overflow: hidden;
+}
+
+.category-media.large {
+  height: 190px;
+}
+
+.category-media img,
+.category-media video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.category-video-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 5px 8px;
+  border-radius: 7px;
+  background: rgba(0,0,0,.62);
+  color: white;
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.category-empty {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  color: #aaa;
+  gap: 6px;
+}
+
+.category-empty span {
+  font-size: 38px;
+}
+
+.category-empty small {
+  font-size: 10px;
+}
+
+/* ============================================
+   PARENT CARD
+============================================ */
+
+.parent-card-body {
+  padding: 15px;
+}
+
+.parent-card-title-row,
+.child-card-title-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 10px;
-  font-weight: 700;
-  color: #555;
+  gap: 10px;
 }
 
-.category-all:hover,
-.parent-category:hover,
-.category-all.selected,
-.parent-category.selected {
-  background: #fff0f7;
-  color: #e43791;
+.parent-card h3,
+.child-card h3 {
+  margin: 0;
+  color: #222;
+  font-size: 17px;
+  font-weight: 900;
 }
 
-.category-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.folder {
-  font-size: 15px;
-}
-
-.arrow {
-  font-size: 22px;
-  transition: transform .2s;
-}
-
-.arrow.rotate {
-  transform: rotate(90deg);
-}
-
-.children {
-  padding: 2px 0 5px 13px;
-}
-
-.child-category {
-  min-height: 36px;
-  border-radius: 8px;
-  background: transparent;
-  color: #777;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 9px;
-  font-size: 13px;
-}
-
-.child-category:hover,
-.child-category.selected {
-  color: #e43791;
-  background: #fff7fb;
-}
-
-.sidebar-support {
-  margin-top: 16px;
-  border-radius: 12px;
-  padding: 14px;
-  background: linear-gradient(135deg,#fff0f7,#f4edff);
-  text-align: center;
-}
-
-.support-icon {
-  font-size: 25px;
-}
-
-.sidebar-support strong {
-  display: block;
-  margin-top: 5px;
-}
-
-.sidebar-support p {
-  font-size: 11px;
+.parent-card-body p,
+.child-card-body p {
+  margin: 7px 0;
   color: #888;
+  font-size: 11px;
   line-height: 1.5;
 }
 
-.sidebar-support a {
-  display: block;
-  text-decoration: none;
-  background: #e83d94;
-  color: white;
-  border-radius: 8px;
-  padding: 8px;
-  font-size: 11px;
+.circle-arrow {
+  width: 31px;
+  height: 31px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #fff0f7;
+  color: #e83d94;
   font-weight: 900;
 }
 
-/* CONTENT */
-
-.shop-content {
-  min-width: 0;
-}
-
-.toolbar {
+.parent-meta {
   display: flex;
-  justify-content: space-between;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin-top: 11px;
+}
+
+.parent-meta span,
+.child-meta {
+  padding: 6px 8px;
+  border-radius: 7px;
+  background: #f7f7fa;
+  color: #888;
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.view-all {
+  margin-top: 13px;
+  display: flex;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 15px;
+  justify-content: space-between;
+  color: #e83d94;
+  font-size: 10px;
+  font-weight: 900;
 }
 
-.toolbar h2 {
-  margin: 0;
-  font-size: 20px;
+/* ============================================
+   CHILD GRID
+============================================ */
+
+.child-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  gap: 18px;
 }
 
-.toolbar > div:first-child span {
-  display: block;
-  margin-top: 4px;
-  color: #999;
-  font-size: 12px;
+.child-card {
+  width: 100%;
+  border: 1px solid #eee;
+  padding: 0;
+  overflow: hidden;
+  background: white;
+  border-radius: 18px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform .2s,
+    box-shadow .2s,
+    border-color .2s;
 }
+
+.child-card:hover {
+  transform: translateY(-4px);
+  border-color: #f2bddb;
+  box-shadow:
+    0 18px 45px
+    rgba(40,20,60,.10);
+}
+
+.child-card-body {
+  padding: 15px;
+}
+
+/* ============================================
+   PRODUCTS
+============================================ */
 
 .tools {
   display: flex;
@@ -1464,10 +2302,10 @@ const styles = `
 
 .search {
   width: 210px;
+  height: 38px;
   background: white;
   border: 1px solid #eee;
   border-radius: 9px;
-  height: 38px;
   display: flex;
   align-items: center;
   padding: 0 10px;
@@ -1475,9 +2313,9 @@ const styles = `
 }
 
 .search input {
+  width: 100%;
   border: 0;
   outline: 0;
-  width: 100%;
   font-size: 12px;
 }
 
@@ -1489,11 +2327,10 @@ const styles = `
   outline: 0;
 }
 
-/* PRODUCTS */
-
 .product-grid {
   display: grid;
-  grid-template-columns: repeat(4,minmax(0,1fr));
+  grid-template-columns:
+    repeat(4, minmax(0,1fr));
   gap: 14px;
 }
 
@@ -1502,12 +2339,16 @@ const styles = `
   border: 1px solid #eee;
   border-radius: 13px;
   overflow: hidden;
-  transition: transform .18s, box-shadow .18s;
+  transition:
+    transform .18s,
+    box-shadow .18s;
 }
 
 .product-card:hover {
   transform: translateY(-3px);
-  box-shadow: 0 15px 35px rgba(40,20,60,.10);
+  box-shadow:
+    0 15px 35px
+    rgba(40,20,60,.10);
 }
 
 .cover {
@@ -1632,7 +2473,9 @@ const styles = `
   cursor: not-allowed;
 }
 
-/* EMPTY */
+/* ============================================
+   EMPTY
+============================================ */
 
 .empty {
   min-height: 300px;
@@ -1661,7 +2504,9 @@ const styles = `
   font-size: 12px;
 }
 
-/* MESSAGE */
+/* ============================================
+   MESSAGE
+============================================ */
 
 .error-box,
 .message-box {
@@ -1689,7 +2534,9 @@ const styles = `
   cursor: pointer;
 }
 
-/* FLOAT */
+/* ============================================
+   FLOATING ADMIN
+============================================ */
 
 .floating-admin {
   position: fixed;
@@ -1706,10 +2553,14 @@ const styles = `
   gap: 7px;
   font-size: 12px;
   font-weight: 900;
-  box-shadow: 0 8px 25px rgba(232,61,148,.3);
+  box-shadow:
+    0 8px 25px
+    rgba(232,61,148,.3);
 }
 
-/* MODAL */
+/* ============================================
+   MODAL
+============================================ */
 
 .modal-overlay {
   position: fixed;
@@ -1729,7 +2580,9 @@ const styles = `
   background: white;
   border-radius: 18px;
   padding: 25px;
-  box-shadow: 0 30px 80px rgba(0,0,0,.25);
+  box-shadow:
+    0 30px 80px
+    rgba(0,0,0,.25);
 }
 
 .close {
@@ -1845,15 +2698,16 @@ const styles = `
 
 .key-box button {
   margin-top: 10px;
-  border: 0;
-  background: white;
   border: 1px solid #eee;
+  background: white;
   border-radius: 7px;
   padding: 7px 10px;
   cursor: pointer;
 }
 
-/* LOADING */
+/* ============================================
+   LOADING
+============================================ */
 
 .loading-screen {
   min-height: 100vh;
@@ -1883,11 +2737,14 @@ const styles = `
   }
 }
 
-/* TABLET */
+/* ============================================
+   TABLET
+============================================ */
 
 @media (max-width: 1050px) {
   .product-grid {
-    grid-template-columns: repeat(3,minmax(0,1fr));
+    grid-template-columns:
+      repeat(3,minmax(0,1fr));
   }
 
   .top-nav {
@@ -1895,9 +2752,12 @@ const styles = `
   }
 }
 
-/* MOBILE */
+/* ============================================
+   MOBILE
+============================================ */
 
 @media (max-width: 760px) {
+
   .topbar {
     height: 58px;
   }
@@ -1930,35 +2790,72 @@ const styles = `
     padding: 12px;
   }
 
-  .layout {
+  /*
+  ----------------------------------------------
+  MOBILE VẪN 2 Ô / HÀNG
+  ----------------------------------------------
+  */
+
+  .parent-grid,
+  .child-grid {
+    grid-template-columns:
+      repeat(2,minmax(0,1fr));
+    gap: 9px;
+  }
+
+  .category-media.large {
+    height: 125px;
+  }
+
+  .parent-card-body,
+  .child-card-body {
+    padding: 10px;
+  }
+
+  .parent-card h3,
+  .child-card h3 {
+    font-size: 12px;
+  }
+
+  .parent-card-body p,
+  .child-card-body p {
+    font-size: 9px;
+  }
+
+  .parent-meta {
     display: block;
   }
 
-  .sidebar {
-    margin-bottom: 14px;
-  }
-
-  .sidebar-support {
-    display: none;
-  }
-
-  .category-tree {
-    max-height: 240px;
-    overflow-y: auto;
-  }
-
-  .toolbar {
+  .parent-meta span {
     display: block;
+    margin-top: 4px;
   }
 
-  .toolbar h2 {
-    margin-bottom: 3px;
+  .view-all {
+    font-size: 8px;
+  }
+
+  .circle-arrow {
+    width: 25px;
+    height: 25px;
+    font-size: 11px;
+  }
+
+  .section-heading,
+  .products-heading {
+    align-items: flex-start;
+  }
+
+  .count-badge {
+    font-size: 9px;
+    padding: 6px 8px;
   }
 
   .tools {
     margin-top: 10px;
     display: grid;
-    grid-template-columns: 1fr 125px;
+    grid-template-columns:
+      1fr 125px;
   }
 
   .search {
@@ -1966,7 +2863,8 @@ const styles = `
   }
 
   .product-grid {
-    grid-template-columns: repeat(2,minmax(0,1fr));
+    grid-template-columns:
+      repeat(2,minmax(0,1fr));
     gap: 9px;
   }
 
@@ -2003,6 +2901,16 @@ const styles = `
 }
 
 @media (max-width: 390px) {
+
+  .parent-grid,
+  .child-grid {
+    gap: 7px;
+  }
+
+  .category-media.large {
+    height: 105px;
+  }
+
   .product-grid {
     gap: 7px;
   }
