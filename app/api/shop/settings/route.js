@@ -4,10 +4,9 @@ import { supabase } from "../../../../lib/supabase";
 const DEFAULT_SETTINGS = {
   id: 1,
   logo_url: "",
-  shop_badge: "XENOVA PLAY SHOP",
-  shop_title: "Cửa hàng",
-  shop_description:
-    "Chọn danh mục để xem sản phẩm và mua KEY.",
+  shop_badge: "",
+  shop_title: "",
+  shop_description: "",
   banners: [],
 };
 
@@ -26,7 +25,9 @@ export async function GET() {
           success: false,
           error: error.message,
         },
-        { status: 500 }
+        {
+          status: 500,
+        }
       );
     }
 
@@ -35,6 +36,9 @@ export async function GET() {
       settings: {
         ...DEFAULT_SETTINGS,
         ...(data || {}),
+        shop_badge: "",
+        shop_title: "",
+        shop_description: "",
         banners: Array.isArray(
           data?.banners
         )
@@ -47,10 +51,12 @@ export async function GET() {
       {
         success: false,
         error:
-          error.message ||
+          error?.message ||
           "Server error",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }
