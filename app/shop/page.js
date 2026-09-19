@@ -129,6 +129,9 @@ export default function ShopPage() {
       setSettings({
         ...DEFAULT_SETTINGS,
         ...(data.settings || {}),
+        logo_url: String(
+          data.settings?.logo_url || ""
+        ),
         banners: Array.isArray(
           data.settings?.banners
         )
@@ -761,6 +764,7 @@ export default function ShopPage() {
   return (
     <main className="page">
 
+      {/* HOA HỒNG RƠI */}
       <div className="petals">
         {Array.from({
           length: 30,
@@ -784,6 +788,7 @@ export default function ShopPage() {
         ))}
       </div>
 
+      {/* TOP BAR */}
       <header className="topbar">
         <div className="topbar-inner">
 
@@ -846,18 +851,7 @@ export default function ShopPage() {
           </nav>
 
           <div className="account">
-            <button
-              className="wallet"
-              onClick={() =>
-                router.push(
-                  "/deposit"
-                )
-              }
-            >
-              💰{" "}
-              {formatPrice(wallet)}
-            </button>
-
+            {/* ẨN SỐ DƯ Ở TOPBAR */}
             {user ? (
               <button
                 className="account-button"
@@ -914,6 +908,7 @@ export default function ShopPage() {
                   onClick={
                     previousBanner
                   }
+                  aria-label="Banner trước"
                 >
                   ‹
                 </button>
@@ -923,6 +918,7 @@ export default function ShopPage() {
                   onClick={
                     nextBanner
                   }
+                  aria-label="Banner tiếp"
                 >
                   ›
                 </button>
@@ -943,6 +939,7 @@ export default function ShopPage() {
                             index
                           )
                         }
+                        aria-label={`Banner ${index + 1}`}
                       />
                     )
                   )}
@@ -955,41 +952,45 @@ export default function ShopPage() {
 
       <div className="container">
 
-        <div className="breadcrumb">
-          <button
-            onClick={goHome}
-          >
-            Cửa hàng
-          </button>
+        {/* CHỈ HIỆN BREADCRUMB KHI ĐÃ ĐI VÀO DANH MỤC */}
+        {view !== "parents" && (
+          <div className="breadcrumb">
 
-          {selectedParent && (
-            <>
-              <span>›</span>
+            <button
+              onClick={goHome}
+            >
+              Cửa hàng
+            </button>
 
-              <button
-                onClick={
-                  goParent
-                }
-              >
-                {
-                  selectedParent.name
-                }
-              </button>
-            </>
-          )}
+            {selectedParent && (
+              <>
+                <span>›</span>
 
-          {selectedChild && (
-            <>
-              <span>›</span>
+                <button
+                  onClick={
+                    goParent
+                  }
+                >
+                  {
+                    selectedParent.name
+                  }
+                </button>
+              </>
+            )}
 
-              <strong>
-                {
-                  selectedChild.name
-                }
-              </strong>
-            </>
-          )}
-        </div>
+            {selectedChild && (
+              <>
+                <span>›</span>
+
+                <strong>
+                  {
+                    selectedChild.name
+                  }
+                </strong>
+              </>
+            )}
+          </div>
+        )}
 
         {error && (
           <div className="error">
@@ -1013,32 +1014,9 @@ export default function ShopPage() {
           </div>
         )}
 
+        {/* DANH MỤC CHA */}
         {view === "parents" && (
           <>
-            <div className="heading">
-              <div>
-                <span className="eyebrow">
-                  DANH MỤC SHOP
-                </span>
-
-                <h2>
-                  Chọn thư mục
-                </h2>
-
-                <p>
-                  Chọn thư mục mẹ để
-                  xem các thư mục con.
-                </p>
-              </div>
-
-              <span className="count">
-                {
-                  parentCategories.length
-                }{" "}
-                thư mục
-              </span>
-            </div>
-
             {parentCategories.length ===
             0 ? (
               <Empty
@@ -1107,6 +1085,7 @@ export default function ShopPage() {
           </>
         )}
 
+        {/* DANH MỤC CON */}
         {view === "children" &&
           selectedParent && (
             <>
@@ -1126,11 +1105,6 @@ export default function ShopPage() {
                       selectedParent.name
                     }
                   </h2>
-
-                  <p>
-                    Chọn thư mục con để
-                    xem sản phẩm.
-                  </p>
                 </div>
 
                 <span className="count">
@@ -1202,6 +1176,7 @@ export default function ShopPage() {
             </>
           )}
 
+        {/* SẢN PHẨM */}
         {view === "products" && (
           <>
             <div className="products-heading">
@@ -1384,6 +1359,7 @@ export default function ShopPage() {
         )}
       </div>
 
+      {/* ZALO */}
       <a
         href={ZALO_ADMIN}
         target="_blank"
@@ -1396,6 +1372,7 @@ export default function ShopPage() {
         </span>
       </a>
 
+      {/* MODAL MUA */}
       {buyModal && (
         <div className="overlay">
           <div className="modal">
@@ -1478,6 +1455,7 @@ export default function ShopPage() {
         </div>
       )}
 
+      {/* MODAL THÀNH CÔNG */}
       {successModal && (
         <div className="overlay">
           <div className="modal">
@@ -1535,6 +1513,50 @@ export default function ShopPage() {
         </div>
       )}
 
+      {/* THANH CÔNG CỤ DƯỚI */}
+      <nav className="bottom-toolbar">
+
+        <button
+          className="bottom-wallet"
+          onClick={() =>
+            router.push("/deposit")
+          }
+        >
+          <span>💰</span>
+          <small>Số dư</small>
+          <strong>
+            {formatPrice(wallet)}
+          </strong>
+        </button>
+
+        <button
+          onClick={() =>
+            router.push(
+              user
+                ? "/account"
+                : "/login"
+            )
+          }
+          aria-label="Tài khoản"
+        >
+          <span className="bottom-icon">
+            👤
+          </span>
+        </button>
+
+        <button
+          onClick={() =>
+            router.push("/keys")
+          }
+          aria-label="Kho KEY"
+        >
+          <span className="bottom-icon">
+            🔑
+          </span>
+        </button>
+
+      </nav>
+
       <style jsx>{styles}</style>
     </main>
   );
@@ -1590,10 +1612,12 @@ const styles = `
     Arial,
     Helvetica,
     sans-serif;
-  padding-bottom: 100px;
+  padding-bottom: 105px;
 }
 
-/* PETALS */
+/* =========================
+   HOA HỒNG
+========================= */
 
 .petals {
   position: fixed;
@@ -1647,7 +1671,9 @@ const styles = `
   }
 }
 
-/* TOP */
+/* =========================
+   TOPBAR
+========================= */
 
 .topbar {
   height: 64px;
@@ -1687,8 +1713,8 @@ const styles = `
 }
 
 .logo-image {
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   object-fit: contain;
   border-radius: 10px;
 }
@@ -1743,29 +1769,23 @@ const styles = `
   gap: 7px;
 }
 
-.wallet,
 .account-button {
   border: 0;
   border-radius: 9px;
   padding: 9px 12px;
   cursor: pointer;
   font-weight: 700;
-}
-
-.wallet {
-  color: #d72882;
-  background: #fff0f7;
-}
-
-.account-button {
   color: white;
   background: #222;
 }
 
-/* BANNER */
+/* =========================
+   BANNER
+========================= */
 
 .banner-section {
-  padding: 18px 18px 4px;
+  padding:
+    12px 18px 4px;
 }
 
 .banner {
@@ -1773,12 +1793,12 @@ const styles = `
   margin: auto;
   position: relative;
   overflow: hidden;
-  border-radius: 18px;
-  aspect-ratio: 1200 / 320;
+  border-radius: 20px;
+  aspect-ratio: 1200 / 380;
   background: #eee;
   box-shadow:
-    0 15px 40px
-    rgba(30,20,50,.10);
+    0 18px 50px
+    rgba(30,20,50,.14);
 }
 
 .banner-image {
@@ -1807,29 +1827,43 @@ const styles = `
   top: 50%;
   transform:
     translateY(-50%);
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   border: 0;
   border-radius: 50%;
   background:
-    rgba(255,255,255,.85);
+    rgba(255,255,255,.88);
   color: #e83d94;
-  font-size: 28px;
+  font-size: 29px;
+  line-height: 1;
   cursor: pointer;
+  box-shadow:
+    0 5px 18px
+    rgba(0,0,0,.12);
+  transition:
+    transform .15s,
+    background .15s;
+}
+
+.banner-arrow:hover {
+  background: white;
+  transform:
+    translateY(-50%)
+    scale(1.06);
 }
 
 .banner-arrow.left {
-  left: 12px;
+  left: 14px;
 }
 
 .banner-arrow.right {
-  right: 12px;
+  right: 14px;
 }
 
 .dots {
   position: absolute;
   left: 50%;
-  bottom: 10px;
+  bottom: 12px;
   transform:
     translateX(-50%);
   display: flex;
@@ -1837,7 +1871,7 @@ const styles = `
   padding: 6px 9px;
   border-radius: 999px;
   background:
-    rgba(0,0,0,.25);
+    rgba(0,0,0,.28);
 }
 
 .dot {
@@ -1849,20 +1883,25 @@ const styles = `
   background:
     rgba(255,255,255,.55);
   cursor: pointer;
+  transition:
+    width .2s,
+    background .2s;
 }
 
 .dot.active {
-  width: 20px;
+  width: 21px;
   border-radius: 999px;
   background: white;
 }
 
-/* CONTENT */
+/* =========================
+   CONTENT
+========================= */
 
 .container {
   max-width: 1220px;
   margin: auto;
-  padding: 18px;
+  padding: 14px 18px 25px;
 }
 
 .breadcrumb {
@@ -1935,7 +1974,9 @@ const styles = `
   font-weight: 900;
 }
 
-/* CATEGORIES */
+/* =========================
+   CATEGORY
+========================= */
 
 .category-grid {
   display: grid;
@@ -2059,7 +2100,9 @@ const styles = `
   font-weight: 900;
 }
 
-/* PRODUCTS */
+/* =========================
+   PRODUCTS
+========================= */
 
 .tools {
   display: flex;
@@ -2214,7 +2257,9 @@ const styles = `
   cursor: not-allowed;
 }
 
-/* EMPTY */
+/* =========================
+   EMPTY / MESSAGE
+========================= */
 
 .empty {
   min-height: 300px;
@@ -2271,12 +2316,14 @@ const styles = `
   cursor: pointer;
 }
 
-/* ZALO */
+/* =========================
+   ZALO
+========================= */
 
 .zalo {
   position: fixed;
   right: 18px;
-  bottom: 18px;
+  bottom: 84px;
   z-index: 90;
   display: flex;
   align-items: center;
@@ -2293,7 +2340,9 @@ const styles = `
     rgba(232,61,148,.3);
 }
 
-/* MODAL */
+/* =========================
+   MODAL
+========================= */
 
 .overlay {
   position: fixed;
@@ -2444,7 +2493,87 @@ const styles = `
   cursor: pointer;
 }
 
-/* LOADING */
+/* =========================
+   THANH DƯỚI
+========================= */
+
+.bottom-toolbar {
+  position: fixed;
+  left: 50%;
+  bottom: 10px;
+  transform:
+    translateX(-50%);
+  z-index: 200;
+  width:
+    min(360px, calc(100vw - 24px));
+  height: 58px;
+  display: grid;
+  grid-template-columns:
+    1.4fr .8fr .8fr;
+  gap: 5px;
+  padding: 5px;
+  border:
+    1px solid rgba(255,255,255,.12);
+  border-radius: 18px;
+  background:
+    rgba(20,20,27,.94);
+  box-shadow:
+    0 15px 40px
+    rgba(0,0,0,.28);
+  backdrop-filter:
+    blur(16px);
+}
+
+.bottom-toolbar button {
+  border: 0;
+  border-radius: 13px;
+  background: transparent;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  transition:
+    background .15s,
+    transform .15s;
+}
+
+.bottom-toolbar button:hover {
+  background:
+    rgba(255,255,255,.08);
+}
+
+.bottom-toolbar button:active {
+  transform: scale(.96);
+}
+
+.bottom-wallet {
+  flex-direction: column;
+  line-height: 1;
+}
+
+.bottom-wallet > span {
+  font-size: 13px;
+}
+
+.bottom-wallet small {
+  font-size: 8px;
+  color: #aaa;
+}
+
+.bottom-wallet strong {
+  font-size: 10px;
+  color: #ff55a5;
+}
+
+.bottom-icon {
+  font-size: 20px;
+}
+
+/* =========================
+   LOADING
+========================= */
 
 .loading {
   min-height: 100vh;
@@ -2474,7 +2603,9 @@ const styles = `
   }
 }
 
-/* RESPONSIVE */
+/* =========================
+   RESPONSIVE
+========================= */
 
 @media (max-width: 1050px) {
   .product-grid {
@@ -2488,6 +2619,7 @@ const styles = `
 }
 
 @media (max-width: 760px) {
+
   .topbar {
     height: 58px;
   }
@@ -2500,16 +2632,13 @@ const styles = `
     display: none;
   }
 
-  .wallet {
-    font-size: 11px;
-  }
-
   .banner-section {
     padding:
-      10px 10px 2px;
+      8px 10px 2px;
   }
 
   .banner {
+    aspect-ratio: 1200 / 430;
     border-radius: 13px;
   }
 
@@ -2520,7 +2649,8 @@ const styles = `
   }
 
   .container {
-    padding: 12px;
+    padding:
+      10px 12px 25px;
   }
 
   .category-grid {
@@ -2586,15 +2716,23 @@ const styles = `
 
   .zalo {
     right: 12px;
-    bottom: 12px;
+    bottom: 78px;
   }
 
   .zalo span {
     display: none;
   }
+
+  .bottom-toolbar {
+    bottom: 8px;
+    height: 56px;
+    width:
+      calc(100vw - 20px);
+  }
 }
 
 @media (max-width: 390px) {
+
   .category-grid,
   .product-grid {
     gap: 7px;
@@ -2610,6 +2748,11 @@ const styles = `
 
   .price {
     font-size: 12px;
+  }
+
+  .bottom-toolbar {
+    width:
+      calc(100vw - 16px);
   }
 }
 
