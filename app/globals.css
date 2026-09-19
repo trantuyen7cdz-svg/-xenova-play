@@ -1368,3 +1368,92 @@ html[data-theme="dark"] .close-button {
     border-radius: 16px 16px 0 0;
   }
 }
+/* ================================
+   XENOVA TEXT CONTRAST FIX
+================================ */
+
+/* LIGHT MODE */
+.category-info span {
+  color: #666d78;
+}
+
+.product-description {
+  color: #626a76;
+}
+
+.product-meta {
+  color: #666d78;
+}
+
+.empty-card p,
+.error-card p {
+  color: #626a76;
+}
+
+.banner-content p {
+  color: #5f6672;
+}
+
+.drawer-user-info small {
+  color: #727985;
+}
+
+.drawer-arrow {
+  color: #737b87;
+}
+
+.loading-screen span {
+  color: #626a76;
+}
+
+.modal-summary span {
+  color: #626a76;
+}
+
+.buy-modal p,
+.success-modal p {
+  color: #626a76;
+}
+
+/* DARK MODE */
+html[data-theme="dark"] .category-info span {
+  color: #b8bec9;
+}
+
+html[data-theme="dark"] .product-description {
+  color: #b5bcc8;
+}
+
+html[data-theme="dark"] .product-meta {
+  color: #b8bec9;
+}
+
+html[data-theme="dark"] .empty-card p,
+html[data-theme="dark"] .error-card p {
+  color: #b5bcc8;
+}
+
+html[data-theme="dark"] .banner-content p {
+  color: #c1c6cf;
+}
+
+html[data-theme="dark"] .drawer-user-info small {
+  color: #aeb5c0;
+}
+
+html[data-theme="dark"] .drawer-arrow {
+  color: #aeb5c0;
+}
+
+html[data-theme="dark"] .loading-screen span {
+  color: #b5bcc8;
+}
+
+html[data-theme="dark"] .modal-summary span {
+  color: #b5bcc8;
+}
+
+html[data-theme="dark"] .buy-modal p,
+html[data-theme="dark"] .success-modal p {
+  color: #b5bcc8;
+}
