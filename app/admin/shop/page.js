@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { supabase } from "../../../lib/supabase";
 
 const DEFAULT_SETTINGS = {
   logo_url: "",
   shop_badge: "XENOVA PLAY SHOP",
   shop_title: "Cửa hàng",
-  shop_description: "Chọn danh mục để xem sản phẩm và mua KEY.",
+  shop_description:
+    "Chọn danh mục để xem sản phẩm và mua KEY.",
   banners: [],
 };
 
@@ -35,9 +37,8 @@ export default function AdminShopPage() {
   const [shopTitle, setShopTitle] = useState(
     DEFAULT_SETTINGS.shop_title
   );
-  const [shopDescription, setShopDescription] = useState(
-    DEFAULT_SETTINGS.shop_description
-  );
+  const [shopDescription, setShopDescription] =
+    useState(DEFAULT_SETTINGS.shop_description);
 
   const [banners, setBanners] = useState([]);
 
@@ -45,76 +46,125 @@ export default function AdminShopPage() {
     loadSettings();
   }, []);
 
+  async function getAccessToken() {
+    const {
+      data: { session },
+      error,
+    } = await supabase.auth.getSession();
+
+    if (error) {
+      throw new Error(
+        error.message ||
+          "Không thể lấy phiên đăng nhập."
+      );
+    }
+
+    if (!session?.access_token) {
+      throw new Error(
+        "Phiên đăng nhập không tồn tại. Hãy đăng nhập lại."
+      );
+    }
+
+    return session.access_token;
+  }
+
   async function loadSettings() {
     setLoading(true);
     setMessage("");
 
     try {
+      const accessToken =
+        await getAccessToken();
+
       const response = await fetch(
         "/api/admin/shop-settings",
         {
+          method: "GET",
           cache: "no-store",
+          headers: {
+            Authorization:
+              `Bearer ${accessToken}`,
+          },
         }
       );
 
-      const result = await response.json();
+      const result =
+        await response.json();
 
       if (!response.ok || !result.success) {
         throw new Error(
-          result.error || "Không thể tải cài đặt Shop."
+          result.error ||
+            "Không thể tải cài đặt Shop."
         );
       }
 
       const settings =
-        result.settings || DEFAULT_SETTINGS;
+        result.settings ||
+        DEFAULT_SETTINGS;
 
-      setLogoUrl(settings.logo_url || "");
+      setLogoUrl(
+        settings.logo_url || ""
+      );
+
       setShopBadge(
         settings.shop_badge ||
           DEFAULT_SETTINGS.shop_badge
       );
+
       setShopTitle(
         settings.shop_title ||
           DEFAULT_SETTINGS.shop_title
       );
+
       setShopDescription(
         settings.shop_description ||
           DEFAULT_SETTINGS.shop_description
       );
 
-      const loadedBanners = Array.isArray(
-        settings.banners
-      )
-        ? settings.banners
-            .map((banner, index) => ({
-              id:
-                banner.id ||
-                `banner-${Date.now()}-${index}`,
-              image_url:
-                banner.image_url || "",
-              title:
-                banner.title || "",
-              enabled:
-                banner.enabled !== false,
-              order:
-                Number.isFinite(
-                  Number(banner.order)
-                )
-                  ? Number(banner.order)
-                  : index,
-            }))
-            .sort(
-              (a, b) =>
-                Number(a.order) -
-                Number(b.order)
-            )
-        : [];
+      const loadedBanners =
+        Array.isArray(settings.banners)
+          ? settings.banners
+              .map((banner, index) => ({
+                id:
+                  banner?.id ||
+                  `banner-${Date.now()}-${index}`,
+
+                image_url:
+                  banner?.image_url || "",
+
+                title:
+                  banner?.title || "",
+
+                enabled:
+                  banner?.enabled !== false,
+
+                order:
+                  Number.isFinite(
+                    Number(banner?.order)
+                  )
+                    ? Number(banner.order)
+                    : index,
+              }))
+              .sort(
+                (a, b) =>
+                  Number(a.order) -
+                  Number(b.order)
+              )
+              .map((banner, index) => ({
+                ...banner,
+                order: index,
+              }))
+          : [];
 
       setBanners(loadedBanners);
     } catch (error) {
-      console.error(error);
+      console.error(
+        "LOAD SHOP SETTINGS:",
+        error
+      );
+
       setMessage(
-        error.message ||
+        error?.message ||
           "Không thể tải cài đặt Shop."
       );
     } finally {
@@ -132,7 +182,11 @@ export default function AdminShopPage() {
     ]);
   }
 
-  function updateBanner(id, field, value) {
+  function updateBanner(
+    id,
+    field,
+    value
+  ) {
     setBanners((current) =>
       current.map((banner) =>
         banner.id === id
@@ -146,17 +200,19 @@ export default function AdminShopPage() {
   }
 
   function deleteBanner(id) {
-    if (
-      !window.confirm(
+    const confirmed =
+      window.confirm(
         "Bạn có chắc muốn xóa banner này?"
-      )
-    ) {
-      return;
-    }
+      );
+
+    if (!confirmed) return;
 
     setBanners((current) =>
       current
-        .filter((banner) => banner.id !== id)
+        .filter(
+          (banner) =>
+            banner.id !== id
+        )
         .map((banner, index) => ({
           ...banner,
           order: index,
@@ -164,7 +220,10 @@ export default function AdminShopPage() {
     );
   }
 
-  function moveBanner(index, direction) {
+  function moveBanner(
+    index,
+    direction
+  ) {
     setBanners((current) => {
       const next = [...current];
 
@@ -185,10 +244,12 @@ export default function AdminShopPage() {
       next[index] = next[target];
       next[target] = temp;
 
-      return next.map((banner, i) => ({
-        ...banner,
-        order: i,
-      }));
+      return next.map(
+        (banner, i) => ({
+          ...banner,
+          order: i,
+        })
+      );
     });
   }
 
@@ -198,7 +259,8 @@ export default function AdminShopPage() {
         banner.id === id
           ? {
               ...banner,
-              enabled: !banner.enabled,
+              enabled:
+                !banner.enabled,
             }
           : banner
       )
@@ -212,24 +274,33 @@ export default function AdminShopPage() {
     setMessage("");
 
     try {
-      const cleanBanners = banners
-        .map((banner, index) => ({
-          id:
-            banner.id ||
-            `banner-${Date.now()}-${index}`,
-          image_url: String(
-            banner.image_url || ""
-          ).trim(),
-          title: String(
-            banner.title || ""
-          ).trim(),
-          enabled:
-            banner.enabled !== false,
-          order: index,
-        }))
-        .filter(
-          (banner) => banner.image_url
-        );
+      const accessToken =
+        await getAccessToken();
+
+      const cleanBanners =
+        banners
+          .map((banner, index) => ({
+            id:
+              banner.id ||
+              `banner-${Date.now()}-${index}`,
+
+            image_url: String(
+              banner.image_url || ""
+            ).trim(),
+
+            title: String(
+              banner.title || ""
+            ).trim(),
+
+            enabled:
+              banner.enabled !== false,
+
+            order: index,
+          }))
+          .filter(
+            (banner) =>
+              banner.image_url
+          );
 
       const response = await fetch(
         "/api/admin/shop-settings",
@@ -238,21 +309,32 @@ export default function AdminShopPage() {
           headers: {
             "Content-Type":
               "application/json",
+
+            Authorization:
+              `Bearer ${accessToken}`,
           },
+
           body: JSON.stringify({
-            logo_url: logoUrl.trim(),
+            logo_url:
+              logoUrl.trim(),
+
             shop_badge:
               shopBadge.trim(),
+
             shop_title:
               shopTitle.trim(),
+
             shop_description:
               shopDescription.trim(),
-            banners: cleanBanners,
+
+            banners:
+              cleanBanners,
           }),
         }
       );
 
-      const result = await response.json();
+      const result =
+        await response.json();
 
       if (!response.ok || !result.success) {
         throw new Error(
@@ -267,10 +349,13 @@ export default function AdminShopPage() {
         "✓ Đã lưu cài đặt Shop thành công."
       );
     } catch (error) {
-      console.error(error);
+      console.error(
+        "SAVE SHOP SETTINGS:",
+        error
+      );
 
       setMessage(
-        error.message ||
+        error?.message ||
           "Không thể lưu cài đặt."
       );
     } finally {
@@ -278,15 +363,23 @@ export default function AdminShopPage() {
     }
   }
 
+  const enabledBanners =
+    banners.filter(
+      (banner) =>
+        banner.enabled &&
+        banner.image_url
+    );
+
   return (
     <main style={styles.page}>
-      <div style={styles.backgroundGlow} />
+      <div style={styles.glowOne} />
+      <div style={styles.glowTwo} />
 
       <div style={styles.container}>
         {/* HEADER */}
         <header style={styles.header}>
           <div>
-            <div style={styles.logo}>
+            <div style={styles.brand}>
               XENOVA PLAY
             </div>
 
@@ -295,8 +388,8 @@ export default function AdminShopPage() {
             </h1>
 
             <p style={styles.subheading}>
-              Chỉnh logo, nội dung và banner
-              hiển thị trên Shop.
+              Quản lý logo, nội dung và
+              banner của cửa hàng.
             </p>
           </div>
 
@@ -318,10 +411,12 @@ export default function AdminShopPage() {
           </div>
         </header>
 
+        {/* MESSAGE */}
         {message && (
           <div
             style={{
               ...styles.message,
+
               ...(message.startsWith("✓")
                 ? styles.successMessage
                 : styles.errorMessage),
@@ -333,32 +428,42 @@ export default function AdminShopPage() {
 
         {loading ? (
           <div style={styles.loading}>
-            Đang tải cài đặt...
+            <div style={styles.loadingIcon}>
+              ◌
+            </div>
+
+            Đang tải cài đặt Shop...
           </div>
         ) : (
           <>
-            {/* THÔNG TIN SHOP */}
+            {/* SHOP INFORMATION */}
             <section style={styles.card}>
               <div style={styles.cardHeader}>
                 <div>
+                  <div style={styles.sectionTag}>
+                    SHOP SETTINGS
+                  </div>
+
                   <h2 style={styles.cardTitle}>
                     THÔNG TIN SHOP
                   </h2>
 
                   <p style={styles.cardDescription}>
-                    Các nội dung này sẽ được
-                    hiển thị ở đầu trang Shop.
+                    Thay đổi nội dung hiển thị
+                    trên trang cửa hàng.
                   </p>
                 </div>
               </div>
 
               <div style={styles.formGrid}>
+                {/* LOGO */}
                 <div style={styles.fieldFull}>
                   <label style={styles.label}>
                     LOGO SHOP
                   </label>
 
                   <input
+                    type="text"
                     value={logoUrl}
                     onChange={(e) =>
                       setLogoUrl(
@@ -370,15 +475,16 @@ export default function AdminShopPage() {
                   />
 
                   <div style={styles.hint}>
-                    Dán URL ảnh logo. Để trống
-                    nếu muốn dùng logo mặc định.
+                    Nhập URL ảnh logo.
+                    Không nhập gì nếu muốn
+                    dùng logo mặc định.
                   </div>
 
                   {logoUrl && (
                     <div style={styles.logoPreview}>
                       <img
                         src={logoUrl}
-                        alt="Logo preview"
+                        alt="Logo"
                         style={
                           styles.logoPreviewImage
                         }
@@ -391,12 +497,14 @@ export default function AdminShopPage() {
                   )}
                 </div>
 
+                {/* BADGE */}
                 <div>
                   <label style={styles.label}>
-                    BADGE SHOP
+                    BADGE
                   </label>
 
                   <input
+                    type="text"
                     value={shopBadge}
                     onChange={(e) =>
                       setShopBadge(
@@ -408,12 +516,14 @@ export default function AdminShopPage() {
                   />
                 </div>
 
+                {/* TITLE */}
                 <div>
                   <label style={styles.label}>
-                    TIÊU ĐỀ
+                    TIÊU ĐỀ SHOP
                   </label>
 
                   <input
+                    type="text"
                     value={shopTitle}
                     onChange={(e) =>
                       setShopTitle(
@@ -425,37 +535,43 @@ export default function AdminShopPage() {
                   />
                 </div>
 
+                {/* DESCRIPTION */}
                 <div style={styles.fieldFull}>
                   <label style={styles.label}>
                     MÔ TẢ
                   </label>
 
                   <textarea
-                    value={shopDescription}
+                    value={
+                      shopDescription
+                    }
                     onChange={(e) =>
                       setShopDescription(
                         e.target.value
                       )
                     }
                     placeholder="Chọn danh mục để xem sản phẩm và mua KEY."
-                    style={styles.textareaSmall}
+                    style={styles.textarea}
                   />
                 </div>
               </div>
             </section>
 
-            {/* BANNER */}
+            {/* BANNERS */}
             <section style={styles.card}>
               <div style={styles.cardHeader}>
                 <div>
+                  <div style={styles.sectionTag}>
+                    ADVERTISEMENT
+                  </div>
+
                   <h2 style={styles.cardTitle}>
                     QUẢN LÝ BANNER
                   </h2>
 
                   <p style={styles.cardDescription}>
-                    Banner chỉ hiển thị ảnh, không
-                    cần link. Shop sẽ tự động
-                    chuyển banner.
+                    Thêm nhiều banner. Shop sẽ
+                    tự động chuyển banner.
                   </p>
                 </div>
 
@@ -464,7 +580,7 @@ export default function AdminShopPage() {
                   onClick={addBanner}
                   style={styles.addButton}
                 >
-                  ＋ Thêm banner
+                  ＋ THÊM BANNER
                 </button>
               </div>
 
@@ -474,16 +590,21 @@ export default function AdminShopPage() {
                     🖼️
                   </div>
 
-                  <div>
-                    Chưa có banner.
-                  </div>
+                  <strong>
+                    Chưa có banner
+                  </strong>
+
+                  <p>
+                    Thêm banner để hiển thị
+                    quảng cáo trên Shop.
+                  </p>
 
                   <button
                     type="button"
                     onClick={addBanner}
                     style={styles.emptyButton}
                   >
-                    Thêm banner đầu tiên
+                    ＋ Thêm banner
                   </button>
                 </div>
               ) : (
@@ -494,23 +615,26 @@ export default function AdminShopPage() {
                         key={banner.id}
                         style={{
                           ...styles.bannerCard,
+
                           opacity:
                             banner.enabled
                               ? 1
                               : 0.55,
                         }}
                       >
+                        {/* BANNER HEADER */}
                         <div
                           style={
-                            styles.bannerTop
+                            styles.bannerHeader
                           }
                         >
                           <div
                             style={
-                              styles.bannerNumber
+                              styles.bannerIndex
                             }
                           >
-                            #{index + 1}
+                            BANNER{" "}
+                            {index + 1}
                           </div>
 
                           <div
@@ -520,17 +644,17 @@ export default function AdminShopPage() {
                           >
                             <button
                               type="button"
+                              disabled={
+                                index === 0
+                              }
                               onClick={() =>
                                 moveBanner(
                                   index,
                                   "up"
                                 )
                               }
-                              disabled={
-                                index === 0
-                              }
                               style={
-                                styles.smallButton
+                                styles.iconButton
                               }
                             >
                               ↑
@@ -538,18 +662,19 @@ export default function AdminShopPage() {
 
                             <button
                               type="button"
+                              disabled={
+                                index ===
+                                banners.length -
+                                  1
+                              }
                               onClick={() =>
                                 moveBanner(
                                   index,
                                   "down"
                                 )
                               }
-                              disabled={
-                                index ===
-                                banners.length - 1
-                              }
                               style={
-                                styles.smallButton
+                                styles.iconButton
                               }
                             >
                               ↓
@@ -564,13 +689,13 @@ export default function AdminShopPage() {
                               }
                               style={
                                 banner.enabled
-                                  ? styles.enabledButton
-                                  : styles.disabledButton
+                                  ? styles.onButton
+                                  : styles.offButton
                               }
                             >
                               {banner.enabled
-                                ? "ĐANG HIỆN"
-                                : "ĐANG ẨN"}
+                                ? "● ĐANG HIỆN"
+                                : "○ ĐANG ẨN"}
                             </button>
 
                             <button
@@ -584,28 +709,30 @@ export default function AdminShopPage() {
                                 styles.deleteButton
                               }
                             >
-                              Xóa
+                              XÓA
                             </button>
                           </div>
                         </div>
 
+                        {/* BANNER CONTENT */}
                         <div
                           style={
-                            styles.bannerBody
+                            styles.bannerContent
                           }
                         >
                           <div
                             style={
-                              styles.bannerForm
+                              styles.bannerInputs
                             }
                           >
                             <label
                               style={styles.label}
                             >
-                              URL ẢNH BANNER
+                              URL ẢNH
                             </label>
 
                             <input
+                              type="text"
                               value={
                                 banner.image_url
                               }
@@ -621,7 +748,11 @@ export default function AdminShopPage() {
                             />
 
                             <label
-                              style={styles.label}
+                              style={{
+                                ...styles.label,
+                                marginTop:
+                                  "16px",
+                              }}
                             >
                               TÊN BANNER
                               <span
@@ -635,6 +766,7 @@ export default function AdminShopPage() {
                             </label>
 
                             <input
+                              type="text"
                               value={
                                 banner.title
                               }
@@ -654,20 +786,21 @@ export default function AdminShopPage() {
                                 styles.hint
                               }
                             >
-                              Không cần nhập link
-                              chuyển trang. Banner
-                              chỉ là ảnh.
+                              Banner chỉ hiển
+                              thị ảnh, không có
+                              link chuyển trang.
                             </div>
                           </div>
 
+                          {/* PREVIEW */}
                           <div
                             style={
-                              styles.previewWrapper
+                              styles.previewBox
                             }
                           >
                             <div
                               style={
-                                styles.previewLabel
+                                styles.previewTitle
                               }
                             >
                               PREVIEW
@@ -685,23 +818,34 @@ export default function AdminShopPage() {
                                   }`
                                 }
                                 style={
-                                  styles.bannerPreview
+                                  styles.bannerImage
                                 }
                                 onError={(e) => {
                                   e.currentTarget.style.display =
                                     "none";
-                                  e.currentTarget.parentElement.querySelector(
-                                    ".image-error"
-                                  ).style.display =
-                                    "flex";
+
+                                  const errorBox =
+                                    e.currentTarget
+                                      .parentElement
+                                      .querySelector(
+                                        ".banner-image-error"
+                                      );
+
+                                  if (
+                                    errorBox
+                                  ) {
+                                    errorBox.style.display =
+                                      "flex";
+                                  }
                                 }}
                               />
                             ) : null}
 
                             <div
-                              className="image-error"
+                              className="banner-image-error"
                               style={{
                                 ...styles.imageError,
+
                                 display:
                                   banner.image_url
                                     ? "none"
@@ -710,7 +854,7 @@ export default function AdminShopPage() {
                             >
                               {banner.image_url
                                 ? "Không tải được ảnh"
-                                : "Chưa có ảnh"}
+                                : "Chưa nhập URL ảnh"}
                             </div>
                           </div>
                         </div>
@@ -721,15 +865,32 @@ export default function AdminShopPage() {
               )}
             </section>
 
-            {/* PREVIEW */}
+            {/* SHOP PREVIEW */}
             <section style={styles.card}>
+              <div style={styles.sectionTag}>
+                LIVE PREVIEW
+              </div>
+
               <h2 style={styles.cardTitle}>
-                XEM TRƯỚC
+                XEM TRƯỚC SHOP
               </h2>
 
+              <p
+                style={{
+                  ...styles.cardDescription,
+                  marginBottom: "20px",
+                }}
+              >
+                Đây là bản xem trước nội dung
+                Shop.
+              </p>
+
               <div style={styles.shopPreview}>
+                {/* LOGO */}
                 <div
-                  style={styles.previewLogoArea}
+                  style={
+                    styles.previewLogoArea
+                  }
                 >
                   {logoUrl ? (
                     <img
@@ -738,11 +899,15 @@ export default function AdminShopPage() {
                       style={
                         styles.previewLogo
                       }
+                      onError={(e) => {
+                        e.currentTarget.style.display =
+                          "none";
+                      }}
                     />
                   ) : (
                     <div
                       style={
-                        styles.previewTextLogo
+                        styles.defaultLogo
                       }
                     >
                       XENOVA
@@ -751,21 +916,27 @@ export default function AdminShopPage() {
                   )}
                 </div>
 
+                {/* BADGE */}
                 <div
-                  style={styles.previewBadge}
+                  style={
+                    styles.previewBadge
+                  }
                 >
                   {shopBadge ||
                     "XENOVA PLAY SHOP"}
                 </div>
 
+                {/* TITLE */}
                 <h3
                   style={
                     styles.previewShopTitle
                   }
                 >
-                  {shopTitle || "Cửa hàng"}
+                  {shopTitle ||
+                    "Cửa hàng"}
                 </h3>
 
+                {/* DESCRIPTION */}
                 <p
                   style={
                     styles.previewDescription
@@ -775,25 +946,20 @@ export default function AdminShopPage() {
                     DEFAULT_SETTINGS.shop_description}
                 </p>
 
+                {/* BANNER */}
                 <div
                   style={
                     styles.previewBannerArea
                   }
                 >
-                  {banners.filter(
-                    (banner) =>
-                      banner.enabled &&
-                      banner.image_url
-                  ).length > 0 ? (
+                  {enabledBanners.length >
+                  0 ? (
                     <img
                       src={
-                        banners.filter(
-                          (banner) =>
-                            banner.enabled &&
-                            banner.image_url
-                        )[0].image_url
+                        enabledBanners[0]
+                          .image_url
                       }
-                      alt="Shop banner"
+                      alt="Banner preview"
                       style={
                         styles.previewShopBanner
                       }
@@ -819,14 +985,19 @@ export default function AdminShopPage() {
                 disabled={saving}
                 style={{
                   ...styles.saveButton,
+
                   opacity: saving
-                    ? 0.65
+                    ? 0.6
                     : 1,
+
+                  cursor: saving
+                    ? "wait"
+                    : "pointer",
                 }}
               >
                 {saving
                   ? "ĐANG LƯU..."
-                  : "💾 LƯU TẤT CẢ CÀI ĐẶT"}
+                  : "💾 LƯU TẤT CẢ"}
               </button>
             </div>
           </>
@@ -840,31 +1011,45 @@ const styles = {
   page: {
     minHeight: "100vh",
     background:
-      "radial-gradient(circle at top, #24102f 0%, #08070b 42%, #040407 100%)",
+      "radial-gradient(circle at top,#24102f 0%,#08070b 42%,#040407 100%)",
     color: "#fff",
     fontFamily:
-      "Arial, Helvetica, sans-serif",
-    padding: "30px 18px 100px",
+      "Arial,Helvetica,sans-serif",
+    padding:
+      "30px 18px 110px",
     position: "relative",
     overflow: "hidden",
   },
 
-  backgroundGlow: {
+  glowOne: {
     position: "fixed",
-    width: "500px",
-    height: "500px",
+    width: "450px",
+    height: "450px",
     borderRadius: "50%",
     background:
-      "rgba(255, 55, 170, 0.08)",
+      "rgba(255,45,170,.08)",
     filter: "blur(100px)",
     top: "-220px",
-    right: "-180px",
+    right: "-150px",
+    pointerEvents: "none",
+  },
+
+  glowTwo: {
+    position: "fixed",
+    width: "350px",
+    height: "350px",
+    borderRadius: "50%",
+    background:
+      "rgba(115,45,255,.07)",
+    filter: "blur(100px)",
+    bottom: "-150px",
+    left: "-100px",
     pointerEvents: "none",
   },
 
   container: {
-    width: "100%",
     maxWidth: "1150px",
+    width: "100%",
     margin: "0 auto",
     position: "relative",
     zIndex: 1,
@@ -872,49 +1057,52 @@ const styles = {
 
   header: {
     display: "flex",
+    justifyContent:
+      "space-between",
     alignItems: "center",
-    justifyContent: "space-between",
     gap: "20px",
-    marginBottom: "24px",
+    marginBottom: "25px",
     flexWrap: "wrap",
   },
 
-  logo: {
-    fontSize: "13px",
+  brand: {
+    color: "#ff4db7",
+    fontSize: "12px",
     fontWeight: "900",
     letterSpacing: "4px",
-    color: "#ff4db8",
-    marginBottom: "8px",
+    marginBottom: "7px",
   },
 
   heading: {
     margin: 0,
     fontSize: "32px",
+    lineHeight: 1.1,
     fontWeight: "950",
     letterSpacing: "1px",
   },
 
   subheading: {
     margin:
-      "8px 0 0",
-    color: "#9e9eab",
+      "9px 0 0",
+    color: "#8f8b98",
     fontSize: "14px",
   },
 
   headerActions: {
     display: "flex",
-    gap: "10px",
+    gap: "9px",
     flexWrap: "wrap",
   },
 
   backButton: {
     textDecoration: "none",
     color: "#fff",
-    background: "#17151d",
+    background: "#17141d",
     border:
-      "1px solid #302b3b",
-    borderRadius: "12px",
-    padding: "12px 18px",
+      "1px solid #302b39",
+    padding:
+      "12px 17px",
+    borderRadius: "11px",
     fontWeight: "800",
   },
 
@@ -922,66 +1110,87 @@ const styles = {
     textDecoration: "none",
     color: "#fff",
     background:
-      "linear-gradient(135deg,#8b32ff,#ff319f)",
-    borderRadius: "12px",
-    padding: "12px 18px",
+      "linear-gradient(135deg,#8c32ff,#ff319f)",
+    padding:
+      "12px 17px",
+    borderRadius: "11px",
     fontWeight: "900",
     boxShadow:
       "0 10px 30px rgba(255,49,159,.2)",
   },
 
   message: {
-    padding: "14px 16px",
     borderRadius: "12px",
+    padding: "14px 16px",
     marginBottom: "18px",
+    fontSize: "14px",
     fontWeight: "700",
   },
 
   successMessage: {
     background:
-      "rgba(0,230,118,.1)",
+      "rgba(0,230,118,.09)",
     border:
-      "1px solid rgba(0,230,118,.3)",
-    color: "#5dffab",
+      "1px solid rgba(0,230,118,.28)",
+    color: "#55ff9f",
   },
 
   errorMessage: {
     background:
-      "rgba(255,23,68,.1)",
+      "rgba(255,40,80,.08)",
     border:
-      "1px solid rgba(255,23,68,.3)",
+      "1px solid rgba(255,40,80,.25)",
     color: "#ff7188",
   },
 
   loading: {
-    background: "#111017",
+    minHeight: "300px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "column",
+    gap: "12px",
+    background:
+      "rgba(15,13,20,.9)",
     border:
-      "1px solid #292531",
+      "1px solid #292530",
     borderRadius: "18px",
-    padding: "60px",
-    textAlign: "center",
-    color: "#aaa",
+    color: "#88838f",
+  },
+
+  loadingIcon: {
+    fontSize: "34px",
+    color: "#ff45ae",
   },
 
   card: {
     background:
-      "linear-gradient(145deg, rgba(20,18,27,.96), rgba(10,9,14,.96))",
+      "linear-gradient(145deg,rgba(20,18,27,.97),rgba(9,8,13,.97))",
     border:
-      "1px solid rgba(255,255,255,.08)",
+      "1px solid rgba(255,255,255,.075)",
     borderRadius: "20px",
     padding: "24px",
     marginBottom: "20px",
     boxShadow:
-      "0 20px 60px rgba(0,0,0,.25)",
+      "0 20px 60px rgba(0,0,0,.22)",
   },
 
   cardHeader: {
     display: "flex",
-    justifyContent: "space-between",
     alignItems: "center",
+    justifyContent:
+      "space-between",
     gap: "20px",
     marginBottom: "22px",
     flexWrap: "wrap",
+  },
+
+  sectionTag: {
+    color: "#ff4db7",
+    fontSize: "10px",
+    fontWeight: "900",
+    letterSpacing: "2px",
+    marginBottom: "7px",
   },
 
   cardTitle: {
@@ -991,10 +1200,10 @@ const styles = {
   },
 
   cardDescription: {
-    color: "#888592",
+    color: "#85818d",
+    fontSize: "13px",
     margin:
       "7px 0 0",
-    fontSize: "13px",
   },
 
   formGrid: {
@@ -1005,111 +1214,118 @@ const styles = {
   },
 
   fieldFull: {
-    gridColumn: "1 / -1",
+    gridColumn:
+      "1 / -1",
   },
 
   label: {
     display: "block",
+    color: "#aaa6b2",
     fontSize: "11px",
     fontWeight: "900",
     letterSpacing: "1px",
-    color: "#aaa6b4",
     marginBottom: "8px",
   },
 
   optional: {
-    color: "#65616d",
+    color: "#66616e",
     fontWeight: "500",
   },
 
   input: {
     width: "100%",
     boxSizing: "border-box",
-    background: "#0a090e",
     border:
-      "1px solid #302c38",
-    borderRadius: "11px",
+      "1px solid #302b37",
+    background: "#09080d",
     color: "#fff",
-    padding: "13px 14px",
+    borderRadius: "10px",
+    padding:
+      "13px 14px",
     outline: "none",
     fontSize: "14px",
   },
 
-  textareaSmall: {
+  textarea: {
     width: "100%",
-    minHeight: "90px",
     boxSizing: "border-box",
+    minHeight: "90px",
     resize: "vertical",
-    background: "#0a090e",
     border:
-      "1px solid #302c38",
-    borderRadius: "11px",
+      "1px solid #302b37",
+    background: "#09080d",
     color: "#fff",
-    padding: "13px 14px",
+    borderRadius: "10px",
+    padding:
+      "13px 14px",
     outline: "none",
     fontSize: "14px",
     fontFamily:
-      "Arial, Helvetica, sans-serif",
+      "Arial,Helvetica,sans-serif",
   },
 
   hint: {
-    color: "#696572",
+    color: "#68636f",
     fontSize: "11px",
     marginTop: "7px",
+    lineHeight: 1.5,
   },
 
   logoPreview: {
     marginTop: "12px",
-    background: "#08070b",
-    border:
-      "1px solid #28242f",
-    borderRadius: "12px",
-    padding: "15px",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
     minHeight: "80px",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: "15px",
+    background: "#07060a",
+    border:
+      "1px solid #292530",
+    borderRadius: "11px",
   },
 
   logoPreviewImage: {
-    maxWidth: "220px",
+    maxWidth: "240px",
     maxHeight: "90px",
     objectFit: "contain",
   },
 
   addButton: {
     border: 0,
-    background:
-      "linear-gradient(135deg,#ff329f,#8c35ff)",
     color: "#fff",
+    background:
+      "linear-gradient(135deg,#ff329f,#8635ff)",
     borderRadius: "11px",
-    padding: "12px 16px",
+    padding:
+      "12px 17px",
     fontWeight: "900",
     cursor: "pointer",
   },
 
   empty: {
     border:
-      "1px dashed #34303c",
+      "1px dashed #35303c",
     borderRadius: "15px",
-    padding: "45px 20px",
     textAlign: "center",
-    color: "#77737e",
+    padding:
+      "45px 20px",
+    color: "#77727f",
   },
 
   emptyIcon: {
-    fontSize: "35px",
-    marginBottom: "8px",
+    fontSize: "38px",
+    marginBottom: "10px",
   },
 
   emptyButton: {
-    marginTop: "15px",
+    marginTop: "12px",
     border:
-      "1px solid #413849",
+      "1px solid #3b3544",
     background: "#15121b",
     color: "#fff",
-    padding: "10px 15px",
     borderRadius: "10px",
+    padding:
+      "10px 15px",
     cursor: "pointer",
     fontWeight: "800",
   },
@@ -1120,143 +1336,155 @@ const styles = {
   },
 
   bannerCard: {
-    background: "#0b0a10",
+    background: "#0a090e",
     border:
-      "1px solid #292531",
-    borderRadius: "16px",
+      "1px solid #292530",
+    borderRadius: "15px",
     overflow: "hidden",
     transition:
       "opacity .2s ease",
   },
 
-  bannerTop: {
+  bannerHeader: {
+    minHeight: "58px",
     display: "flex",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: "10px",
-    padding: "12px 14px",
+    justifyContent:
+      "space-between",
+    gap: "12px",
+    padding:
+      "10px 13px",
     borderBottom:
-      "1px solid #24212a",
+      "1px solid #25212c",
     flexWrap: "wrap",
   },
 
-  bannerNumber: {
+  bannerIndex: {
+    color: "#ff4db7",
+    fontSize: "11px",
     fontWeight: "950",
-    color: "#ff4caf",
+    letterSpacing: "1px",
   },
 
   bannerActions: {
     display: "flex",
     gap: "7px",
+    alignItems: "center",
     flexWrap: "wrap",
   },
 
-  smallButton: {
-    minWidth: "34px",
+  iconButton: {
+    width: "34px",
     height: "34px",
     border:
-      "1px solid #38333f",
-    background: "#16131c",
+      "1px solid #37313f",
+    background: "#15121b",
     color: "#fff",
     borderRadius: "8px",
-    cursor: "pointer",
     fontWeight: "900",
+    cursor: "pointer",
   },
 
-  enabledButton: {
+  onButton: {
     height: "34px",
     border:
       "1px solid rgba(0,230,118,.3)",
     background:
       "rgba(0,230,118,.08)",
-    color: "#49ff9a",
+    color: "#4cff9b",
     borderRadius: "8px",
-    padding: "0 10px",
+    padding:
+      "0 11px",
     cursor: "pointer",
     fontWeight: "900",
-    fontSize: "11px",
+    fontSize: "10px",
   },
 
-  disabledButton: {
+  offButton: {
     height: "34px",
     border:
-      "1px solid #3a3541",
-    background: "#16131c",
-    color: "#8a8591",
+      "1px solid #38333f",
+    background: "#15121b",
+    color: "#85808c",
     borderRadius: "8px",
-    padding: "0 10px",
+    padding:
+      "0 11px",
     cursor: "pointer",
     fontWeight: "900",
-    fontSize: "11px",
+    fontSize: "10px",
   },
 
   deleteButton: {
     height: "34px",
     border:
-      "1px solid rgba(255,23,68,.3)",
+      "1px solid rgba(255,40,75,.3)",
     background:
-      "rgba(255,23,68,.08)",
-    color: "#ff637e",
+      "rgba(255,40,75,.07)",
+    color: "#ff637d",
     borderRadius: "8px",
-    padding: "0 12px",
+    padding:
+      "0 11px",
     cursor: "pointer",
     fontWeight: "900",
+    fontSize: "10px",
   },
 
-  bannerBody: {
+  bannerContent: {
     display: "grid",
     gridTemplateColumns:
-      "minmax(0,1fr) minmax(280px,430px)",
+      "minmax(0,1fr) minmax(280px,450px)",
     gap: "18px",
     padding: "18px",
   },
 
-  bannerForm: {
+  bannerInputs: {
     minWidth: 0,
   },
 
-  previewWrapper: {
+  previewBox: {
     minWidth: 0,
   },
 
-  previewLabel: {
+  previewTitle: {
+    color: "#66616e",
     fontSize: "10px",
-    color: "#696572",
     fontWeight: "900",
     letterSpacing: "1px",
     marginBottom: "7px",
   },
 
-  bannerPreview: {
+  bannerImage: {
     width: "100%",
-    aspectRatio: "1200 / 320",
+    aspectRatio:
+      "1200 / 320",
     objectFit: "cover",
     display: "block",
-    borderRadius: "11px",
+    borderRadius: "10px",
     border:
-      "1px solid #2c2833",
-    background: "#07070a",
+      "1px solid #2b2732",
+    background: "#060509",
   },
 
   imageError: {
     width: "100%",
-    aspectRatio: "1200 / 320",
-    borderRadius: "11px",
+    aspectRatio:
+      "1200 / 320",
     border:
       "1px dashed #37323f",
+    borderRadius: "10px",
     alignItems: "center",
     justifyContent: "center",
     color: "#68636f",
-    background: "#08070b",
+    background: "#07060a",
     fontSize: "12px",
   },
 
   shopPreview: {
     background:
-      "radial-gradient(circle at top,#29112e,#09080d 55%)",
+      "radial-gradient(circle at top,#29112e,#09080d 58%)",
     border:
-      "1px solid #292431",
-    borderRadius: "18px",
+      "1px solid #292530",
+    borderRadius: "17px",
     padding: "30px",
     textAlign: "center",
     overflow: "hidden",
@@ -1271,29 +1499,28 @@ const styles = {
   },
 
   previewLogo: {
-    maxWidth: "230px",
-    maxHeight: "70px",
+    maxWidth: "240px",
+    maxHeight: "75px",
     objectFit: "contain",
   },
 
-  previewTextLogo: {
+  defaultLogo: {
     fontSize: "27px",
     fontWeight: "950",
     letterSpacing: "2px",
   },
 
-  previewTextLogoSpan: {},
-
   previewBadge: {
     display: "inline-block",
-    padding: "7px 12px",
-    borderRadius: "999px",
+    color: "#ff64bd",
     background:
-      "rgba(255,61,171,.1)",
+      "rgba(255,61,171,.09)",
     border:
       "1px solid rgba(255,61,171,.3)",
-    color: "#ff65bd",
-    fontSize: "11px",
+    borderRadius: "999px",
+    padding:
+      "7px 12px",
+    fontSize: "10px",
     fontWeight: "900",
   },
 
@@ -1305,11 +1532,11 @@ const styles = {
   },
 
   previewDescription: {
-    color: "#8f8a97",
-    fontSize: "13px",
+    maxWidth: "700px",
     margin:
       "0 auto 20px",
-    maxWidth: "650px",
+    color: "#898490",
+    fontSize: "13px",
   },
 
   previewBannerArea: {
@@ -1320,17 +1547,20 @@ const styles = {
 
   previewShopBanner: {
     width: "100%",
-    aspectRatio: "1200 / 320",
+    aspectRatio:
+      "1200 / 320",
     objectFit: "cover",
-    borderRadius: "13px",
+    borderRadius: "12px",
     display: "block",
   },
 
   noBanner: {
-    aspectRatio: "1200 / 320",
+    width: "100%",
+    aspectRatio:
+      "1200 / 320",
     border:
       "1px dashed #37323f",
-    borderRadius: "13px",
+    borderRadius: "12px",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -1343,22 +1573,22 @@ const styles = {
     bottom: "15px",
     display: "flex",
     justifyContent: "center",
-    zIndex: 20,
+    zIndex: 30,
     pointerEvents: "none",
   },
 
   saveButton: {
     pointerEvents: "auto",
     border: 0,
-    background:
-      "linear-gradient(135deg,#ff329f,#7d35ff)",
     color: "#fff",
+    background:
+      "linear-gradient(135deg,#ff329f,#7736ff)",
     borderRadius: "14px",
-    padding: "15px 28px",
+    padding:
+      "15px 30px",
     fontSize: "14px",
     fontWeight: "950",
-    cursor: "pointer",
     boxShadow:
-      "0 15px 45px rgba(174,40,255,.35)",
+      "0 15px 45px rgba(150,40,255,.3)",
   },
 };
