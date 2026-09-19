@@ -11,17 +11,7 @@ const supabaseAdmin = createClient(
 
 /*
 ==================================================
-SỬA LỖI TIẾNG VIỆT BỊ KIỂU:
-
-PHáº¦N Má»€M
-CÃ¡c loáº¡i KEY
-KEY 1 NGÃ€Y
-
-THÀNH:
-
-PHẦN MỀM
-Các loại KEY
-KEY 1 NGÀY
+SỬA LỖI TIẾNG VIỆT BỊ MOJIBAKE
 ==================================================
 */
 
@@ -30,12 +20,10 @@ function fixVietnamese(value) {
     return value;
   }
 
-  // Chỉ sửa khi chuỗi có dấu hiệu bị mojibake
   const looksBroken =
     value.includes("Ã") ||
     value.includes("Â") ||
     value.includes("áº") ||
-    value.includes("á»") ||
     value.includes("á»") ||
     value.includes("â") ||
     value.includes("Ä") ||
@@ -52,7 +40,6 @@ function fixVietnamese(value) {
       .from(value, "latin1")
       .toString("utf8");
 
-    // Chỉ dùng kết quả nếu nó hợp lệ
     if (
       fixed &&
       !fixed.includes("�") &&
@@ -102,7 +89,7 @@ function fixObject(value) {
 
 /*
 ==================================================
-GET
+GET SHOP CATALOG
 ==================================================
 */
 
@@ -111,6 +98,16 @@ export async function GET() {
     /*
     ==============================================
     CATEGORY
+    ==============================================
+    
+    Bao gồm:
+
+    - Thư mục mẹ
+    - Thư mục con
+    - Ảnh
+    - Video
+    - Kiểu media
+    - parent_id
     ==============================================
     */
 
@@ -126,6 +123,8 @@ export async function GET() {
         description,
         image_url,
         demo_image_url,
+        media_type,
+        video_url,
         active,
         parent_id,
         created_at,
@@ -153,6 +152,7 @@ export async function GET() {
           headers: {
             "Content-Type":
               "application/json; charset=utf-8",
+
             "Cache-Control":
               "no-store, no-cache, must-revalidate",
           },
@@ -209,6 +209,7 @@ export async function GET() {
           headers: {
             "Content-Type":
               "application/json; charset=utf-8",
+
             "Cache-Control":
               "no-store, no-cache, must-revalidate",
           },
@@ -233,19 +234,25 @@ export async function GET() {
 
     /*
     ==============================================
-    CATEGORY PATH
+    LẤY ĐƯỜNG DẪN CATEGORY
+    ==============================================
 
     Ví dụ:
 
-    KEY
-    └── ANDROID
+    ANDROID
+    └── KEY 7 NGÀY
 
-    =>
+    Product thuộc:
+    KEY 7 NGÀY
 
+    thì:
+
+    category_path:
     [
-      KEY,
-      ANDROID
+      ANDROID,
+      KEY 7 NGÀY
     ]
+
     ==============================================
     */
 
@@ -272,7 +279,24 @@ export async function GET() {
       ) {
         path.unshift({
           id: current.id,
+
           name: current.name,
+
+          description:
+            current.description ?? null,
+
+          image_url:
+            current.image_url ?? null,
+
+          demo_image_url:
+            current.demo_image_url ?? null,
+
+          media_type:
+            current.media_type ?? "image",
+
+          video_url:
+            current.video_url ?? null,
+
           parent_id:
             current.parent_id ?? null,
         });
@@ -297,7 +321,7 @@ export async function GET() {
 
     /*
     ==============================================
-    GẮN CATEGORY VÀO PRODUCT
+    GẮN THÔNG TIN CATEGORY VÀO PRODUCT
     ==============================================
     */
 
@@ -322,10 +346,22 @@ export async function GET() {
             category_path:
               categoryPath,
 
+            /*
+            --------------------------------------
+            CATEGORY MẸ
+            --------------------------------------
+            */
+
             parent_category:
               categoryPath.length
                 ? categoryPath[0]
                 : null,
+
+            /*
+            --------------------------------------
+            CATEGORY CON
+            --------------------------------------
+            */
 
             child_category:
               categoryPath.length > 1
@@ -333,6 +369,105 @@ export async function GET() {
                     categoryPath.length - 1
                   ]
                 : null,
+          };
+        }
+      );
+
+    /*
+    ==============================================
+    ĐẾM CATEGORY
+    ==============================================
+    */
+
+    const categoryList =
+      categories || [];
+
+    const parentCategories =
+      categoryList.filter(
+        (category) =>
+          category.parent_id === null ||
+          category.parent_id === undefined
+      );
+
+    const childCategories =
+      categoryList.filter(
+        (category) =>
+          category.parent_id !== null &&
+          category.parent_id !== undefined
+      );
+
+    /*
+    ==============================================
+    THỐNG KÊ CHO TỪNG CATEGORY
+    ==============================================
+    */
+
+    const categoriesWithStats =
+      categoryList.map(
+        (category) => {
+          const categoryId =
+            Number(category.id);
+
+          /*
+          ----------------------------------------
+          CATEGORY CON TRỰC TIẾP
+          ----------------------------------------
+          */
+
+          const children =
+            childCategories.filter(
+              (child) =>
+                Number(child.parent_id) ===
+                categoryId
+            );
+
+          /*
+          ----------------------------------------
+          PRODUCT TRỰC TIẾP
+          ----------------------------------------
+          */
+
+          const directProducts =
+            productsWithCategory.filter(
+              (product) =>
+                Number(product.category_id) ===
+                categoryId
+            );
+
+          /*
+          ----------------------------------------
+          PRODUCT THUỘC CATEGORY CON
+          ----------------------------------------
+          */
+
+          const childIds =
+            new Set(
+              children.map(
+                (child) =>
+                  Number(child.id)
+              )
+            );
+
+          const childProducts =
+            productsWithCategory.filter(
+              (product) =>
+                childIds.has(
+                  Number(product.category_id)
+                )
+            );
+
+          return {
+            ...category,
+
+            children_count:
+              children.length,
+
+            direct_product_count:
+              directProducts.length,
+
+            product_count:
+              directProducts.length +
+              childProducts.length,
           };
         }
       );
@@ -347,14 +482,52 @@ export async function GET() {
       success: true,
 
       categories:
-        categories || [],
+        categoriesWithStats,
 
       products:
         productsWithCategory,
 
+      /*
+      --------------------------------------------
+      DANH SÁCH THƯ MỤC MẸ
+      --------------------------------------------
+      */
+
+      parent_categories:
+        categoriesWithStats.filter(
+          (category) =>
+            category.parent_id === null ||
+            category.parent_id === undefined
+        ),
+
+      /*
+      --------------------------------------------
+      DANH SÁCH THƯ MỤC CON
+      --------------------------------------------
+      */
+
+      child_categories:
+        categoriesWithStats.filter(
+          (category) =>
+            category.parent_id !== null &&
+            category.parent_id !== undefined
+        ),
+
+      /*
+      --------------------------------------------
+      META
+      --------------------------------------------
+      */
+
       meta: {
         category_count:
-          (categories || []).length,
+          categoryList.length,
+
+        parent_category_count:
+          parentCategories.length,
+
+        child_category_count:
+          childCategories.length,
 
         product_count:
           productsWithCategory.length,
@@ -366,8 +539,7 @@ export async function GET() {
 
     /*
     ==============================================
-    QUAN TRỌNG:
-    SỬA MOJIBAKE NGAY TRƯỚC KHI TRẢ JSON
+    SỬA MOJIBAKE TRƯỚC KHI TRẢ JSON
     ==============================================
     */
 
@@ -401,6 +573,7 @@ export async function GET() {
     return NextResponse.json(
       {
         success: false,
+
         error:
           error?.message ||
           "Không thể tải catalog",
