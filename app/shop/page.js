@@ -69,10 +69,6 @@ export default function ShopPage() {
   const [buying, setBuying] = useState(false);
   const [message, setMessage] = useState("");
 
-  /* =========================================
-     AUTH
-  ========================================= */
-
   useEffect(() => {
     let mounted = true;
 
@@ -101,10 +97,6 @@ export default function ShopPage() {
       subscription.unsubscribe();
     };
   }, []);
-
-  /* =========================================
-     LOAD SHOP
-  ========================================= */
 
   async function loadShop() {
     try {
@@ -176,9 +168,9 @@ export default function ShopPage() {
     loadShop();
   }, []);
 
-  /* =========================================
-     LOAD WALLET
-  ========================================= */
+  /* =========================
+     WALLET
+  ========================= */
 
   useEffect(() => {
     if (!user) {
@@ -191,11 +183,9 @@ export default function ShopPage() {
         data,
         error,
       } = await supabase
-        .from("profiles")
-        .select(
-          "wallet_balance,balance"
-        )
-        .eq("id", user.id)
+        .from("wallets")
+        .select("balance")
+        .eq("user_id", user.id)
         .maybeSingle();
 
       if (error) {
@@ -203,24 +193,22 @@ export default function ShopPage() {
           "WALLET ERROR:",
           error
         );
+
+        setWallet(0);
         return;
       }
 
       setWallet(
-        Number(
-          data?.wallet_balance ??
-            data?.balance ??
-            0
-        )
+        Number(data?.balance || 0)
       );
     }
 
     loadWallet();
   }, [user]);
 
-  /* =========================================
+  /* =========================
      CATEGORY
-  ========================================= */
+  ========================= */
 
   const parentCategories =
     useMemo(() => {
@@ -270,10 +258,6 @@ export default function ShopPage() {
     ).length;
   }
 
-  /* =========================================
-     OPEN PARENT
-  ========================================= */
-
   function openParent(parent) {
     setSelectedParent(parent);
     setSelectedChild(null);
@@ -290,19 +274,11 @@ export default function ShopPage() {
     setView("products");
   }
 
-  /* =========================================
-     OPEN CHILD
-  ========================================= */
-
   function openChild(child) {
     setSelectedChild(child);
     setSearch("");
     setView("products");
   }
-
-  /* =========================================
-     BACK
-  ========================================= */
 
   function goHome() {
     setSelectedParent(null);
@@ -332,9 +308,9 @@ export default function ShopPage() {
     }
   }
 
-  /* =========================================
+  /* =========================
      STOCK
-  ========================================= */
+  ========================= */
 
   function getStock(productId) {
     const value =
@@ -360,9 +336,9 @@ export default function ShopPage() {
     return Number(value || 0);
   }
 
-  /* =========================================
-     FILTER PRODUCTS
-  ========================================= */
+  /* =========================
+     PRODUCTS
+  ========================= */
 
   const filteredProducts =
     useMemo(() => {
@@ -459,9 +435,9 @@ export default function ShopPage() {
       sort,
     ]);
 
-  /* =========================================
-     PRODUCT MEDIA
-  ========================================= */
+  /* =========================
+     MEDIA
+  ========================= */
 
   function ProductMedia({ product }) {
     const image =
@@ -484,26 +460,6 @@ export default function ShopPage() {
       );
     }
 
-    if (
-      product.media_type ===
-        "both" &&
-      product.video_url
-    ) {
-      return (
-        <div className="media-wrap">
-          <img
-            src={image}
-            alt={product.name}
-            className="product-media"
-          />
-
-          <span className="video-badge">
-            ▶ VIDEO
-          </span>
-        </div>
-      );
-    }
-
     return (
       <img
         src={image}
@@ -512,10 +468,6 @@ export default function ShopPage() {
       />
     );
   }
-
-  /* =========================================
-     CATEGORY MEDIA
-  ========================================= */
 
   function CategoryMedia({
     category,
@@ -595,9 +547,9 @@ export default function ShopPage() {
     );
   }
 
-  /* =========================================
+  /* =========================
      BUY
-  ========================================= */
+  ========================= */
 
   async function handleBuy() {
     if (!buyModal) {
@@ -702,23 +654,27 @@ export default function ShopPage() {
 
       await loadShop();
 
+      /* ĐỌC LẠI VÍ SAU KHI MUA */
+
       const {
-        data: profile,
+        data: walletData,
+        error: walletError,
       } =
         await supabase
-          .from("profiles")
-          .select(
-            "wallet_balance,balance"
-          )
-          .eq("id", user.id)
+          .from("wallets")
+          .select("balance")
+          .eq("user_id", user.id)
           .maybeSingle();
 
-      if (profile) {
+      if (walletError) {
+        console.error(
+          "RELOAD WALLET ERROR:",
+          walletError
+        );
+      } else {
         setWallet(
           Number(
-            profile.wallet_balance ??
-              profile.balance ??
-              0
+            walletData?.balance || 0
           )
         );
       }
@@ -737,36 +693,36 @@ export default function ShopPage() {
     }
   }
 
-  /* =========================================
+  /* =========================
      LOADING
-  ========================================= */
+  ========================= */
 
   if (loading) {
     return (
-      <div className="loading-screen">
-        <div className="loading-box">
-          <div className="loader" />
+      <>
+        <div className="loading-screen">
+          <div className="loading-box">
+            <div className="loader" />
 
-          <p>
-            Đang tải cửa hàng...
-          </p>
+            <p>
+              Đang tải cửa hàng...
+            </p>
+          </div>
         </div>
 
         <style jsx>
           {styles}
         </style>
-      </div>
+      </>
     );
   }
 
-  /* =========================================
+  /* =========================
      MAIN
-  ========================================= */
+  ========================= */
 
   return (
     <main className="page">
-
-      {/* HEADER */}
 
       <header className="topbar">
         <div className="topbar-inner">
@@ -868,8 +824,6 @@ export default function ShopPage() {
         </div>
       </header>
 
-      {/* HERO */}
-
       <section className="hero">
         <div>
           <span className="hero-badge">
@@ -887,11 +841,7 @@ export default function ShopPage() {
         </div>
       </section>
 
-      {/* CONTENT */}
-
       <div className="container">
-
-        {/* BREADCRUMB */}
 
         <div className="breadcrumb">
 
@@ -925,15 +875,11 @@ export default function ShopPage() {
 
         </div>
 
-        {/* ERROR */}
-
         {error && (
           <div className="error-box">
             {error}
           </div>
         )}
-
-        {/* MESSAGE */}
 
         {message && (
           <div className="message-box">
@@ -951,9 +897,7 @@ export default function ShopPage() {
           </div>
         )}
 
-        {/* =================================
-            PARENT
-        ================================= */}
+        {/* PARENT */}
 
         {view === "parents" && (
           <>
@@ -1000,11 +944,6 @@ export default function ShopPage() {
 
                 {parentCategories.map(
                   (parent) => {
-
-                    const children =
-                      getChildren(
-                        parent.id
-                      );
 
                     const productCount =
                       getParentProductCount(
@@ -1054,15 +993,15 @@ export default function ShopPage() {
 
                           <div className="parent-meta">
 
-  <span>
-    🛒{" "}
-    {
-      productCount
-    }{" "}
-    sản phẩm
-  </span>
+                            <span>
+                              🛒{" "}
+                              {
+                                productCount
+                              }{" "}
+                              sản phẩm
+                            </span>
 
-</div>
+                          </div>
 
                           <div className="view-all">
 
@@ -1088,9 +1027,7 @@ export default function ShopPage() {
           </>
         )}
 
-        {/* =================================
-            CHILD
-        ================================= */}
+        {/* CHILD */}
 
         {view === "children" &&
           selectedParent && (
@@ -1210,9 +1147,7 @@ export default function ShopPage() {
             </>
           )}
 
-        {/* =================================
-            PRODUCTS
-        ================================= */}
+        {/* PRODUCTS */}
 
         {view === "products" && (
           <>
@@ -1429,7 +1364,7 @@ export default function ShopPage() {
 
       </div>
 
-      {/* FLOATING ZALO */}
+      {/* ZALO */}
 
       <a
         href={ZALO_ADMIN}
@@ -1443,9 +1378,7 @@ export default function ShopPage() {
         </span>
       </a>
 
-      {/* =================================
-          BUY MODAL
-      ================================= */}
+      {/* BUY MODAL */}
 
       {buyModal && (
         <div className="modal-overlay">
@@ -1549,9 +1482,7 @@ export default function ShopPage() {
         </div>
       )}
 
-      {/* =================================
-          SUCCESS MODAL
-      ================================= */}
+      {/* SUCCESS */}
 
       {successModal && (
         <div className="modal-overlay">
@@ -1634,12 +1565,12 @@ const styles = `
   background:
     radial-gradient(
       circle at 10% 10%,
-      rgba(255, 120, 190, .10),
+      rgba(255,120,190,.10),
       transparent 28%
     ),
     radial-gradient(
       circle at 90% 20%,
-      rgba(150, 120, 255, .08),
+      rgba(150,120,255,.08),
       transparent 28%
     ),
     #f7f8fc;
@@ -1649,8 +1580,6 @@ const styles = `
     Helvetica,
     sans-serif;
 }
-
-/* HEADER */
 
 .topbar {
   height: 64px;
@@ -1754,8 +1683,6 @@ const styles = `
   color: white;
 }
 
-/* HERO */
-
 .hero {
   min-height: 155px;
   display: flex;
@@ -1798,8 +1725,6 @@ const styles = `
   color: #777;
 }
 
-/* CONTAINER */
-
 .container {
   max-width: 1220px;
   margin: auto;
@@ -1826,8 +1751,6 @@ const styles = `
 .breadcrumb strong {
   color: #e83d94;
 }
-
-/* SECTION */
 
 .section-heading,
 .products-heading {
@@ -1872,8 +1795,6 @@ const styles = `
   font-weight: 850;
 }
 
-/* PARENT GRID */
-
 .parent-grid {
   display: grid;
   grid-template-columns:
@@ -1903,8 +1824,6 @@ const styles = `
     0 18px 45px
     rgba(40,20,60,.10);
 }
-
-/* CATEGORY MEDIA */
 
 .category-media {
   width: 100%;
@@ -1960,9 +1879,8 @@ const styles = `
   font-size: 10px;
 }
 
-/* PARENT CARD */
-
-.parent-card-body {
+.parent-card-body,
+.child-card-body {
   padding: 15px;
 }
 
@@ -2029,8 +1947,6 @@ const styles = `
   font-weight: 900;
 }
 
-/* CHILD */
-
 .child-grid {
   display: grid;
   grid-template-columns:
@@ -2060,12 +1976,6 @@ const styles = `
     0 18px 45px
     rgba(40,20,60,.10);
 }
-
-.child-card-body {
-  padding: 15px;
-}
-
-/* PRODUCTS */
 
 .tools {
   display: flex;
@@ -2135,25 +2045,6 @@ const styles = `
   height: 100%;
   display: block;
   object-fit: cover;
-}
-
-.media-wrap {
-  position: relative;
-  width: 100%;
-  height: 100%;
-}
-
-.video-badge,
-.media-tag {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  background: rgba(0,0,0,.65);
-  color: white;
-  padding: 4px 7px;
-  border-radius: 6px;
-  font-size: 9px;
-  font-weight: 900;
 }
 
 .stock {
@@ -2245,8 +2136,6 @@ const styles = `
   cursor: not-allowed;
 }
 
-/* EMPTY */
-
 .empty {
   min-height: 300px;
   background: white;
@@ -2274,8 +2163,6 @@ const styles = `
   font-size: 12px;
 }
 
-/* MESSAGE */
-
 .error-box,
 .message-box {
   padding: 12px 14px;
@@ -2302,8 +2189,6 @@ const styles = `
   cursor: pointer;
 }
 
-/* FLOATING */
-
 .floating-admin {
   position: fixed;
   right: 18px;
@@ -2323,8 +2208,6 @@ const styles = `
     0 8px 25px
     rgba(232,61,148,.3);
 }
-
-/* MODAL */
 
 .modal-overlay {
   position: fixed;
@@ -2469,8 +2352,6 @@ const styles = `
   cursor: pointer;
 }
 
-/* LOADING */
-
 .loading-screen {
   min-height: 100vh;
   background: #f7f8fc;
@@ -2499,10 +2380,7 @@ const styles = `
   }
 }
 
-/* TABLET */
-
 @media (max-width: 1050px) {
-
   .product-grid {
     grid-template-columns:
       repeat(3,minmax(0,1fr));
@@ -2512,8 +2390,6 @@ const styles = `
     display: none;
   }
 }
-
-/* MOBILE */
 
 @media (max-width: 760px) {
 
