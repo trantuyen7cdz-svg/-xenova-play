@@ -6,20 +6,14 @@ import { supabase } from "../../lib/supabase";
 
 const ZALO_ADMIN = "https://zalo.me/0987654321";
 
-/* =========================================================
-   BANNER QUẢNG CÁO
-   Thêm ảnh mới bằng cách thêm 1 dòng vào mảng này.
-   ========================================================= */
-
-const BANNER_IMAGES = [
-  "https://placehold.co/1200x320/ff4ba6/ffffff?text=XENOVA+PLAY",
-  "https://placehold.co/1200x320/8d54ff/ffffff?text=QUANG+CAO",
-  "https://placehold.co/1200x320/e83d94/ffffff?text=XENOVA+SHOP",
-];
-
-/* =========================================================
-   FORMAT
-   ========================================================= */
+const DEFAULT_SETTINGS = {
+  logo_url: "",
+  shop_badge: "XENOVA PLAY SHOP",
+  shop_title: "Cửa hàng",
+  shop_description:
+    "Chọn danh mục để xem sản phẩm và mua KEY.",
+  banners: [],
+};
 
 function formatPrice(value) {
   return (
@@ -52,10 +46,6 @@ function getCategoryImage(category) {
   );
 }
 
-/* =========================================================
-   SHOP
-   ========================================================= */
-
 export default function ShopPage() {
   const router = useRouter();
 
@@ -69,6 +59,10 @@ export default function ShopPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  const [settings, setSettings] =
+    useState(DEFAULT_SETTINGS);
 
   const [selectedParent, setSelectedParent] =
     useState(null);
@@ -82,57 +76,17 @@ export default function ShopPage() {
   const [sort, setSort] = useState("default");
 
   const [buyModal, setBuyModal] = useState(null);
-
   const [successModal, setSuccessModal] =
     useState(null);
 
   const [buying, setBuying] = useState(false);
-  const [message, setMessage] = useState("");
-
-  /* =======================================================
-     BANNER
-     ======================================================= */
-
   const [bannerIndex, setBannerIndex] = useState(0);
 
-  useEffect(() => {
-    if (BANNER_IMAGES.length <= 1) {
-      return;
-    }
-
-    const timer = setInterval(() => {
-      setBannerIndex((current) => {
-        return (
-          (current + 1) %
-          BANNER_IMAGES.length
-        );
-      });
-    }, 4000);
-
-    return () => clearInterval(timer);
-  }, []);
-
-  function previousBanner() {
-    setBannerIndex((current) => {
-      return (
-        (current - 1 + BANNER_IMAGES.length) %
-        BANNER_IMAGES.length
-      );
-    });
-  }
-
-  function nextBanner() {
-    setBannerIndex((current) => {
-      return (
-        (current + 1) %
-        BANNER_IMAGES.length
-      );
-    });
-  }
-
-  /* =======================================================
-     USER
-     ======================================================= */
+  /*
+   * =====================================================
+   * AUTH
+   * =====================================================
+   */
 
   useEffect(() => {
     let mounted = true;
@@ -142,20 +96,21 @@ export default function ShopPage() {
         data: { user },
       } = await supabase.auth.getUser();
 
-      if (!mounted) return;
-
-      setUser(user || null);
+      if (mounted) {
+        setUser(user || null);
+      }
     }
 
     loadUser();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setUser(session?.user || null);
-      }
-    );
+    } =
+      supabase.auth.onAuthStateChange(
+        (_event, session) => {
+          setUser(session?.user || null);
+        }
+      );
 
     return () => {
       mounted = false;
@@ -163,9 +118,116 @@ export default function ShopPage() {
     };
   }, []);
 
-  /* =======================================================
-     LOAD SHOP
-     ======================================================= */
+  /*
+   * =====================================================
+   * SETTINGS
+   * =====================================================
+   */
+
+  async function loadSettings() {
+    try {
+      const response = await fetch(
+        "/api/shop/settings",
+        {
+          cache: "no-store",
+        }
+      );
+
+      if (!response.ok) return;
+
+      const data = await response.json();
+
+      if (!data?.success) return;
+
+      setSettings({
+        ...DEFAULT_SETTINGS,
+        ...(data.settings || {}),
+        banners: Array.isArray(
+          data.settings?.banners
+        )
+          ? data.settings.banners
+          : [],
+      });
+    } catch (err) {
+      console.error(
+        "SHOP SETTINGS ERROR:",
+        err
+      );
+    }
+  }
+
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const activeBanners = useMemo(() => {
+    const banners = Array.isArray(
+      settings.banners
+    )
+      ? settings.banners
+      : [];
+
+    return banners
+      .filter(
+        (banner) =>
+          banner &&
+          banner.image_url &&
+          banner.enabled !== false
+      )
+      .sort(
+        (a, b) =>
+          Number(a.order || 0) -
+          Number(b.order || 0)
+      );
+  }, [settings.banners]);
+
+  useEffect(() => {
+    setBannerIndex(0);
+  }, [activeBanners.length]);
+
+  useEffect(() => {
+    if (activeBanners.length <= 1) return;
+
+    const timer = setInterval(() => {
+      setBannerIndex((current) => {
+        return (
+          (current + 1) %
+          activeBanners.length
+        );
+      });
+    }, 4000);
+
+    return () => clearInterval(timer);
+  }, [activeBanners.length]);
+
+  function previousBanner() {
+    if (activeBanners.length <= 1) return;
+
+    setBannerIndex((current) => {
+      return (
+        (current -
+          1 +
+          activeBanners.length) %
+        activeBanners.length
+      );
+    });
+  }
+
+  function nextBanner() {
+    if (activeBanners.length <= 1) return;
+
+    setBannerIndex(
+      (current) =>
+        (current + 1) %
+        activeBanners.length
+    );
+  }
+
+  /*
+   * =====================================================
+   * LOAD SHOP
+   * =====================================================
+   */
 
   async function loadShop() {
     try {
@@ -197,7 +259,7 @@ export default function ShopPage() {
       ) {
         throw new Error(
           catalog.error ||
-            "Không tải được cửa hàng"
+            "Không tải được cửa hàng."
         );
       }
 
@@ -226,7 +288,7 @@ export default function ShopPage() {
 
       setError(
         err.message ||
-          "Không thể tải cửa hàng"
+          "Không thể tải cửa hàng."
       );
     } finally {
       setLoading(false);
@@ -237,15 +299,19 @@ export default function ShopPage() {
     loadShop();
   }, []);
 
-  /* =======================================================
-     WALLET
-     ======================================================= */
+  /*
+   * =====================================================
+   * WALLET
+   * =====================================================
+   */
 
   useEffect(() => {
     if (!user) {
       setWallet(0);
       return;
     }
+
+    let mounted = true;
 
     async function loadWallet() {
       const {
@@ -256,6 +322,8 @@ export default function ShopPage() {
         .select("balance")
         .eq("user_id", user.id)
         .maybeSingle();
+
+      if (!mounted) return;
 
       if (error) {
         console.error(
@@ -273,18 +341,25 @@ export default function ShopPage() {
     }
 
     loadWallet();
+
+    return () => {
+      mounted = false;
+    };
   }, [user]);
 
-  /* =======================================================
-     CATEGORY
-     ======================================================= */
+  /*
+   * =====================================================
+   * CATEGORY
+   * =====================================================
+   */
 
   const parentCategories =
     useMemo(() => {
       return categories.filter(
         (category) =>
           category.parent_id === null ||
-          category.parent_id === undefined
+          category.parent_id ===
+            undefined
       );
     }, [categories]);
 
@@ -312,18 +387,17 @@ export default function ShopPage() {
     const children =
       getChildren(parentId);
 
-    const allowedIds = [
+    const ids = [
       Number(parentId),
       ...children.map((item) =>
         Number(item.id)
       ),
     ];
 
-    return products.filter(
-      (product) =>
-        allowedIds.includes(
-          Number(product.category_id)
-        )
+    return products.filter((product) =>
+      ids.includes(
+        Number(product.category_id)
+      )
     ).length;
   }
 
@@ -335,12 +409,11 @@ export default function ShopPage() {
     const children =
       getChildren(parent.id);
 
-    if (children.length > 0) {
+    if (children.length) {
       setView("children");
-      return;
+    } else {
+      setView("products");
     }
-
-    setView("products");
   }
 
   function openChild(child) {
@@ -370,16 +443,18 @@ export default function ShopPage() {
         selectedParent.id
       );
 
-    if (children.length > 0) {
-      setView("children");
-    } else {
-      setView("products");
-    }
+    setView(
+      children.length
+        ? "children"
+        : "products"
+    );
   }
 
-  /* =======================================================
-     STOCK
-     ======================================================= */
+  /*
+   * =====================================================
+   * STOCK
+   * =====================================================
+   */
 
   function getStock(productId) {
     const value =
@@ -405,9 +480,11 @@ export default function ShopPage() {
     return Number(value || 0);
   }
 
-  /* =======================================================
-     PRODUCTS
-     ======================================================= */
+  /*
+   * =====================================================
+   * PRODUCTS
+   * =====================================================
+   */
 
   const filteredProducts =
     useMemo(() => {
@@ -429,19 +506,18 @@ export default function ShopPage() {
             selectedParent.id
           );
 
-        const allowedIds = [
+        const ids = [
           Number(
             selectedParent.id
           ),
-          ...children.map(
-            (item) =>
-              Number(item.id)
+          ...children.map((item) =>
+            Number(item.id)
           ),
         ];
 
         result = result.filter(
           (product) =>
-            allowedIds.includes(
+            ids.includes(
               Number(
                 product.category_id
               )
@@ -504,18 +580,17 @@ export default function ShopPage() {
       sort,
     ]);
 
-  /* =======================================================
-     MEDIA
-     ======================================================= */
+  /*
+   * =====================================================
+   * MEDIA
+   * =====================================================
+   */
 
   function ProductMedia({ product }) {
-    const image =
-      getProductImage(product);
-
     if (
-      product.media_type ===
+      product?.media_type ===
         "video" &&
-      product.video_url
+      product?.video_url
     ) {
       return (
         <video
@@ -531,8 +606,8 @@ export default function ShopPage() {
 
     return (
       <img
-        src={image}
-        alt={product.name}
+        src={getProductImage(product)}
+        alt={product?.name || "Product"}
         className="product-media"
       />
     );
@@ -540,38 +615,25 @@ export default function ShopPage() {
 
   function CategoryMedia({
     category,
-    large = false,
   }) {
     const image =
       getCategoryImage(category);
 
-    const type =
-      category?.media_type ||
-      (category?.video_url
-        ? "video"
-        : "image");
+    const video =
+      category?.video_url;
 
-    if (
-      type === "video" &&
-      category?.video_url
-    ) {
+    if (video) {
       return (
-        <div
-          className={
-            large
-              ? "category-media large"
-              : "category-media"
-          }
-        >
+        <div className="category-media">
           <video
-            src={category.video_url}
+            src={video}
             muted
             loop
             playsInline
             autoPlay
           />
 
-          <span className="category-video-badge">
+          <span className="video-badge">
             ▶ VIDEO
           </span>
         </div>
@@ -580,13 +642,7 @@ export default function ShopPage() {
 
     if (image) {
       return (
-        <div
-          className={
-            large
-              ? "category-media large"
-              : "category-media"
-          }
-        >
+        <div className="category-media">
           <img
             src={image}
             alt={
@@ -599,31 +655,20 @@ export default function ShopPage() {
     }
 
     return (
-      <div
-        className={
-          large
-            ? "category-media large category-empty"
-            : "category-media category-empty"
-        }
-      >
-        <span>📁</span>
-
-        <small>
-          {category?.name ||
-            "Danh mục"}
-        </small>
+      <div className="category-media empty-media">
+        📁
       </div>
     );
   }
 
-  /* =======================================================
-     BUY
-     ======================================================= */
+  /*
+   * =====================================================
+   * BUY
+   * =====================================================
+   */
 
   async function handleBuy() {
-    if (!buyModal) {
-      return;
-    }
+    if (!buyModal) return;
 
     if (!user) {
       router.push("/login");
@@ -663,9 +708,7 @@ export default function ShopPage() {
       } =
         await supabase.auth.getSession();
 
-      if (
-        !session?.access_token
-      ) {
+      if (!session?.access_token) {
         router.push("/login");
         return;
       }
@@ -703,7 +746,7 @@ export default function ShopPage() {
         throw new Error(
           data?.error ||
             data?.message ||
-            "Không thể mua sản phẩm"
+            "Không thể mua sản phẩm."
         );
       }
 
@@ -725,26 +768,21 @@ export default function ShopPage() {
 
       const {
         data: walletData,
-        error: walletError,
       } =
         await supabase
           .from("wallets")
           .select("balance")
-          .eq("user_id", user.id)
+          .eq(
+            "user_id",
+            user.id
+          )
           .maybeSingle();
 
-      if (walletError) {
-        console.error(
-          "RELOAD WALLET ERROR:",
-          walletError
-        );
-      } else {
-        setWallet(
-          Number(
-            walletData?.balance || 0
-          )
-        );
-      }
+      setWallet(
+        Number(
+          walletData?.balance || 0
+        )
+      );
     } catch (err) {
       console.error(
         "BUY ERROR:",
@@ -753,71 +791,60 @@ export default function ShopPage() {
 
       setMessage(
         err.message ||
-          "Mua sản phẩm thất bại"
+          "Mua sản phẩm thất bại."
       );
     } finally {
       setBuying(false);
     }
   }
 
-  /* =======================================================
-     LOADING
-     ======================================================= */
+  /*
+   * =====================================================
+   * LOADING
+   * =====================================================
+   */
 
   if (loading) {
     return (
       <>
-        <div className="loading-screen">
-          <div className="loading-box">
-            <div className="loader" />
-
-            <p>
-              Đang tải cửa hàng...
-            </p>
-          </div>
+        <div className="loading">
+          <div className="spinner" />
+          <p>
+            Đang tải cửa hàng...
+          </p>
         </div>
 
-        <style jsx>
-          {styles}
-        </style>
+        <style jsx>{styles}</style>
       </>
     );
   }
 
-  /* =======================================================
-     MAIN
-     ======================================================= */
+  /*
+   * =====================================================
+   * MAIN
+   * =====================================================
+   */
 
   return (
     <main className="page">
 
-      {/* =================================================
-          HOA HỒNG RƠI
-          ================================================= */}
-
-      <div
-        className="rose-petals"
-        aria-hidden="true"
-      >
+      {/* HOA HỒNG */}
+      <div className="petals">
         {Array.from({
           length: 30,
         }).map((_, index) => (
           <span
             key={index}
-            className="rose-petal"
+            className="petal"
             style={{
               left:
                 `${(index * 37) % 100}%`,
-
               animationDuration:
                 `${7 + (index % 7)}s`,
-
               animationDelay:
                 `${-(index % 9)}s`,
-
               width:
                 `${7 + (index % 5)}px`,
-
               height:
                 `${10 + (index % 6)}px`,
             }}
@@ -825,10 +852,7 @@ export default function ShopPage() {
         ))}
       </div>
 
-      {/* =================================================
-          HEADER
-          ================================================= */}
-
+      {/* HEADER */}
       <header className="topbar">
         <div className="topbar-inner">
 
@@ -838,20 +862,29 @@ export default function ShopPage() {
               router.push("/")
             }
           >
-            <span className="logo-x">
-              X
-            </span>
+            {settings.logo_url ? (
+              <img
+                src={
+                  settings.logo_url
+                }
+                alt="XENOVA PLAY"
+                className="logo-image"
+              />
+            ) : (
+              <span className="logo-icon">
+                X
+              </span>
+            )}
 
-            <span>
+            <span className="logo-text">
               XENOVA
               <small>
-                {" "}PLAY
+                PLAY
               </small>
             </span>
           </button>
 
-          <nav className="top-nav">
-
+          <nav className="nav">
             <button
               onClick={() =>
                 router.push("/")
@@ -879,15 +912,15 @@ export default function ShopPage() {
             >
               Đơn hàng
             </button>
-
           </nav>
 
-          <div className="account-area">
-
+          <div className="account">
             <button
               className="wallet"
               onClick={() =>
-                router.push("/deposit")
+                router.push(
+                  "/deposit"
+                )
               }
             >
               💰{" "}
@@ -896,7 +929,7 @@ export default function ShopPage() {
 
             {user ? (
               <button
-                className="account"
+                className="account-button"
                 onClick={() =>
                   router.push(
                     "/account"
@@ -907,7 +940,7 @@ export default function ShopPage() {
               </button>
             ) : (
               <button
-                className="account"
+                className="account-button"
                 onClick={() =>
                   router.push(
                     "/login"
@@ -917,123 +950,102 @@ export default function ShopPage() {
                 Đăng nhập
               </button>
             )}
-
           </div>
-
         </div>
       </header>
 
-      {/* =================================================
-          HERO
-          ================================================= */}
-
+      {/* HERO */}
       <section className="hero">
-        <div>
-          <span className="hero-badge">
-            XENOVA PLAY SHOP
+        <div className="hero-inner">
+          <span className="badge">
+            {settings.shop_badge ||
+              "XENOVA PLAY SHOP"}
           </span>
 
           <h1>
-            Cửa hàng
+            {settings.shop_title ||
+              "Cửa hàng"}
           </h1>
 
           <p>
-            Chọn danh mục để xem
-            sản phẩm và mua KEY.
+            {settings.shop_description ||
+              "Chọn danh mục để xem sản phẩm và mua KEY."}
           </p>
         </div>
       </section>
 
-      {/* =================================================
-          BANNER QUẢNG CÁO
-          ================================================= */}
-
-      {BANNER_IMAGES.length > 0 && (
+      {/* BANNER */}
+      {activeBanners.length > 0 && (
         <section className="banner-section">
-          <div className="banner-container">
+          <div className="banner">
 
-            <div className="banner-slider">
+            <img
+              key={
+                activeBanners[
+                  bannerIndex
+                ]?.id ||
+                bannerIndex
+              }
+              src={
+                activeBanners[
+                  bannerIndex
+                ]?.image_url
+              }
+              alt="XENOVA PLAY"
+              className="banner-image"
+            />
 
-              <img
-                key={bannerIndex}
-                src={
-                  BANNER_IMAGES[
-                    bannerIndex
-                  ]
-                }
-                alt="XENOVA PLAY banner"
-                className="banner-image"
-              />
+            {activeBanners.length >
+              1 && (
+              <>
+                <button
+                  className="banner-arrow left"
+                  onClick={
+                    previousBanner
+                  }
+                >
+                  ‹
+                </button>
 
-              {BANNER_IMAGES.length >
-                1 && (
-                <>
-                  <button
-                    type="button"
-                    className="banner-arrow banner-prev"
-                    onClick={
-                      previousBanner
-                    }
-                    aria-label="Banner trước"
-                  >
-                    ‹
-                  </button>
+                <button
+                  className="banner-arrow right"
+                  onClick={
+                    nextBanner
+                  }
+                >
+                  ›
+                </button>
 
-                  <button
-                    type="button"
-                    className="banner-arrow banner-next"
-                    onClick={
-                      nextBanner
-                    }
-                    aria-label="Banner tiếp theo"
-                  >
-                    ›
-                  </button>
-                </>
-              )}
-
-              {BANNER_IMAGES.length >
-                1 && (
-                <div className="banner-dots">
-                  {BANNER_IMAGES.map(
+                <div className="dots">
+                  {activeBanners.map(
                     (_, index) => (
                       <button
                         key={index}
-                        type="button"
                         className={
                           index ===
                           bannerIndex
-                            ? "banner-dot active"
-                            : "banner-dot"
+                            ? "dot active"
+                            : "dot"
                         }
                         onClick={() =>
                           setBannerIndex(
                             index
                           )
                         }
-                        aria-label={
-                          `Banner ${index + 1}`
-                        }
                       />
                     )
                   )}
                 </div>
-              )}
-
-            </div>
-
+              </>
+            )}
           </div>
         </section>
       )}
 
-      {/* =================================================
-          CONTENT
-          ================================================= */}
-
+      {/* CONTENT */}
       <div className="container">
 
         <div className="breadcrumb">
-
           <button
             onClick={goHome}
           >
@@ -1045,9 +1057,13 @@ export default function ShopPage() {
               <span>›</span>
 
               <button
-                onClick={goParent}
+                onClick={
+                  goParent
+                }
               >
-                {selectedParent.name}
+                {
+                  selectedParent.name
+                }
               </button>
             </>
           )}
@@ -1055,23 +1071,23 @@ export default function ShopPage() {
           {selectedChild && (
             <>
               <span>›</span>
-
               <strong>
-                {selectedChild.name}
+                {
+                  selectedChild.name
+                }
               </strong>
             </>
           )}
-
         </div>
 
         {error && (
-          <div className="error-box">
+          <div className="error">
             {error}
           </div>
         )}
 
         {message && (
-          <div className="message-box">
+          <div className="message">
             <span>
               {message}
             </span>
@@ -1081,21 +1097,17 @@ export default function ShopPage() {
                 setMessage("")
               }
             >
-              ✕
+              ×
             </button>
           </div>
         )}
 
-        {/* =================================================
-            PARENT
-            ================================================= */}
-
+        {/* PARENT */}
         {view === "parents" && (
           <>
-            <div className="section-heading">
-
+            <div className="heading">
               <div>
-                <span className="back-link">
+                <span className="eyebrow">
                   DANH MỤC SHOP
                 </span>
 
@@ -1109,129 +1121,93 @@ export default function ShopPage() {
                 </p>
               </div>
 
-              <span className="count-badge">
-                {parentCategories.length}{" "}
+              <span className="count">
+                {
+                  parentCategories.length
+                }{" "}
                 thư mục
               </span>
-
             </div>
 
             {parentCategories.length ===
             0 ? (
-              <div className="empty">
-                <div>📁</div>
-
-                <h3>
-                  Chưa có danh mục
-                </h3>
-
-                <p>
-                  Admin chưa tạo thư mục
-                  sản phẩm.
-                </p>
-              </div>
+              <Empty
+                icon="📁"
+                title="Chưa có danh mục"
+                text="Admin chưa tạo thư mục sản phẩm."
+              />
             ) : (
-              <div className="parent-grid">
-
+              <div className="category-grid">
                 {parentCategories.map(
-                  (parent) => {
-
-                    const productCount =
-                      getParentProductCount(
+                  (parent) => (
+                    <button
+                      key={
                         parent.id
-                      );
-
-                    return (
-                      <button
-                        key={
-                          parent.id
+                      }
+                      className="category-card"
+                      onClick={() =>
+                        openParent(
+                          parent
+                        )
+                      }
+                    >
+                      <CategoryMedia
+                        category={
+                          parent
                         }
-                        className="parent-card"
-                        onClick={() =>
-                          openParent(
-                            parent
-                          )
-                        }
-                      >
+                      />
 
-                        <CategoryMedia
-                          category={
-                            parent
-                          }
-                          large
-                        />
+                      <div className="category-body">
+                        <div className="category-title">
+                          <h3>
+                            {
+                              parent.name
+                            }
+                          </h3>
 
-                        <div className="parent-card-body">
-
-                          <div className="parent-card-title-row">
-
-                            <h3>
-                              {
-                                parent.name
-                              }
-                            </h3>
-
-                            <span className="circle-arrow">
-                              →
-                            </span>
-
-                          </div>
-
-                          <p>
-                            {parent.description ||
-                              "Xem các sản phẩm trong danh mục này."}
-                          </p>
-
-                          <div className="parent-meta">
-
-                            <span>
-                              🛒{" "}
-                              {
-                                productCount
-                              }{" "}
-                              sản phẩm
-                            </span>
-
-                          </div>
-
-                          <div className="view-all">
-
-                            <span>
-                              XEM TẤT CẢ
-                            </span>
-
-                            <span>
-                              →
-                            </span>
-
-                          </div>
-
+                          <span>
+                            →
+                          </span>
                         </div>
 
-                      </button>
-                    );
-                  }
-                )}
+                        <p>
+                          {parent.description ||
+                            "Xem các sản phẩm trong danh mục này."}
+                        </p>
 
+                        <div className="meta">
+                          🛒{" "}
+                          {
+                            getParentProductCount(
+                              parent.id
+                            )
+                          }{" "}
+                          sản phẩm
+                        </div>
+
+                        <div className="view">
+                          XEM TẤT CẢ →
+                        </div>
+                      </div>
+                    </button>
+                  )
+                )}
               </div>
             )}
           </>
         )}
 
-        {/* =================================================
-            CHILD
-            ================================================= */}
-
+        {/* CHILDREN */}
         {view === "children" &&
           selectedParent && (
             <>
-              <div className="section-heading">
-
+              <div className="heading">
                 <div>
-
                   <button
-                    className="back-link"
-                    onClick={goHome}
+                    className="back"
+                    onClick={
+                      goHome
+                    }
                   >
                     ← QUAY LẠI
                   </button>
@@ -1246,10 +1222,9 @@ export default function ShopPage() {
                     Chọn thư mục con để
                     xem sản phẩm.
                   </p>
-
                 </div>
 
-                <span className="count-badge">
+                <span className="count">
                   {
                     getChildren(
                       selectedParent.id
@@ -1257,103 +1232,74 @@ export default function ShopPage() {
                   }{" "}
                   thư mục con
                 </span>
-
               </div>
 
-              <div className="child-grid">
-
+              <div className="category-grid">
                 {getChildren(
                   selectedParent.id
-                ).map((child) => {
-
-                  const childProducts =
-                    getProductsByCategory(
+                ).map((child) => (
+                  <button
+                    key={
                       child.id
-                    );
-
-                  return (
-                    <button
-                      key={
-                        child.id
+                    }
+                    className="category-card"
+                    onClick={() =>
+                      openChild(
+                        child
+                      )
+                    }
+                  >
+                    <CategoryMedia
+                      category={
+                        child
                       }
-                      className="child-card"
-                      onClick={() =>
-                        openChild(
-                          child
-                        )
-                      }
-                    >
+                    />
 
-                      <CategoryMedia
-                        category={
-                          child
-                        }
-                        large
-                      />
-
-                      <div className="child-card-body">
-
-                        <div className="child-card-title-row">
-
-                          <h3>
-                            {
-                              child.name
-                            }
-                          </h3>
-
-                          <span className="circle-arrow">
-                            →
-                          </span>
-
-                        </div>
-
-                        <p>
-                          {child.description ||
-                            "Xem sản phẩm trong thư mục này."}
-                        </p>
-
-                        <span className="child-meta">
-                          🛒{" "}
+                    <div className="category-body">
+                      <div className="category-title">
+                        <h3>
                           {
-                            childProducts.length
-                          }{" "}
-                          sản phẩm
+                            child.name
+                          }
+                        </h3>
+
+                        <span>
+                          →
                         </span>
-
-                        <div className="view-all">
-
-                          <span>
-                            XEM SẢN PHẨM
-                          </span>
-
-                          <span>
-                            →
-                          </span>
-
-                        </div>
-
                       </div>
 
-                    </button>
-                  );
-                })}
+                      <p>
+                        {child.description ||
+                          "Xem sản phẩm trong thư mục này."}
+                      </p>
 
+                      <div className="meta">
+                        🛒{" "}
+                        {
+                          getProductsByCategory(
+                            child.id
+                          ).length
+                        }{" "}
+                        sản phẩm
+                      </div>
+
+                      <div className="view">
+                        XEM SẢN PHẨM →
+                      </div>
+                    </div>
+                  </button>
+                ))}
               </div>
             </>
           )}
 
-        {/* =================================================
-            PRODUCTS
-            ================================================= */}
-
+        {/* PRODUCTS */}
         {view === "products" && (
           <>
             <div className="products-heading">
-
               <div>
-
                 <button
-                  className="back-link"
+                  className="back"
                   onClick={
                     selectedChild
                       ? goParent
@@ -1374,16 +1320,11 @@ export default function ShopPage() {
                   Chọn sản phẩm để
                   mua KEY.
                 </p>
-
               </div>
 
               <div className="tools">
-
                 <div className="search">
-
-                  <span>
-                    🔎
-                  </span>
+                  🔎
 
                   <input
                     value={search}
@@ -1394,7 +1335,6 @@ export default function ShopPage() {
                     }
                     placeholder="Tìm sản phẩm..."
                   />
-
                 </div>
 
                 <select
@@ -1421,35 +1361,20 @@ export default function ShopPage() {
                     Tên A → Z
                   </option>
                 </select>
-
               </div>
-
             </div>
 
             {filteredProducts.length ===
             0 ? (
-              <div className="empty">
-
-                <div>
-                  🛒
-                </div>
-
-                <h3>
-                  Chưa có sản phẩm
-                </h3>
-
-                <p>
-                  Danh mục này hiện chưa
-                  có sản phẩm.
-                </p>
-
-              </div>
+              <Empty
+                icon="🛒"
+                title="Chưa có sản phẩm"
+                text="Danh mục này hiện chưa có sản phẩm."
+              />
             ) : (
               <div className="product-grid">
-
                 {filteredProducts.map(
                   (product) => {
-
                     const stock =
                       getStock(
                         product.id
@@ -1462,9 +1387,7 @@ export default function ShopPage() {
                         }
                         className="product-card"
                       >
-
                         <div className="cover">
-
                           <ProductMedia
                             product={
                               product
@@ -1482,18 +1405,17 @@ export default function ShopPage() {
                               ? `Còn ${stock}`
                               : "HẾT HÀNG"}
                           </span>
-
                         </div>
 
                         <div className="product-body">
-
-                          <div className="product-category">
+                          <span className="product-category">
                             {
                               selectedChild?.name ||
-                              product.category?.name ||
+                              product.category
+                                ?.name ||
                               ""
                             }
-                          </div>
+                          </span>
 
                           <h3>
                             {
@@ -1502,15 +1424,14 @@ export default function ShopPage() {
                           </h3>
 
                           <p className="description">
-                            {
-                              product.description ||
-                              "Sản phẩm XENOVA PLAY."
-                            }
+                            {product.description ||
+                              "Sản phẩm XENOVA PLAY."}
                           </p>
 
                           {product.duration_days && (
                             <div className="duration">
-                              ⏱ Thời hạn:{" "}
+                              ⏱{" "}
+                              Thời hạn:{" "}
                               {
                                 product.duration_days
                               }{" "}
@@ -1519,7 +1440,6 @@ export default function ShopPage() {
                           )}
 
                           <div className="product-bottom">
-
                             <strong className="price">
                               {formatPrice(
                                 product.price
@@ -1527,7 +1447,7 @@ export default function ShopPage() {
                             </strong>
 
                             <button
-                              className="buy-button"
+                              className="buy"
                               disabled={
                                 stock <= 0
                               }
@@ -1535,7 +1455,6 @@ export default function ShopPage() {
                                 setMessage(
                                   ""
                                 );
-
                                 setBuyModal(
                                   product
                                 );
@@ -1545,33 +1464,24 @@ export default function ShopPage() {
                                 ? "MUA NGAY"
                                 : "HẾT HÀNG"}
                             </button>
-
                           </div>
-
                         </div>
-
                       </div>
                     );
                   }
                 )}
-
               </div>
             )}
-
           </>
         )}
-
       </div>
 
-      {/* =================================================
-          ZALO
-          ================================================= */}
-
+      {/* ZALO */}
       <a
         href={ZALO_ADMIN}
         target="_blank"
         rel="noreferrer"
-        className="floating-admin"
+        className="zalo"
       >
         💬
         <span>
@@ -1579,13 +1489,9 @@ export default function ShopPage() {
         </span>
       </a>
 
-      {/* =================================================
-          BUY MODAL
-          ================================================= */}
-
+      {/* BUY MODAL */}
       {buyModal && (
-        <div className="modal-overlay">
-
+        <div className="overlay">
           <div className="modal">
 
             <button
@@ -1611,59 +1517,37 @@ export default function ShopPage() {
               }
             </p>
 
-            <div className="confirm-row">
+            <InfoRow
+              label="Giá"
+              value={formatPrice(
+                buyModal.price
+              )}
+            />
 
-              <span>
-                Giá
-              </span>
+            <InfoRow
+              label="Số dư"
+              value={formatPrice(
+                wallet
+              )}
+            />
 
-              <strong>
-                {formatPrice(
-                  buyModal.price
-                )}
-              </strong>
-
-            </div>
-
-            <div className="confirm-row">
-
-              <span>
-                Số dư
-              </span>
-
-              <strong>
-                {formatPrice(
-                  wallet
-                )}
-              </strong>
-
-            </div>
-
-            <div className="confirm-row">
-
-              <span>
-                Sau khi mua
-              </span>
-
-              <strong>
-                {formatPrice(
-                  Math.max(
-                    0,
-                    wallet -
-                      Number(
-                        buyModal.price ||
-                          0
-                      )
-                  )
-                )}
-              </strong>
-
-            </div>
+            <InfoRow
+              label="Sau khi mua"
+              value={formatPrice(
+                Math.max(
+                  0,
+                  wallet -
+                    Number(
+                      buyModal.price ||
+                        0
+                    )
+                )
+              )}
+            />
 
             <div className="modal-actions">
-
               <button
-                className="cancel-button"
+                className="cancel"
                 disabled={buying}
                 onClick={() =>
                   setBuyModal(null)
@@ -1673,7 +1557,7 @@ export default function ShopPage() {
               </button>
 
               <button
-                className="confirm-button"
+                className="confirm"
                 disabled={buying}
                 onClick={
                   handleBuy
@@ -1683,24 +1567,17 @@ export default function ShopPage() {
                   ? "ĐANG XỬ LÝ..."
                   : "XÁC NHẬN MUA"}
               </button>
-
             </div>
-
           </div>
-
         </div>
       )}
 
-      {/* =================================================
-          SUCCESS
-          ================================================= */}
-
+      {/* SUCCESS */}
       {successModal && (
-        <div className="modal-overlay">
+        <div className="overlay">
+          <div className="modal">
 
-          <div className="modal success-modal">
-
-            <div className="success-icon">
+            <div className="success">
               ✓
             </div>
 
@@ -1708,17 +1585,15 @@ export default function ShopPage() {
               Mua hàng thành công
             </h2>
 
-            <p>
+            <p className="modal-product">
               {
                 successModal
-                  .product
-                  ?.name
+                  .product?.name
               }
             </p>
 
             {successModal.key && (
               <div className="key-box">
-
                 <span>
                   KEY CỦA BẠN
                 </span>
@@ -1738,12 +1613,11 @@ export default function ShopPage() {
                 >
                   📋 Sao chép
                 </button>
-
               </div>
             )}
 
             <button
-              className="confirm-button full"
+              className="confirm full"
               onClick={() =>
                 setSuccessModal(
                   null
@@ -1752,23 +1626,40 @@ export default function ShopPage() {
             >
               ĐÓNG
             </button>
-
           </div>
-
         </div>
       )}
 
-      <style jsx>
-        {styles}
-      </style>
-
+      <style jsx>{styles}</style>
     </main>
   );
 }
 
-/* =========================================================
-   CSS
-   ========================================================= */
+function Empty({
+  icon,
+  title,
+  text,
+}) {
+  return (
+    <div className="empty">
+      <div>{icon}</div>
+      <h3>{title}</h3>
+      <p>{text}</p>
+    </div>
+  );
+}
+
+function InfoRow({
+  label,
+  value,
+}) {
+  return (
+    <div className="info-row">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
 
 const styles = `
 * {
@@ -1777,35 +1668,29 @@ const styles = `
 
 .page {
   min-height: 100vh;
-
   background:
     radial-gradient(
-      circle at 10% 10%,
-      rgba(255,120,190,.10),
+      circle at 10% 5%,
+      rgba(255,80,170,.12),
       transparent 28%
     ),
     radial-gradient(
-      circle at 90% 20%,
-      rgba(150,120,255,.08),
+      circle at 90% 10%,
+      rgba(130,80,255,.10),
       transparent 28%
     ),
     #f7f8fc;
-
   color: #222;
-
   font-family:
     Arial,
     Helvetica,
     sans-serif;
-
-  padding-bottom: 90px;
+  padding-bottom: 100px;
 }
 
-/* =========================================================
-   HOA HỒNG
-   ========================================================= */
+/* PETALS */
 
-.rose-petals {
+.petals {
   position: fixed;
   inset: 0;
   overflow: hidden;
@@ -1813,223 +1698,152 @@ const styles = `
   z-index: 80;
 }
 
-.rose-petal {
+.petal {
   position: absolute;
   top: -30px;
-
-  display: block;
-
   border-radius:
     75% 25% 70% 30%;
-
   background:
     linear-gradient(
       135deg,
       #ff5a91,
       #d71955
     );
-
-  opacity: .55;
-
-  transform:
-    rotate(25deg);
-
+  opacity: .45;
   animation:
-    roseFall
-    linear
-    infinite;
-
-  will-change:
-    transform;
+    fall linear infinite;
 }
 
-@keyframes roseFall {
-
+@keyframes fall {
   0% {
     transform:
-      translate3d(
-        0,
-        -40px,
-        0
-      )
+      translateY(-50px)
       rotate(0deg);
-
     opacity: 0;
   }
 
   10% {
-    opacity: .55;
+    opacity: .5;
   }
 
-  30% {
+  50% {
     transform:
-      translate3d(
-        30px,
-        30vh,
-        0
-      )
-      rotate(110deg);
-  }
-
-  55% {
-    transform:
-      translate3d(
-        -35px,
-        60vh,
-        0
-      )
+      translateY(55vh)
+      translateX(-35px)
       rotate(220deg);
-  }
-
-  80% {
-    opacity: .45;
-
-    transform:
-      translate3d(
-        45px,
-        85vh,
-        0
-      )
-      rotate(300deg);
   }
 
   100% {
     transform:
-      translate3d(
-        -25px,
-        110vh,
-        0
-      )
-      rotate(390deg);
-
+      translateY(110vh)
+      translateX(30px)
+      rotate(400deg);
     opacity: 0;
   }
 }
 
-/* =========================================================
-   TOPBAR
-   ========================================================= */
+/* TOP */
 
 .topbar {
   height: 64px;
-
   background:
     rgba(255,255,255,.96);
-
   border-bottom:
     1px solid #eee;
-
   position: sticky;
   top: 0;
-
   z-index: 100;
-
   backdrop-filter:
-    blur(14px);
+    blur(15px);
 }
 
 .topbar-inner {
   max-width: 1220px;
   height: 100%;
-
   margin: auto;
   padding: 0 18px;
-
   display: flex;
   align-items: center;
-  justify-content: space-between;
-
-  gap: 20px;
+  justify-content:
+    space-between;
+  gap: 15px;
 }
 
 .logo {
   border: 0;
   background: transparent;
-
-  cursor: pointer;
-
   display: flex;
   align-items: center;
-
   gap: 9px;
-
+  cursor: pointer;
+  color: #151515;
   font-size: 18px;
   font-weight: 900;
-
-  color: #151515;
 }
 
-.logo small {
-  color: #e83d94;
-  font-size: 12px;
+.logo-image {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  border-radius: 10px;
 }
 
-.logo-x {
-  width: 34px;
-  height: 34px;
-
+.logo-icon {
+  width: 35px;
+  height: 35px;
   border-radius: 11px;
-
   display: grid;
   place-items: center;
-
   background:
     linear-gradient(
       135deg,
       #ff4ba6,
       #8d54ff
     );
-
   color: white;
-
-  font-weight: 900;
-
   box-shadow:
     0 8px 20px
     rgba(232,61,148,.25);
 }
 
-.top-nav {
+.logo-text small {
+  color: #e83d94;
+  margin-left: 4px;
+  font-size: 11px;
+}
+
+.nav {
   display: flex;
   gap: 4px;
 }
 
-.top-nav button {
+.nav button {
   border: 0;
   background: transparent;
-
-  padding: 10px 14px;
-
+  padding: 10px 13px;
   border-radius: 9px;
-
   cursor: pointer;
-
   color: #666;
-
   font-weight: 700;
 }
 
-.top-nav button:hover,
-.top-nav button.active {
+.nav button:hover,
+.nav button.active {
   color: #e83d94;
   background: #fff0f7;
 }
 
-.account-area {
+.account {
   display: flex;
-  gap: 8px;
+  gap: 7px;
 }
 
 .wallet,
-.account {
+.account-button {
   border: 0;
-
   border-radius: 9px;
-
   padding: 9px 12px;
-
   cursor: pointer;
-
   font-weight: 700;
 }
 
@@ -2038,693 +1852,402 @@ const styles = `
   background: #fff0f7;
 }
 
-.account {
-  background: #222;
+.account-button {
   color: white;
+  background: #222;
 }
 
-/* =========================================================
-   HERO
-   ========================================================= */
+/* HERO */
 
 .hero {
   min-height: 155px;
-
   display: flex;
   align-items: center;
-
   background:
     linear-gradient(
       110deg,
-      #ffd9ec 0%,
+      #ffd9ec,
       #ffeef8 48%,
-      #eee4ff 100%
+      #eee4ff
     );
-
   border-bottom:
     1px solid #f1dbe8;
 }
 
-.hero > div {
+.hero-inner {
   width: 1220px;
-
   margin: auto;
-
   padding: 28px 18px;
 }
 
-.hero-badge {
+.badge {
   display: inline-block;
-
   background: white;
   color: #e23a91;
-
   padding: 6px 11px;
-
   border-radius: 999px;
-
   font-size: 11px;
   font-weight: 900;
-
   margin-bottom: 8px;
 }
 
 .hero h1 {
   margin: 0;
-
   font-size: 30px;
   font-weight: 900;
 }
 
 .hero p {
   margin: 7px 0 0;
-
   color: #777;
 }
 
-/* =========================================================
-   BANNER
-   ========================================================= */
+/* BANNER */
 
 .banner-section {
-  width: 100%;
-
-  padding:
-    18px
-    18px
-    4px;
+  padding: 18px 18px 4px;
 }
 
-.banner-container {
-  width: 100%;
+.banner {
   max-width: 1220px;
-
   margin: auto;
-}
-
-.banner-slider {
-  width: 100%;
-
   position: relative;
-
   overflow: hidden;
-
   border-radius: 18px;
-
-  background:
-    linear-gradient(
-      135deg,
-      #f9d7eb,
-      #eee4ff
-    );
-
-  box-shadow:
-    0 14px 40px
-    rgba(50,30,70,.10);
-
   aspect-ratio: 1200 / 320;
+  background: #eee;
+  box-shadow:
+    0 15px 40px
+    rgba(30,20,50,.10);
 }
 
 .banner-image {
   width: 100%;
   height: 100%;
-
   display: block;
-
   object-fit: cover;
-
   animation:
-    bannerFade
-    .45s
-    ease;
+    bannerFade .4s ease;
 }
 
 @keyframes bannerFade {
   from {
-    opacity: .45;
-    transform:
-      scale(1.015);
+    opacity: .4;
+    transform: scale(1.02);
   }
 
   to {
     opacity: 1;
-    transform:
-      scale(1);
+    transform: scale(1);
   }
 }
 
 .banner-arrow {
   position: absolute;
-
   top: 50%;
-
   transform:
     translateY(-50%);
-
-  width: 38px;
-  height: 38px;
-
+  width: 40px;
+  height: 40px;
   border: 0;
-
   border-radius: 50%;
-
   background:
-    rgba(255,255,255,.82);
-
+    rgba(255,255,255,.85);
   color: #e83d94;
-
-  font-size: 30px;
-  line-height: 1;
-
-  display: grid;
-  place-items: center;
-
+  font-size: 28px;
   cursor: pointer;
-
-  opacity: .85;
-
-  transition:
-    .2s;
 }
 
-.banner-arrow:hover {
-  opacity: 1;
-
-  background: white;
-
-  transform:
-    translateY(-50%)
-    scale(1.06);
-}
-
-.banner-prev {
+.banner-arrow.left {
   left: 12px;
 }
 
-.banner-next {
+.banner-arrow.right {
   right: 12px;
 }
 
-.banner-dots {
+.dots {
   position: absolute;
-
   left: 50%;
   bottom: 10px;
-
   transform:
     translateX(-50%);
-
   display: flex;
-
   gap: 6px;
-
-  padding:
-    6px 9px;
-
+  padding: 6px 9px;
   border-radius: 999px;
-
   background:
-    rgba(0,0,0,.20);
-
-  backdrop-filter:
-    blur(5px);
+    rgba(0,0,0,.25);
 }
 
-.banner-dot {
+.dot {
   width: 7px;
   height: 7px;
-
   padding: 0;
-
   border: 0;
-
   border-radius: 50%;
-
   background:
-    rgba(255,255,255,.60);
-
+    rgba(255,255,255,.55);
   cursor: pointer;
-
-  transition:
-    .2s;
 }
 
-.banner-dot.active {
+.dot.active {
   width: 20px;
-
   border-radius: 999px;
-
   background: white;
 }
 
-/* =========================================================
-   CONTAINER
-   ========================================================= */
+/* CONTENT */
 
 .container {
   max-width: 1220px;
-
   margin: auto;
-
   padding: 18px;
 }
 
 .breadcrumb {
   display: flex;
-
-  gap: 8px;
-
   align-items: center;
-
-  font-size: 13px;
-
-  color: #999;
-
+  gap: 8px;
   margin-bottom: 18px;
+  color: #999;
+  font-size: 13px;
 }
 
 .breadcrumb button {
   border: 0;
-
   background: transparent;
-
-  cursor: pointer;
-
-  color: #777;
-
   padding: 0;
+  color: #777;
+  cursor: pointer;
 }
 
 .breadcrumb strong {
   color: #e83d94;
 }
 
-/* =========================================================
-   HEADINGS
-   ========================================================= */
-
-.section-heading,
+.heading,
 .products-heading {
   display: flex;
-
-  align-items: flex-end;
-
   justify-content:
     space-between;
-
+  align-items: flex-end;
   gap: 15px;
-
   margin-bottom: 18px;
 }
 
-.section-heading h2,
-.products-heading h2 {
-  margin: 7px 0 0;
-
-  font-size: 23px;
-
+.eyebrow {
+  color: #e83d94;
+  font-size: 10px;
   font-weight: 900;
 }
 
-.section-heading p,
+.heading h2,
+.products-heading h2 {
+  margin: 6px 0 0;
+  font-size: 23px;
+}
+
+.heading p,
 .products-heading p {
   margin: 5px 0 0;
-
   color: #999;
-
   font-size: 12px;
 }
 
-.count-badge {
+.count {
   background: white;
-
   border: 1px solid #eee;
-
   border-radius: 999px;
-
   padding: 8px 12px;
-
   color: #e83d94;
-
   font-size: 11px;
-
-  font-weight: 850;
+  font-weight: 900;
 }
 
-.back-link {
+.back {
   border: 0;
-
   background: transparent;
-
   padding: 0;
-
   color: #e83d94;
-
   cursor: pointer;
-
   font-size: 11px;
-
-  font-weight: 850;
+  font-weight: 900;
 }
 
-/* =========================================================
-   CATEGORIES
-   ========================================================= */
+/* CATEGORIES */
 
-.parent-grid {
+.category-grid {
   display: grid;
-
   grid-template-columns:
-    repeat(2, minmax(0, 1fr));
-
+    repeat(2,minmax(0,1fr));
   gap: 18px;
 }
 
-.parent-card {
-  width: 100%;
-
-  border: 1px solid #eee;
-
+.category-card {
   padding: 0;
-
   overflow: hidden;
-
-  background: white;
-
+  border:
+    1px solid #eee;
   border-radius: 18px;
-
+  background: white;
   text-align: left;
-
   cursor: pointer;
-
   transition:
     transform .2s,
-    box-shadow .2s,
-    border-color .2s;
+    box-shadow .2s;
 }
 
-.parent-card:hover {
+.category-card:hover {
   transform:
     translateY(-4px);
-
-  border-color:
-    #f2bddb;
-
   box-shadow:
     0 18px 45px
     rgba(40,20,60,.10);
 }
 
 .category-media {
-  width: 100%;
-
-  height: 95px;
-
+  height: 190px;
+  position: relative;
+  overflow: hidden;
   background:
     linear-gradient(
       135deg,
       #f7edf4,
       #eeeafd
     );
-
-  position: relative;
-
-  overflow: hidden;
-}
-
-.category-media.large {
-  height: 190px;
 }
 
 .category-media img,
 .category-media video {
   width: 100%;
   height: 100%;
-
-  object-fit: cover;
-
   display: block;
+  object-fit: cover;
 }
 
-.category-video-badge {
-  position: absolute;
+.empty-media {
+  display: grid;
+  place-items: center;
+  font-size: 50px;
+}
 
+.video-badge {
+  position: absolute;
   top: 10px;
   left: 10px;
-
   padding: 5px 8px;
-
   border-radius: 7px;
-
-  background:
-    rgba(0,0,0,.62);
-
   color: white;
-
+  background:
+    rgba(0,0,0,.65);
   font-size: 9px;
-
   font-weight: 900;
 }
 
-.category-empty {
-  display: flex;
-
-  flex-direction: column;
-
-  justify-content: center;
-  align-items: center;
-
-  color: #aaa;
-
-  gap: 6px;
-}
-
-.category-empty span {
-  font-size: 38px;
-}
-
-.category-empty small {
-  font-size: 10px;
-}
-
-.parent-card-body,
-.child-card-body {
+.category-body {
   padding: 15px;
 }
 
-.parent-card-title-row,
-.child-card-title-row {
+.category-title {
   display: flex;
-
   align-items: center;
-
   justify-content:
     space-between;
-
   gap: 10px;
 }
 
-.parent-card h3,
-.child-card h3 {
+.category-title h3 {
   margin: 0;
-
-  color: #222;
-
   font-size: 17px;
+  color: #222;
+}
 
+.category-title span {
+  width: 31px;
+  height: 31px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #fff0f7;
+  color: #e83d94;
   font-weight: 900;
 }
 
-.parent-card-body p,
-.child-card-body p {
+.category-body p {
   margin: 7px 0;
-
   color: #888;
-
   font-size: 11px;
-
   line-height: 1.5;
 }
 
-.circle-arrow {
-  width: 31px;
-  height: 31px;
-
-  flex-shrink: 0;
-
-  display: grid;
-
-  place-items: center;
-
-  border-radius: 50%;
-
-  background: #fff0f7;
-
-  color: #e83d94;
-
-  font-weight: 900;
-}
-
-.parent-meta {
-  display: flex;
-
-  gap: 7px;
-
-  flex-wrap: wrap;
-
-  margin-top: 11px;
-}
-
-.parent-meta span,
-.child-meta {
+.meta {
+  display: inline-block;
+  margin-top: 6px;
   padding: 6px 8px;
-
   border-radius: 7px;
-
   background: #f7f7fa;
-
   color: #888;
-
   font-size: 9px;
-
-  font-weight: 750;
+  font-weight: 800;
 }
 
-.view-all {
+.view {
   margin-top: 13px;
-
-  display: flex;
-
-  align-items: center;
-
-  justify-content:
-    space-between;
-
   color: #e83d94;
-
   font-size: 10px;
-
   font-weight: 900;
 }
 
-.child-grid {
-  display: grid;
-
-  grid-template-columns:
-    repeat(2, minmax(0, 1fr));
-
-  gap: 18px;
-}
-
-.child-card {
-  width: 100%;
-
-  border: 1px solid #eee;
-
-  padding: 0;
-
-  overflow: hidden;
-
-  background: white;
-
-  border-radius: 18px;
-
-  text-align: left;
-
-  cursor: pointer;
-
-  transition:
-    transform .2s,
-    box-shadow .2s,
-    border-color .2s;
-}
-
-.child-card:hover {
-  transform:
-    translateY(-4px);
-
-  border-color:
-    #f2bddb;
-
-  box-shadow:
-    0 18px 45px
-    rgba(40,20,60,.10);
-}
-
-/* =========================================================
-   TOOLS
-   ========================================================= */
+/* PRODUCTS */
 
 .tools {
   display: flex;
-
   gap: 8px;
 }
 
 .search {
-  width: 210px;
+  width: 220px;
   height: 38px;
-
-  background: white;
-
-  border: 1px solid #eee;
-
-  border-radius: 9px;
-
   display: flex;
-
   align-items: center;
-
+  gap: 7px;
   padding: 0 10px;
-
-  gap: 6px;
+  border:
+    1px solid #eee;
+  border-radius: 9px;
+  background: white;
 }
 
 .search input {
   width: 100%;
-
   border: 0;
-
   outline: 0;
-
   font-size: 12px;
 }
 
 .tools select {
   border:
     1px solid #eee;
-
   background: white;
-
   border-radius: 9px;
-
   padding: 0 10px;
-
   outline: 0;
 }
 
-/* =========================================================
-   PRODUCTS
-   ========================================================= */
-
 .product-grid {
   display: grid;
-
   grid-template-columns:
-    repeat(4, minmax(0,1fr));
-
+    repeat(4,minmax(0,1fr));
   gap: 14px;
 }
 
 .product-card {
-  background: white;
-
-  border: 1px solid #eee;
-
-  border-radius: 13px;
-
   overflow: hidden;
-
+  background: white;
+  border:
+    1px solid #eee;
+  border-radius: 13px;
   transition:
     transform .18s,
     box-shadow .18s;
@@ -2733,7 +2256,6 @@ const styles = `
 .product-card:hover {
   transform:
     translateY(-3px);
-
   box-shadow:
     0 15px 35px
     rgba(40,20,60,.10);
@@ -2741,48 +2263,35 @@ const styles = `
 
 .cover {
   height: 150px;
-
-  background: #f0f1f6;
-
   position: relative;
-
   overflow: hidden;
+  background: #eee;
 }
 
 .product-media {
   width: 100%;
   height: 100%;
-
   display: block;
-
   object-fit: cover;
 }
 
 .stock {
   position: absolute;
-
-  right: 8px;
   top: 8px;
-
+  right: 8px;
   padding: 4px 7px;
-
   border-radius: 999px;
-
   font-size: 9px;
-
   font-weight: 900;
 }
 
-.stock.available {
-  background:
-    rgba(255,255,255,.94);
-
-  color: #22a05a;
+.available {
+  background: white;
+  color: #20a35b;
 }
 
-.stock.soldout {
+.soldout {
   background: #222;
-
   color: white;
 }
 
@@ -2792,122 +2301,72 @@ const styles = `
 
 .product-category {
   color: #e83d94;
-
   font-size: 9px;
-
   font-weight: 900;
-
   text-transform: uppercase;
-
-  margin-bottom: 5px;
-
-  white-space: nowrap;
-
-  overflow: hidden;
-
-  text-overflow: ellipsis;
 }
 
 .product-body h3 {
-  margin: 0;
-
+  margin: 5px 0 0;
   font-size: 14px;
-
-  line-height: 1.35;
 }
 
 .description {
   margin: 6px 0;
-
-  color: #888;
-
-  font-size: 10px;
-
-  line-height: 1.45;
-
   min-height: 28px;
+  color: #888;
+  font-size: 10px;
+  line-height: 1.45;
 }
 
 .duration {
   color: #888;
-
   font-size: 10px;
-
-  margin-top: 5px;
 }
 
 .product-bottom {
   margin-top: 11px;
-
   display: flex;
-
   align-items: center;
-
   justify-content:
     space-between;
-
   gap: 7px;
 }
 
 .price {
   color: #e52f8d;
-
   font-size: 15px;
-
-  white-space: nowrap;
 }
 
-.buy-button {
+.buy {
   border: 0;
-
   border-radius: 7px;
-
   padding: 8px 9px;
-
   background: #e83d94;
-
   color: white;
-
   font-size: 9px;
-
   font-weight: 900;
-
   cursor: pointer;
 }
 
-.buy-button:hover {
-  background: #d92f85;
-}
-
-.buy-button:disabled {
+.buy:disabled {
   background: #bbb;
-
   cursor: not-allowed;
 }
 
-/* =========================================================
-   EMPTY / MESSAGE
-   ========================================================= */
+/* EMPTY */
 
 .empty {
   min-height: 300px;
-
-  background: white;
-
-  border: 1px solid #eee;
-
-  border-radius: 14px;
-
   display: flex;
-
   flex-direction: column;
-
   align-items: center;
-
   justify-content: center;
-
+  border:
+    1px solid #eee;
+  border-radius: 14px;
+  background: white;
   color: #999;
-
   text-align: center;
 }
 
@@ -2916,128 +2375,87 @@ const styles = `
 }
 
 .empty h3 {
-  color: #555;
-
   margin: 10px 0 4px;
+  color: #555;
 }
 
 .empty p {
   margin: 0;
-
   font-size: 12px;
 }
 
-.error-box,
-.message-box {
-  padding: 12px 14px;
-
-  border-radius: 10px;
-
+.error,
+.message {
   margin-bottom: 13px;
-
+  padding: 12px 14px;
+  border-radius: 10px;
   font-size: 12px;
 }
 
-.error-box {
+.error {
   background: #fff0f0;
-
   color: #c33;
 }
 
-.message-box {
-  background: #fff4d9;
-
-  color: #8a6200;
-
+.message {
   display: flex;
-
   justify-content:
     space-between;
+  background: #fff4d9;
+  color: #8a6200;
 }
 
-.message-box button {
+.message button {
   border: 0;
-
   background: transparent;
-
   cursor: pointer;
 }
 
-/* =========================================================
-   ADMIN
-   ========================================================= */
+/* ZALO */
 
-.floating-admin {
+.zalo {
   position: fixed;
-
   right: 18px;
   bottom: 18px;
-
   z-index: 90;
-
-  background: #e83d94;
-
-  color: white;
-
-  text-decoration: none;
-
-  border-radius: 999px;
-
-  padding: 11px 15px;
-
   display: flex;
-
   align-items: center;
-
   gap: 7px;
-
+  padding: 11px 15px;
+  border-radius: 999px;
+  background: #e83d94;
+  color: white;
+  text-decoration: none;
   font-size: 12px;
-
   font-weight: 900;
-
   box-shadow:
     0 8px 25px
     rgba(232,61,148,.3);
 }
 
-/* =========================================================
-   MODAL
-   ========================================================= */
+/* MODAL */
 
-.modal-overlay {
+.overlay {
   position: fixed;
-
   inset: 0;
-
   z-index: 500;
-
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
   background:
     rgba(20,15,25,.55);
-
-  display: flex;
-
-  align-items: center;
-
-  justify-content: center;
-
-  padding: 18px;
-
   backdrop-filter:
-    blur(4px);
+    blur(5px);
 }
 
 .modal {
-  position: relative;
-
   width:
     min(420px,100%);
-
-  background: white;
-
-  border-radius: 18px;
-
+  position: relative;
   padding: 25px;
-
+  border-radius: 18px;
+  background: white;
   box-shadow:
     0 30px 80px
     rgba(0,0,0,.25);
@@ -3045,239 +2463,171 @@ const styles = `
 
 .close {
   position: absolute;
-
   right: 15px;
   top: 13px;
-
-  border: 0;
-
-  background: #f4f4f4;
-
   width: 30px;
   height: 30px;
-
+  border: 0;
   border-radius: 50%;
-
+  background: #f4f4f4;
   cursor: pointer;
-
   font-size: 18px;
 }
 
 .modal-icon,
-.success-icon {
+.success {
   width: 55px;
   height: 55px;
-
   margin: auto;
-
-  border-radius: 16px;
-
   display: grid;
-
   place-items: center;
-
-  font-size: 25px;
-
+  border-radius: 16px;
   background: #fff0f7;
+  font-size: 25px;
 }
 
-.success-icon {
+.success {
   background: #e9fff1;
-
   color: #19a758;
-
   font-weight: 900;
 }
 
 .modal h2 {
   text-align: center;
-
   margin: 13px 0 5px;
 }
 
 .modal-product {
   text-align: center;
-
   color: #e83d94;
-
   font-weight: 800;
 }
 
-.confirm-row {
+.info-row {
   display: flex;
-
   justify-content:
     space-between;
-
+  padding: 11px 0;
   border-bottom:
     1px solid #eee;
-
-  padding: 11px 0;
-
   font-size: 13px;
 }
 
-.confirm-row strong {
+.info-row strong {
   color: #e83d94;
 }
 
 .modal-actions {
   display: grid;
-
   grid-template-columns:
     1fr 1fr;
-
   gap: 8px;
-
   margin-top: 18px;
 }
 
-.cancel-button,
-.confirm-button {
+.cancel,
+.confirm {
   border: 0;
-
   border-radius: 9px;
-
   padding: 11px;
-
   cursor: pointer;
-
   font-weight: 900;
 }
 
-.cancel-button {
+.cancel {
   background: #eee;
 }
 
-.confirm-button {
+.confirm {
   background: #e83d94;
-
   color: white;
 }
 
-.confirm-button:disabled {
+.confirm:disabled {
   opacity: .6;
-
-  cursor: not-allowed;
 }
 
-.confirm-button.full {
+.full {
   width: 100%;
-
   margin-top: 15px;
 }
 
 .key-box {
   margin-top: 15px;
-
   padding: 14px;
-
-  background: #f7f7fa;
-
   border-radius: 10px;
-
+  background: #f7f7fa;
   text-align: center;
 }
 
 .key-box span {
   display: block;
-
   color: #999;
-
   font-size: 10px;
-
   margin-bottom: 7px;
 }
 
 .key-box strong {
   display: block;
-
-  word-break: break-all;
-
-  font-size: 15px;
-
   color: #e83d94;
+  word-break: break-all;
+  font-size: 15px;
 }
 
 .key-box button {
   margin-top: 10px;
-
   border:
     1px solid #eee;
-
   background: white;
-
   border-radius: 7px;
-
   padding: 7px 10px;
-
   cursor: pointer;
 }
 
-/* =========================================================
-   LOADING
-   ========================================================= */
+/* LOADING */
 
-.loading-screen {
+.loading {
   min-height: 100vh;
-
-  background: #f7f8fc;
-
   display: grid;
-
   place-items: center;
-}
-
-.loading-box {
-  text-align: center;
-
+  align-content: center;
+  gap: 12px;
+  background: #f7f8fc;
   color: #888;
 }
 
-.loader {
+.spinner {
   width: 40px;
   height: 40px;
-
   border:
     4px solid #eee;
-
   border-top-color:
     #e83d94;
-
   border-radius: 50%;
-
   animation:
-    spin .8s
-    linear infinite;
-
-  margin: auto;
+    spin .8s linear infinite;
 }
 
 @keyframes spin {
   to {
-    transform:
-      rotate(360deg);
+    transform: rotate(360deg);
   }
 }
 
-/* =========================================================
-   RESPONSIVE
-   ========================================================= */
+/* RESPONSIVE */
 
 @media (max-width: 1050px) {
-
   .product-grid {
     grid-template-columns:
       repeat(3,minmax(0,1fr));
   }
 
-  .top-nav {
+  .nav {
     display: none;
   }
 }
 
 @media (max-width: 760px) {
-
   .topbar {
     height: 58px;
   }
@@ -3286,7 +2636,7 @@ const styles = `
     padding: 0 11px;
   }
 
-  .account {
+  .account-button {
     display: none;
   }
 
@@ -3298,7 +2648,7 @@ const styles = `
     min-height: 125px;
   }
 
-  .hero > div {
+  .hero-inner {
     padding: 22px 14px;
   }
 
@@ -3308,116 +2658,50 @@ const styles = `
 
   .banner-section {
     padding:
-      10px
-      10px
-      2px;
+      10px 10px 2px;
   }
 
-  .banner-slider {
+  .banner {
     border-radius: 13px;
   }
 
   .banner-arrow {
     width: 31px;
     height: 31px;
-
     font-size: 24px;
-  }
-
-  .banner-prev {
-    left: 7px;
-  }
-
-  .banner-next {
-    right: 7px;
-  }
-
-  .banner-dots {
-    bottom: 6px;
-
-    padding:
-      5px 7px;
-  }
-
-  .banner-dot {
-    width: 6px;
-    height: 6px;
-  }
-
-  .banner-dot.active {
-    width: 16px;
   }
 
   .container {
     padding: 12px;
   }
 
-  .parent-grid,
-  .child-grid {
-    grid-template-columns:
-      repeat(2,minmax(0,1fr));
-
+  .category-grid {
     gap: 9px;
   }
 
-  .category-media.large {
+  .category-media {
     height: 125px;
   }
 
-  .parent-card-body,
-  .child-card-body {
+  .category-body {
     padding: 10px;
   }
 
-  .parent-card h3,
-  .child-card h3 {
+  .category-title h3 {
     font-size: 12px;
   }
 
-  .parent-card-body p,
-  .child-card-body p {
+  .category-body p {
     font-size: 9px;
   }
 
-  .parent-meta {
-    display: block;
-  }
-
-  .parent-meta span {
-    display: block;
-
-    margin-top: 4px;
-  }
-
-  .view-all {
-    font-size: 8px;
-  }
-
-  .circle-arrow {
-    width: 25px;
-    height: 25px;
-
-    font-size: 11px;
-  }
-
-  .section-heading,
   .products-heading {
-    align-items:
-      flex-start;
-  }
-
-  .count-badge {
-    font-size: 9px;
-
-    padding:
-      6px 8px;
+    display: block;
   }
 
   .tools {
     margin-top: 10px;
-
     display: grid;
-
     grid-template-columns:
       1fr 125px;
   }
@@ -3429,7 +2713,6 @@ const styles = `
   .product-grid {
     grid-template-columns:
       repeat(2,minmax(0,1fr));
-
     gap: 9px;
   }
 
@@ -3449,42 +2732,28 @@ const styles = `
     font-size: 13px;
   }
 
-  .buy-button {
+  .buy {
     padding: 7px;
-
-    font-size: 8px;
   }
 
-  .floating-admin {
+  .zalo {
     right: 12px;
     bottom: 12px;
-
-    padding:
-      10px 12px;
   }
 
-  .floating-admin span {
+  .zalo span {
     display: none;
-  }
-
-  .rose-petal {
-    opacity: .38;
   }
 }
 
 @media (max-width: 390px) {
-
-  .parent-grid,
-  .child-grid {
-    gap: 7px;
-  }
-
-  .category-media.large {
-    height: 105px;
-  }
-
+  .category-grid,
   .product-grid {
     gap: 7px;
+  }
+
+  .category-media {
+    height: 105px;
   }
 
   .cover {
@@ -3494,17 +2763,12 @@ const styles = `
   .price {
     font-size: 12px;
   }
-
-  .buy-button {
-    padding: 6px;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-
-  .rose-petal,
+  .petal,
   .banner-image,
-  .loader {
+  .spinner {
     animation: none !important;
   }
 }
