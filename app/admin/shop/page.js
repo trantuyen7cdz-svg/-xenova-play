@@ -21,6 +21,27 @@ function isImage(file) {
   return Boolean(file && file.type?.startsWith("image/"));
 }
 
+async function getAccessToken() {
+  const {
+    data: { session },
+    error,
+  } = await supabase.auth.getSession();
+
+  if (error) {
+    throw new Error(
+      error.message || "Không thể lấy phiên đăng nhập."
+    );
+  }
+
+  if (!session?.access_token) {
+    throw new Error(
+      "Chưa nhận được phiên đăng nhập. Vui lòng đăng nhập lại."
+    );
+  }
+
+  return session.access_token;
+}
+
 export default function AdminShopPage() {
   const bannerInputRef = useRef(null);
   const logoInputRef = useRef(null);
@@ -36,48 +57,15 @@ export default function AdminShopPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  /*
-   * Lấy access token hiện tại.
-   * API Admin dùng token này để xác thực phiên đăng nhập.
-   */
-  async function getAccessToken() {
-    const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession();
-
-    if (sessionError) {
-      throw new Error(
-        sessionError.message || "Không thể lấy phiên đăng nhập."
-      );
-    }
-
-    if (!session?.access_token) {
-      throw new Error(
-        "Chưa nhận được phiên đăng nhập. Vui lòng đăng nhập lại."
-      );
-    }
-
-    return session.access_token;
-  }
-
-  /*
-   * Chờ Supabase khôi phục session rồi mới tải dữ liệu Admin.
-   */
   useEffect(() => {
     let mounted = true;
 
-    async function init() {
+    async function initialize() {
       try {
         setLoading(true);
         setError("");
         setMessage("");
 
-        /*
-         * Lấy session hiện tại.
-         * Nếu Supabase đang khôi phục session, getSession()
-         * sẽ trả session sau khi client khởi tạo xong.
-         */
         const {
           data: { session },
           error: sessionError,
@@ -86,43 +74,37 @@ export default function AdminShopPage() {
         if (sessionError) {
           throw new Error(
             sessionError.message ||
-              "Không thể kiểm tra phiên đăng nhập."
+              "Không thể lấy phiên đăng nhập."
           );
         }
 
         if (!session?.access_token) {
           if (mounted) {
+            setLoading(false);
             setError(
               "Chưa nhận được phiên đăng nhập. Vui lòng đăng nhập lại."
             );
-            setLoading(false);
           }
 
           return;
         }
 
-        if (mounted) {
-          await loadSettings(session.access_token);
-        }
+        await loadSettings(session.access_token);
       } catch (err) {
         console.error(err);
 
         if (mounted) {
           setError(
             err?.message ||
-              "Không thể tải quản lý SHOP."
+              "Không thể khởi tạo trang quản lý SHOP."
           );
           setLoading(false);
         }
       }
     }
 
-    init();
+    initialize();
 
-    /*
-     * Khi Supabase phát hiện đăng nhập / đăng xuất,
-     * cập nhật lại trạng thái Admin.
-     */
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(
@@ -134,9 +116,7 @@ export default function AdminShopPage() {
           event === "TOKEN_REFRESHED"
         ) {
           if (session?.access_token) {
-            await loadSettings(
-              session.access_token
-            );
+            await loadSettings(session.access_token);
           }
         }
 
@@ -160,7 +140,6 @@ export default function AdminShopPage() {
     try {
       setLoading(true);
       setError("");
-      setMessage("");
 
       const token =
         accessToken || (await getAccessToken());
@@ -199,25 +178,18 @@ export default function AdminShopPage() {
                 id:
                   banner?.id ||
                   `banner-${Date.now()}-${index}`,
-
                 image_url: String(
                   banner?.image_url || ""
                 ),
-
                 enabled:
                   banner?.enabled !== false,
-
-                order:
-                  Number.isFinite(
-                    Number(banner?.order)
-                  )
-                    ? Number(
-                        banner.order
-                      )
-                    : index,
+                order: Number.isFinite(
+                  Number(banner?.order)
+                )
+                  ? Number(banner.order)
+                  : index,
               })
             )
-          )
           : []
       );
     } catch (err) {
@@ -225,7 +197,7 @@ export default function AdminShopPage() {
 
       setError(
         err?.message ||
-          "Không thể tải cài đặt SHOP."
+          "Có lỗi khi tải cài đặt SHOP."
       );
     } finally {
       setLoading(false);
@@ -255,9 +227,6 @@ export default function AdminShopPage() {
       );
     }
 
-    /*
-     * Kiểm tra user hiện tại trước khi upload.
-     */
     const {
       data: { user },
       error: userError,
@@ -269,12 +238,11 @@ export default function AdminShopPage() {
 
     if (!user) {
       throw new Error(
-        "Bạn chưa đăng nhập hoặc phiên đăng nhập đã hết."
+        "Bạn chưa đăng nhập."
       );
     }
 
-    const extension =
-      getExtension(file);
+    const extension = getExtension(file);
 
     const prefix =
       type === "logo"
@@ -286,12 +254,7 @@ export default function AdminShopPage() {
         .toString(36)
         .slice(2, 10)}.${extension}`;
 
-    /*
-     * Giữ nguyên đường dẫn user.id
-     * để không làm thay đổi Storage Policy hiện tại.
-     */
-    const path =
-      `${user.id}/${fileName}`;
+    const path = `${user.id}/${fileName}`;
 
     const {
       error: uploadError,
@@ -310,11 +273,10 @@ export default function AdminShopPage() {
       );
     }
 
-    const {
-      data: publicData,
-    } = supabase.storage
-      .from(BUCKET)
-      .getPublicUrl(path);
+    const { data: publicData } =
+      supabase.storage
+        .from(BUCKET)
+        .getPublicUrl(path);
 
     if (!publicData?.publicUrl) {
       throw new Error(
@@ -337,11 +299,10 @@ export default function AdminShopPage() {
       clearMessages();
       setUploadingLogo(true);
 
-      const url =
-        await uploadImage(
-          file,
-          "logo"
-        );
+      const url = await uploadImage(
+        file,
+        "logo"
+      );
 
       setLogoUrl(url);
 
@@ -376,22 +337,18 @@ export default function AdminShopPage() {
       const uploaded = [];
 
       for (const file of files) {
-        const url =
-          await uploadImage(
-            file,
-            "banner"
-          );
+        const url = await uploadImage(
+          file,
+          "banner"
+        );
 
         uploaded.push({
           id:
             `banner-${Date.now()}-${Math.random()
               .toString(36)
               .slice(2, 10)}`,
-
           image_url: url,
-
           enabled: true,
-
           order:
             banners.length +
             uploaded.length,
@@ -436,15 +393,12 @@ export default function AdminShopPage() {
     setBanners((current) =>
       current
         .filter(
-          (banner) =>
-            banner.id !== id
+          (banner) => banner.id !== id
         )
-        .map(
-          (banner, index) => ({
-            ...banner,
-            order: index,
-          })
-        )
+        .map((banner, index) => ({
+          ...banner,
+          order: index,
+        }))
     );
   }
 
@@ -500,11 +454,6 @@ export default function AdminShopPage() {
       setSaving(true);
       clearMessages();
 
-      /*
-       * QUAN TRỌNG:
-       * Lấy access token và gửi Authorization
-       * cho API Admin.
-       */
       const accessToken =
         await getAccessToken();
 
@@ -520,13 +469,10 @@ export default function AdminShopPage() {
           .map(
             (banner, index) => ({
               id: banner.id,
-
               image_url:
                 banner.image_url.trim(),
-
               enabled:
                 banner.enabled !== false,
-
               order: index,
             })
           );
@@ -536,19 +482,15 @@ export default function AdminShopPage() {
           "/api/admin/shop-settings",
           {
             method: "PUT",
-
             headers: {
               "Content-Type":
                 "application/json",
-
               Authorization:
                 `Bearer ${accessToken}`,
             },
-
             body: JSON.stringify({
               logo_url:
                 logoUrl.trim(),
-
               banners:
                 cleanBanners,
             }),
@@ -624,8 +566,8 @@ export default function AdminShopPage() {
             </h1>
 
             <p style={styles.subtitle}>
-              Quản lý logo và banner hiển thị trên trang
-              SHOP.
+              Quản lý logo và banner
+              hiển thị trên trang SHOP.
             </p>
           </div>
 
@@ -635,8 +577,9 @@ export default function AdminShopPage() {
             disabled={saving}
             style={{
               ...styles.saveButton,
-              opacity:
-                saving ? 0.65 : 1,
+              opacity: saving
+                ? 0.65
+                : 1,
             }}
           >
             {saving
@@ -665,149 +608,93 @@ export default function AdminShopPage() {
           </div>
         )}
 
-        {/* ================= LOGO ================= */}
-
+        {/* LOGO */}
         <section style={styles.card}>
-          <div
-            style={
-              styles.sectionHeader
-            }
-          >
+          <div style={styles.cardHeader}>
             <div>
-              <h2
-                style={
-                  styles.sectionTitle
-                }
-              >
+              <h2 style={styles.cardTitle}>
                 LOGO SHOP
               </h2>
 
               <p
                 style={
-                  styles.sectionDescription
+                  styles.cardDescription
                 }
               >
-                Logo này sẽ được sử dụng trên giao diện
-                SHOP. Bạn có thể thay đổi bất cứ lúc nào.
+                Upload logo trực tiếp từ
+                máy. Logo sẽ được dùng
+                trên SHOP.
               </p>
             </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                logoInputRef.current?.click()
+              }
+              disabled={uploadingLogo}
+              style={{
+                ...styles.primaryButton,
+                opacity: uploadingLogo
+                  ? 0.6
+                  : 1,
+              }}
+            >
+              {uploadingLogo
+                ? "ĐANG UPLOAD..."
+                : "📤 TẢI LOGO"}
+            </button>
+
+            <input
+              ref={logoInputRef}
+              type="file"
+              accept="image/*"
+              onChange={
+                handleLogoUpload
+              }
+              style={{
+                display: "none",
+              }}
+            />
           </div>
 
-          <div style={styles.logoArea}>
-            <div
-              style={
-                styles.logoPreview
-              }
-            >
-              {logoUrl ? (
-                <img
-                  src={logoUrl}
-                  alt="XENOVA PLAY Logo"
-                  style={
-                    styles.logoImage
-                  }
-                />
-              ) : (
-                <div
-                  style={
-                    styles.noLogo
-                  }
-                >
-                  <span>𝕏</span>
-
-                  <small>
-                    CHƯA CÓ LOGO
-                  </small>
-                </div>
-              )}
-            </div>
-
-            <div
-              style={
-                styles.logoActions
-              }
-            >
-              <button
-                type="button"
-                onClick={() =>
-                  logoInputRef.current?.click()
-                }
-                disabled={
-                  uploadingLogo
-                }
+          <div
+            style={styles.logoPreview}
+          >
+            {logoUrl ? (
+              <img
+                src={logoUrl}
+                alt="Logo XENOVA PLAY"
                 style={
-                  styles.primaryButton
+                  styles.logoImage
                 }
-              >
-                {uploadingLogo
-                  ? "ĐANG UPLOAD..."
-                  : "🖼️ TẢI LOGO MỚI"}
-              </button>
-
-              {logoUrl && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLogoUrl("");
-
-                    setMessage(
-                      "Đã xóa logo khỏi cấu hình. Nhấn LƯU CẤU HÌNH để áp dụng."
-                    );
-                  }}
-                  style={
-                    styles.deleteButton
-                  }
-                >
-                  🗑️ XÓA LOGO
-                </button>
-              )}
-
-              <input
-                ref={logoInputRef}
-                type="file"
-                accept="image/*"
-                onChange={
-                  handleLogoUpload
-                }
-                style={{
-                  display: "none",
-                }}
               />
-
+            ) : (
               <div
-                style={styles.hint}
+                style={styles.noLogo}
               >
-                JPG, PNG, WEBP, GIF hoặc AVIF · tối đa
-                10MB
+                CHƯA CÓ LOGO
               </div>
-            </div>
+            )}
           </div>
         </section>
 
-        {/* ================= BANNER ================= */}
-
+        {/* BANNER */}
         <section style={styles.card}>
-          <div
-            style={
-              styles.sectionHeader
-            }
-          >
+          <div style={styles.cardHeader}>
             <div>
-              <h2
-                style={
-                  styles.sectionTitle
-                }
-              >
-                BANNER QUẢNG CÁO
+              <h2 style={styles.cardTitle}>
+                BANNER SHOP
               </h2>
 
               <p
                 style={
-                  styles.sectionDescription
+                  styles.cardDescription
                 }
               >
-                Thêm nhiều banner. Banner đang bật sẽ
-                tự động chạy trên SHOP.
+                Có thể upload nhiều banner,
+                bật/tắt, xoá và sắp xếp
+                thứ tự.
               </p>
             </div>
 
@@ -816,16 +703,18 @@ export default function AdminShopPage() {
               onClick={() =>
                 bannerInputRef.current?.click()
               }
-              disabled={
-                uploadingBanner
-              }
-              style={
-                styles.primaryButton
-              }
+              disabled={uploadingBanner}
+              style={{
+                ...styles.primaryButton,
+                opacity:
+                  uploadingBanner
+                    ? 0.6
+                    : 1,
+              }}
             >
               {uploadingBanner
                 ? "ĐANG UPLOAD..."
-                : "＋ THÊM BANNER"}
+                : "📤 TẢI BANNER"}
             </button>
 
             <input
@@ -842,24 +731,16 @@ export default function AdminShopPage() {
             />
           </div>
 
-          {banners.length === 0 ? (
-            <div style={styles.empty}>
-              <div
-                style={
-                  styles.emptyIcon
-                }
-              >
-                🖼️
-              </div>
-
-              <strong>
-                Chưa có banner
-              </strong>
-
-              <span>
-                Nhấn “THÊM BANNER” để tải ảnh quảng cáo
-                lên.
-              </span>
+          {!banners.length ? (
+            <div
+              style={
+                styles.emptyBanner
+              }
+            >
+              Chưa có banner nào.
+              <br />
+              Hãy tải banner lên bằng
+              nút phía trên.
             </div>
           ) : (
             <div
@@ -870,17 +751,13 @@ export default function AdminShopPage() {
               {banners.map(
                 (banner, index) => (
                   <div
-                    key={
-                      banner.id ||
-                      index
-                    }
+                    key={banner.id}
                     style={{
                       ...styles.bannerItem,
                       opacity:
-                        banner.enabled ===
-                        false
-                          ? 0.55
-                          : 1,
+                        banner.enabled
+                          ? 1
+                          : 0.5,
                     }}
                   >
                     <div
@@ -888,12 +765,12 @@ export default function AdminShopPage() {
                         styles.bannerNumber
                       }
                     >
-                      {index + 1}
+                      #{index + 1}
                     </div>
 
                     <div
                       style={
-                        styles.bannerPreview
+                        styles.bannerImageWrap
                       }
                     >
                       {banner.image_url ? (
@@ -911,10 +788,10 @@ export default function AdminShopPage() {
                       ) : (
                         <div
                           style={
-                            styles.invalidImage
+                            styles.noBanner
                           }
                         >
-                          Không có ảnh
+                          KHÔNG CÓ ẢNH
                         </div>
                       )}
                     </div>
@@ -924,234 +801,211 @@ export default function AdminShopPage() {
                         styles.bannerInfo
                       }
                     >
-                      <strong>
-                        BANNER{" "}
-                        {index + 1}
-                      </strong>
-
-                      <span
-                        style={{
-                          ...styles.status,
-                          background:
-                            banner.enabled ===
-                            false
-                              ? "#3a3a3a"
-                              : "#163d29",
-                          color:
-                            banner.enabled ===
-                            false
-                              ? "#aaa"
-                              : "#66e09b",
-                        }}
+                      <div
+                        style={
+                          styles.status
+                        }
                       >
-                        {banner.enabled ===
-                        false
-                          ? "ĐANG TẮT"
-                          : "ĐANG BẬT"}
-                      </span>
-                    </div>
+                        {banner.enabled
+                          ? "● ĐANG HIỂN THỊ"
+                          : "○ ĐANG TẮT"}
+                      </div>
 
-                    <div
-                      style={
-                        styles.bannerControls
-                      }
-                    >
-                      <button
-                        type="button"
-                        onClick={() =>
-                          moveBanner(
-                            banner.id,
-                            "up"
-                          )
+                      <div
+                        style={
+                          styles.urlText
                         }
-                        disabled={
-                          index === 0
+                        title={
+                          banner.image_url
                         }
-                        style={{
-                          ...styles.smallButton,
-                          opacity:
+                      >
+                        {banner.image_url}
+                      </div>
+
+                      <div
+                        style={
+                          styles.actionRow
+                        }
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            moveBanner(
+                              banner.id,
+                              "up"
+                            )
+                          }
+                          disabled={
                             index === 0
-                              ? 0.35
-                              : 1,
-                        }}
-                        title="Đưa lên"
-                      >
-                        ↑
-                      </button>
+                          }
+                          style={{
+                            ...styles.smallButton,
+                            opacity:
+                              index ===
+                              0
+                                ? 0.4
+                                : 1,
+                          }}
+                        >
+                          ↑
+                        </button>
 
-                      <button
-                        type="button"
-                        onClick={() =>
-                          moveBanner(
-                            banner.id,
-                            "down"
-                          )
-                        }
-                        disabled={
-                          index ===
-                          banners.length -
-                            1
-                        }
-                        style={{
-                          ...styles.smallButton,
-                          opacity:
+                        <button
+                          type="button"
+                          onClick={() =>
+                            moveBanner(
+                              banner.id,
+                              "down"
+                            )
+                          }
+                          disabled={
                             index ===
                             banners.length -
                               1
-                              ? 0.35
-                              : 1,
-                        }}
-                        title="Đưa xuống"
-                      >
-                        ↓
-                      </button>
+                          }
+                          style={{
+                            ...styles.smallButton,
+                            opacity:
+                              index ===
+                              banners.length -
+                                1
+                                ? 0.4
+                                : 1,
+                          }}
+                        >
+                          ↓
+                        </button>
 
-                      <button
-                        type="button"
-                        onClick={() =>
-                          toggleBanner(
-                            banner.id
-                          )
-                        }
-                        style={
-                          banner.enabled ===
-                          false
-                            ? styles.enableButton
-                            : styles.disableButton
-                        }
-                      >
-                        {banner.enabled ===
-                        false
-                          ? "BẬT"
-                          : "TẮT"}
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            toggleBanner(
+                              banner.id
+                            )
+                          }
+                          style={
+                            styles.smallButton
+                          }
+                        >
+                          {banner.enabled
+                            ? "Ẩn"
+                            : "Hiện"}
+                        </button>
 
-                      <button
-                        type="button"
-                        onClick={() =>
-                          deleteBanner(
-                            banner.id
-                          )
-                        }
-                        style={
-                          styles.deleteButton
-                        }
-                      >
-                        XÓA
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            deleteBanner(
+                              banner.id
+                            )
+                          }
+                          style={
+                            styles.deleteButton
+                          }
+                        >
+                          Xoá
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )
               )}
             </div>
           )}
-
-          <div
-            style={
-              styles.bottomHint
-            }
-          >
-            💡 Banner được hiển thị theo thứ tự từ trên
-            xuống. Chỉ banner <b>ĐANG BẬT</b> mới xuất
-            hiện trên SHOP.
-          </div>
         </section>
 
-        {/* ================= PREVIEW ================= */}
-
+        {/* PREVIEW */}
         <section style={styles.card}>
           <div
-            style={
-              styles.sectionHeader
-            }
+            style={styles.cardHeader}
           >
             <div>
               <h2
-                style={
-                  styles.sectionTitle
-                }
+                style={styles.cardTitle}
               >
                 XEM TRƯỚC
               </h2>
 
               <p
                 style={
-                  styles.sectionDescription
+                  styles.cardDescription
                 }
               >
-                Kiểm tra nhanh logo và banner trước khi
-                lưu.
+                Xem nhanh logo và các
+                banner đang bật.
               </p>
             </div>
           </div>
 
           <div
             style={
-              styles.previewShop
+              styles.previewBox
             }
           >
-            <div
-              style={
-                styles.previewTop
-              }
-            >
-              {logoUrl ? (
-                <img
-                  src={logoUrl}
-                  alt="Logo preview"
-                  style={
-                    styles.previewLogo
-                  }
-                />
-              ) : (
-                <div
-                  style={
-                    styles.previewLogoText
-                  }
-                >
-                  XENOVA
-                  <small>
-                    PLAY
-                  </small>
-                </div>
-              )}
-            </div>
-
-            {banners.filter(
-              (banner) =>
-                banner.enabled !==
-                  false &&
-                banner.image_url
-            ).length > 0 ? (
-              <div
+            {logoUrl ? (
+              <img
+                src={logoUrl}
+                alt="Logo preview"
                 style={
-                  styles.previewBanner
+                  styles.previewLogo
                 }
-              >
-                <img
-                  src={
-                    banners.find(
-                      (banner) =>
-                        banner.enabled !==
-                          false &&
-                        banner.image_url
-                    )?.image_url
-                  }
-                  alt="Banner preview"
-                  style={
-                    styles.previewBannerImage
-                  }
-                />
-              </div>
+              />
             ) : (
               <div
                 style={
-                  styles.previewEmpty
+                  styles.previewNoLogo
                 }
               >
-                Chưa có banner đang bật
+                XENOVA PLAY
               </div>
             )}
+
+            <div
+              style={
+                styles.previewBannerList
+              }
+            >
+              {banners
+                .filter(
+                  (banner) =>
+                    banner.enabled &&
+                    banner.image_url
+                )
+                .map(
+                  (banner, index) => (
+                    <img
+                      key={
+                        banner.id ||
+                        index
+                      }
+                      src={
+                        banner.image_url
+                      }
+                      alt={`Preview ${
+                        index + 1
+                      }`}
+                      style={
+                        styles.previewBanner
+                      }
+                    />
+                  )
+                )}
+
+              {!banners.some(
+                (banner) =>
+                  banner.enabled &&
+                  banner.image_url
+              ) && (
+                <div
+                  style={
+                    styles.previewEmpty
+                  }
+                >
+                  Chưa có banner đang
+                  bật.
+                </div>
+              )}
+            </div>
           </div>
         </section>
       </div>
@@ -1161,20 +1015,20 @@ export default function AdminShopPage() {
           box-sizing: border-box;
         }
 
+        html,
         body {
           margin: 0;
-          background: #08090d;
-          color: #fff;
+          padding: 0;
+          background: #05070c;
         }
 
         button {
           font-family: inherit;
         }
 
-        @media (max-width: 800px) {
-          .admin-banner-item {
-            grid-template-columns:
-              32px 1fr;
+        @media (max-width: 700px) {
+          .admin-shop-container {
+            padding: 14px;
           }
         }
       `}</style>
@@ -1186,60 +1040,62 @@ const styles = {
   page: {
     minHeight: "100vh",
     background:
-      "radial-gradient(circle at top, #15172a 0%, #08090d 48%, #050507 100%)",
-    padding: "30px 16px 80px",
+      "radial-gradient(circle at top, #111827 0%, #05070c 48%, #020307 100%)",
+    color: "#fff",
+    padding: "24px 14px 60px",
   },
 
   container: {
     width: "100%",
-    maxWidth: "1250px",
+    maxWidth: "1200px",
     margin: "0 auto",
   },
 
   loading: {
-    minHeight: "80vh",
+    minHeight: "100vh",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    color: "#aaa",
-    fontSize: "15px",
+    color: "#fff",
+    fontSize: "16px",
+    background: "#05070c",
   },
 
   header: {
     display: "flex",
-    justifyContent: "space-between",
     alignItems: "center",
+    justifyContent: "space-between",
     gap: "20px",
-    marginBottom: "24px",
+    marginBottom: "22px",
     flexWrap: "wrap",
   },
 
   badge: {
-    display: "inline-flex",
-    padding: "6px 10px",
+    display: "inline-block",
+    padding: "7px 12px",
     borderRadius: "999px",
     background:
-      "rgba(255,255,255,.07)",
+      "rgba(255,255,255,0.08)",
     border:
-      "1px solid rgba(255,255,255,.10)",
-    color: "#aaa",
-    fontSize: "10px",
+      "1px solid rgba(255,255,255,0.12)",
+    color: "#a5b4fc",
+    fontSize: "12px",
     fontWeight: 800,
-    letterSpacing: "1.5px",
+    letterSpacing: "1px",
     marginBottom: "8px",
   },
 
   title: {
     margin: 0,
     fontSize: "30px",
-    fontWeight: 950,
-    letterSpacing: "-1px",
+    fontWeight: 900,
+    letterSpacing: "-0.5px",
   },
 
   subtitle: {
-    margin: "8px 0 0",
-    color: "#858894",
-    fontSize: "13px",
+    margin: "7px 0 0",
+    color: "#94a3b8",
+    fontSize: "14px",
   },
 
   saveButton: {
@@ -1247,351 +1103,269 @@ const styles = {
     borderRadius: "12px",
     padding: "13px 18px",
     background:
-      "linear-gradient(135deg,#ffffff,#d9d9df)",
-    color: "#08090d",
-    fontWeight: 950,
-    fontSize: "12px",
+      "linear-gradient(135deg, #6366f1, #8b5cf6)",
+    color: "#fff",
+    fontWeight: 900,
     cursor: "pointer",
+    boxShadow:
+      "0 12px 30px rgba(99,102,241,0.25)",
   },
 
   successMessage: {
-    marginBottom: "18px",
+    marginBottom: "16px",
     padding: "13px 15px",
     borderRadius: "12px",
     background:
-      "rgba(36,150,88,.12)",
+      "rgba(34,197,94,0.1)",
     border:
-      "1px solid rgba(70,200,120,.22)",
-    color: "#78e2a5",
-    fontSize: "13px",
+      "1px solid rgba(34,197,94,0.25)",
+    color: "#86efac",
+    fontSize: "14px",
   },
 
   errorMessage: {
-    marginBottom: "18px",
+    marginBottom: "16px",
     padding: "13px 15px",
     borderRadius: "12px",
     background:
-      "rgba(220,50,70,.12)",
+      "rgba(239,68,68,0.1)",
     border:
-      "1px solid rgba(255,80,100,.22)",
-    color: "#ff8a9b",
-    fontSize: "13px",
+      "1px solid rgba(239,68,68,0.25)",
+    color: "#fca5a5",
+    fontSize: "14px",
   },
 
   card: {
     background:
-      "linear-gradient(145deg,rgba(24,25,35,.96),rgba(13,14,20,.96))",
+      "rgba(15,23,42,0.78)",
     border:
-      "1px solid rgba(255,255,255,.08)",
+      "1px solid rgba(255,255,255,0.08)",
     borderRadius: "18px",
     padding: "20px",
     marginBottom: "18px",
     boxShadow:
-      "0 20px 60px rgba(0,0,0,.25)",
+      "0 20px 60px rgba(0,0,0,0.25)",
+    backdropFilter: "blur(14px)",
   },
 
-  sectionHeader: {
+  cardHeader: {
     display: "flex",
-    justifyContent: "space-between",
     alignItems: "center",
-    gap: "15px",
-    marginBottom: "18px",
+    justifyContent: "space-between",
+    gap: "16px",
     flexWrap: "wrap",
+    marginBottom: "18px",
   },
 
-  sectionTitle: {
+  cardTitle: {
     margin: 0,
-    fontSize: "16px",
-    fontWeight: 950,
-    letterSpacing: ".5px",
+    fontSize: "18px",
+    fontWeight: 900,
   },
 
-  sectionDescription: {
-    margin: "6px 0 0",
-    color: "#777b88",
-    fontSize: "12px",
+  cardDescription: {
+    margin: "5px 0 0",
+    color: "#94a3b8",
+    fontSize: "13px",
     lineHeight: 1.5,
   },
 
   primaryButton: {
     border: 0,
-    borderRadius: "10px",
-    padding: "11px 14px",
-    background: "#fff",
-    color: "#08090d",
-    fontSize: "11px",
-    fontWeight: 950,
+    borderRadius: "11px",
+    padding: "11px 15px",
+    background:
+      "linear-gradient(135deg, #2563eb, #7c3aed)",
+    color: "#fff",
+    fontWeight: 800,
     cursor: "pointer",
   },
 
-  logoArea: {
-    display: "flex",
-    gap: "22px",
-    alignItems: "center",
-    flexWrap: "wrap",
-  },
-
   logoPreview: {
-    width: "220px",
-    height: "100px",
+    minHeight: "180px",
     borderRadius: "15px",
     border:
-      "1px solid rgba(255,255,255,.10)",
+      "1px dashed rgba(255,255,255,0.14)",
     background:
-      "linear-gradient(145deg,#11131b,#090a0e)",
+      "rgba(0,0,0,0.2)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
+    padding: "20px",
     overflow: "hidden",
   },
 
   logoImage: {
-    maxWidth: "90%",
-    maxHeight: "80%",
+    maxWidth: "100%",
+    maxHeight: "180px",
     objectFit: "contain",
+    display: "block",
   },
 
   noLogo: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "5px",
-    color: "#555965",
+    color: "#64748b",
+    fontSize: "13px",
+    fontWeight: 800,
+    letterSpacing: "1px",
   },
 
-  logoActions: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "flex-start",
-    gap: "9px",
-  },
-
-  deleteButton: {
-    border:
-      "1px solid rgba(255,70,90,.20)",
-    borderRadius: "9px",
-    padding: "9px 12px",
-    background:
-      "rgba(255,60,80,.08)",
-    color: "#ff7788",
-    fontSize: "10px",
-    fontWeight: 900,
-    cursor: "pointer",
-  },
-
-  hint: {
-    color: "#555966",
-    fontSize: "10px",
-  },
-
-  empty: {
-    minHeight: "180px",
-    borderRadius: "14px",
-    border:
-      "1px dashed rgba(255,255,255,.10)",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "7px",
-    color: "#707480",
-    fontSize: "12px",
+  emptyBanner: {
     textAlign: "center",
-  },
-
-  emptyIcon: {
-    fontSize: "28px",
-    marginBottom: "3px",
+    padding: "55px 20px",
+    borderRadius: "15px",
+    border:
+      "1px dashed rgba(255,255,255,0.12)",
+    color: "#64748b",
+    lineHeight: 1.8,
+    fontSize: "14px",
   },
 
   bannerList: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "12px",
+    display: "grid",
+    gap: "14px",
   },
 
   bannerItem: {
     display: "grid",
     gridTemplateColumns:
-      "38px minmax(220px,360px) 1fr auto",
+      "45px minmax(180px, 360px) 1fr",
     gap: "14px",
     alignItems: "center",
     padding: "12px",
     borderRadius: "14px",
     background:
-      "rgba(255,255,255,.025)",
+      "rgba(2,6,23,0.7)",
     border:
-      "1px solid rgba(255,255,255,.07)",
-    transition: "opacity .2s",
+      "1px solid rgba(255,255,255,0.07)",
   },
 
   bannerNumber: {
-    width: "32px",
-    height: "32px",
-    borderRadius: "9px",
-    background:
-      "rgba(255,255,255,.07)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontWeight: 950,
-    fontSize: "12px",
-    color: "#aaa",
+    color: "#a5b4fc",
+    fontSize: "13px",
+    fontWeight: 900,
+    textAlign: "center",
   },
 
-  bannerPreview: {
+  bannerImageWrap: {
     width: "100%",
-    aspectRatio: "1200 / 320",
-    borderRadius: "9px",
+    aspectRatio: "16 / 6",
+    borderRadius: "10px",
     overflow: "hidden",
-    background: "#090a0e",
-    border:
-      "1px solid rgba(255,255,255,.07)",
+    background: "#020617",
   },
 
   bannerImage: {
     width: "100%",
     height: "100%",
-    display: "block",
     objectFit: "cover",
+    display: "block",
   },
 
-  invalidImage: {
+  noBanner: {
     width: "100%",
     height: "100%",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    color: "#666",
-    fontSize: "11px",
+    color: "#64748b",
+    fontSize: "12px",
+    fontWeight: 800,
   },
 
   bannerInfo: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "flex-start",
-    gap: "7px",
     minWidth: 0,
   },
 
   status: {
-    display: "inline-flex",
-    padding: "5px 8px",
-    borderRadius: "999px",
-    fontSize: "9px",
+    fontSize: "12px",
     fontWeight: 900,
+    color: "#86efac",
+    marginBottom: "7px",
   },
 
-  bannerControls: {
+  urlText: {
+    color: "#64748b",
+    fontSize: "11px",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    marginBottom: "10px",
+  },
+
+  actionRow: {
     display: "flex",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    gap: "6px",
+    gap: "7px",
     flexWrap: "wrap",
   },
 
   smallButton: {
-    width: "32px",
-    height: "32px",
     border:
-      "1px solid rgba(255,255,255,.10)",
-    borderRadius: "8px",
+      "1px solid rgba(255,255,255,0.1)",
     background:
-      "rgba(255,255,255,.05)",
+      "rgba(255,255,255,0.06)",
     color: "#fff",
-    fontWeight: 900,
-    cursor: "pointer",
-  },
-
-  enableButton: {
-    border:
-      "1px solid rgba(80,210,130,.20)",
     borderRadius: "8px",
-    background:
-      "rgba(70,200,120,.08)",
-    color: "#6de29a",
-    padding: "8px 10px",
-    fontSize: "9px",
-    fontWeight: 900,
+    padding: "7px 10px",
     cursor: "pointer",
+    fontSize: "12px",
+    fontWeight: 800,
   },
 
-  disableButton: {
+  deleteButton: {
     border:
-      "1px solid rgba(255,190,70,.20)",
+      "1px solid rgba(239,68,68,0.25)",
+    background:
+      "rgba(239,68,68,0.1)",
+    color: "#fca5a5",
     borderRadius: "8px",
-    background:
-      "rgba(255,180,60,.08)",
-    color: "#e8b66a",
-    padding: "8px 10px",
-    fontSize: "9px",
-    fontWeight: 900,
+    padding: "7px 10px",
     cursor: "pointer",
+    fontSize: "12px",
+    fontWeight: 800,
   },
 
-  bottomHint: {
-    marginTop: "15px",
-    padding: "12px",
-    borderRadius: "10px",
+  previewBox: {
+    borderRadius: "15px",
     background:
-      "rgba(255,255,255,.025)",
-    color: "#777b87",
-    fontSize: "10px",
-    lineHeight: 1.5,
-  },
-
-  previewShop: {
-    borderRadius: "14px",
+      "linear-gradient(180deg, #080b12, #03050a)",
+    border:
+      "1px solid rgba(255,255,255,0.08)",
+    padding: "18px",
     overflow: "hidden",
-    background: "#090a0f",
-    border:
-      "1px solid rgba(255,255,255,.08)",
-  },
-
-  previewTop: {
-    height: "64px",
-    padding: "0 18px",
-    display: "flex",
-    alignItems: "center",
-    borderBottom:
-      "1px solid rgba(255,255,255,.06)",
   },
 
   previewLogo: {
-    maxWidth: "150px",
-    maxHeight: "42px",
+    display: "block",
+    maxWidth: "220px",
+    maxHeight: "80px",
     objectFit: "contain",
+    margin: "0 auto 18px",
   },
 
-  previewLogoText: {
-    fontSize: "17px",
-    fontWeight: 950,
+  previewNoLogo: {
+    textAlign: "center",
+    fontSize: "24px",
+    fontWeight: 1000,
+    marginBottom: "18px",
     letterSpacing: "1px",
-    display: "flex",
-    alignItems: "center",
-    gap: "5px",
+  },
+
+  previewBannerList: {
+    display: "grid",
+    gap: "12px",
   },
 
   previewBanner: {
     width: "100%",
-    aspectRatio: "1200 / 320",
-    overflow: "hidden",
-  },
-
-  previewBannerImage: {
-    width: "100%",
-    height: "100%",
-    objectFit: "cover",
     display: "block",
+    borderRadius: "12px",
+    objectFit: "cover",
   },
 
   previewEmpty: {
-    minHeight: "160px",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    color: "#555966",
-    fontSize: "12px",
+    textAlign: "center",
+    color: "#64748b",
+    padding: "35px 10px",
+    fontSize: "13px",
   },
 };
