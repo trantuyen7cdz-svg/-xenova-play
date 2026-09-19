@@ -8,50 +8,78 @@ const supabaseAdmin = createClient(
 
 export async function GET() {
   try {
+    // =========================
+    // LẤY DANH MỤC
+    // =========================
     const { data: categories, error: categoryError } =
       await supabaseAdmin
         .from("product_categories")
-        .select("id,name,active,demo_image_url")
-        .eq("active", true)
+        .select(`
+          id,
+          name,
+          description,
+          image_url,
+          demo_image_url,
+          active,
+          parent_id
+        `)
         .order("id", { ascending: true });
 
     if (categoryError) {
-      console.error("CATALOG CATEGORY ERROR:", categoryError);
+      console.error("CATEGORY ERROR:", categoryError);
 
       return NextResponse.json(
         {
           success: false,
-          message: "Không thể tải danh mục sản phẩm.",
+          error: categoryError.message,
         },
         { status: 500 }
       );
     }
 
+    // =========================
+    // LẤY SẢN PHẨM
+    // =========================
     const { data: products, error: productError } =
       await supabaseAdmin
         .from("products")
-        .select(
-          "id,name,description,price,duration_days,active,is_active,demo_image_url,category_id"
-        )
+        .select(`
+          id,
+          name,
+          description,
+          price,
+          duration_days,
+          active,
+          is_active,
+          demo_image_url,
+          category_id,
+          media_type,
+          video_url
+        `)
         .eq("active", true)
         .eq("is_active", true)
         .order("id", { ascending: true });
 
     if (productError) {
-      console.error("CATALOG PRODUCT ERROR:", productError);
+      console.error("PRODUCT ERROR:", productError);
 
       return NextResponse.json(
         {
           success: false,
-          message: "Không thể tải sản phẩm.",
+          error: productError.message,
         },
         { status: 500 }
       );
     }
 
+    // =========================
+    // TRẢ VỀ CATALOG
+    // =========================
     return NextResponse.json({
       success: true,
+
       categories: categories || [],
+
       products: products || [],
     });
   } catch (error) {
@@ -60,7 +88,7 @@ export async function GET() {
     return NextResponse.json(
       {
         success: false,
-        message: "Lỗi server.",
+        error: error?.message || "Catalog error",
       },
       { status: 500 }
     );
