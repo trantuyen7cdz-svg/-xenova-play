@@ -4,9 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 
-const SAMPLE_IMAGE =
-  "https://i.ibb.co/GQNBB2RS/985-AEC8-F-0918-406-B8-C87-A6-D63-EB02674.png";
-
 const NAV_ITEMS = [
   { label: "Trang chủ", path: "/" },
   { label: "Cửa hàng", path: "/shop" },
@@ -17,6 +14,15 @@ const NAV_ITEMS = [
   { label: "Cài đặt", path: "/settings" },
 ];
 
+const CATEGORY_ICONS = {
+  all: "✦",
+  android: "◈",
+  iphone: "⌁",
+  ios: "⌁",
+  pc: "▣",
+  other: "◆",
+};
+
 function normalize(value) {
   return String(value || "")
     .toLowerCase()
@@ -24,98 +30,76 @@ function normalize(value) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
-function getProductName(product) {
-  return (
-    product?.name ||
-    product?.title ||
-    product?.product_name ||
-    product?.display_name ||
-    "KEY XENOVA"
-  );
-}
-
-function getProductPrice(product) {
-  const value =
-    product?.price ??
-    product?.selling_price ??
-    product?.sale_price ??
-    product?.amount ??
-    0;
-
-  const number = Number(value);
-  return Number.isFinite(number) ? number : 0;
-}
-
-function getProductDescription(product) {
-  return (
-    product?.description ||
-    product?.short_description ||
-    product?.desc ||
-    "KEY chính hãng XENOVA PLAY"
-  );
-}
-
 function getProductType(product) {
   const text = normalize(
     [
       product?.name,
       product?.title,
-      product?.category_name,
       product?.category,
       product?.type,
       product?.platform,
+      product?.device,
     ].join(" ")
   );
 
-  if (text.includes("iphone") || text.includes("ios")) return "ios";
-  if (text.includes("android") || text.includes("adr")) return "android";
-  if (text.includes("pc") || text.includes("windows")) return "pc";
+  if (
+    text.includes("android") ||
+    text.includes("adr")
+  ) {
+    return "android";
+  }
+
+  if (
+    text.includes("iphone") ||
+    text.includes("ios")
+  ) {
+    return "iphone";
+  }
+
+  if (
+    text.includes("pc") ||
+    text.includes("windows")
+  ) {
+    return "pc";
+  }
 
   return "other";
 }
 
 function formatPrice(value) {
-  const number = Number(value) || 0;
-  return `${number.toLocaleString("vi-VN")}đ`;
+  const number = Number(value || 0);
+
+  return new Intl.NumberFormat("vi-VN").format(number) + "đ";
 }
 
 function formatDuration(product) {
+  if (!product) return "";
+
   const duration =
-    product?.duration ??
-    product?.days ??
-    product?.day ??
-    product?.valid_days ??
-    product?.duration_days;
+    product.duration ??
+    product.duration_days ??
+    product.days ??
+    product.expire_days ??
+    product.valid_days;
 
-  if (duration !== undefined && duration !== null && duration !== "") {
-    const number = Number(duration);
+  if (duration) {
+    const days = Number(duration);
 
-    if (Number.isFinite(number)) {
-      if (number >= 30 && number % 30 === 0) {
-        return `${number / 30} tháng`;
-      }
+    if (days === 1) return "1 ngày";
+    if (days === 7) return "7 ngày";
+    if (days === 30) return "30 ngày";
 
-      return `${number} ngày`;
-    }
-
-    return String(duration);
+    return `${days} ngày`;
   }
 
-  const text = `${product?.name || ""} ${product?.title || ""}`;
+  const text = String(
+    product.duration_text ||
+      product.duration_label ||
+      product.description ||
+      ""
+  );
 
-  if (/1\s*tháng|1\s*thang|30\s*ngày|30\s*ngay/i.test(text)) {
-    return "1 tháng";
-  }
-
-  if (/1\s*tuần|1\s*tuan|7\s*ngày|7\s*ngay/i.test(text)) {
-    return "1 tuần";
-  }
-
-  if (/1\s*ngày|1\s*ngay/i.test(text)) {
-    return "1 ngày";
-  }
-
-  return "KEY";
+  return text;
 }
 
 function getProductImage(product) {
@@ -123,90 +107,134 @@ function getProductImage(product) {
     product?.image_url ||
     product?.image ||
     product?.thumbnail ||
-    product?.photo ||
-    SAMPLE_IMAGE
+    product?.cover ||
+    product?.avatar ||
+    ""
   );
 }
 
-function getStockValue(value) {
-  if (typeof value === "number") return value;
+function getStock(stock, product) {
+  if (!stock || !product) return 0;
 
-  if (typeof value === "string") {
-    const number = Number(value);
-    return Number.isFinite(number) ? number : 0;
-  }
+  const id = String(product.id);
 
-  if (value && typeof value === "object") {
+  if (Array.isArray(stock)) {
+    const item = stock.find(
+      (row) =>
+        String(row.product_id ?? row.id ?? "") === id
+    );
+
+    if (!item) return 0;
+
     return Number(
-      value.stock ??
-        value.quantity ??
-        value.available ??
-        value.count ??
-        value.total ??
+      item.stock ??
+        item.quantity ??
+        item.available ??
+        item.count ??
         0
     );
+  }
+
+  if (typeof stock === "object") {
+    const item = stock[id];
+
+    if (typeof item === "number") {
+      return item;
+    }
+
+    if (item && typeof item === "object") {
+      return Number(
+        item.stock ??
+          item.quantity ??
+          item.available ??
+          item.count ??
+          0
+      );
+    }
   }
 
   return 0;
 }
 
-function ProductCard({ product, stock, onBuy }) {
-  const price = getProductPrice(product);
-  const name = getProductName(product);
-  const type = getProductType(product);
-  const duration = formatDuration(product);
-  const image = getProductImage(product);
-  const description = getProductDescription(product);
-  const available = stock > 0;
+function ProductIcon({ type }) {
+  const icon = CATEGORY_ICONS[type] || CATEGORY_ICONS.other;
 
-  const typeLabel = {
-    android: "ANDROID",
-    ios: "IPHONE",
-    pc: "PC",
-    other: "KEY",
-  }[type];
+  return (
+    <div className={`product-icon icon-${type}`}>
+      <span>{icon}</span>
+    </div>
+  );
+}
+
+function ProductCard({ product, stock, onBuy }) {
+  const quantity = getStock(stock, product);
+  const type = getProductType(product);
+  const image = getProductImage(product);
 
   return (
     <div className="product-card">
-      <div className="product-image-wrap">
-        <img
-          src={image}
-          alt={name}
-          className="product-image"
-          onError={(event) => {
-            event.currentTarget.src = SAMPLE_IMAGE;
-          }}
-        />
+      <div className="product-cover">
+        {image ? (
+          <img
+            src={image}
+            alt={product.name || product.title || "XENOVA"}
+            className="product-image"
+          />
+        ) : (
+          <ProductIcon type={type} />
+        )}
 
-        <div className="product-badge">{typeLabel}</div>
-
-        <div className={`stock-badge ${available ? "in-stock" : "out-stock"}`}>
-          {available ? `${stock} KEY` : "HẾT KEY"}
+        <div
+          className={`stock-badge ${
+            quantity > 0 ? "stock-ok" : "stock-out"
+          }`}
+        >
+          {quantity > 0 ? `Còn ${quantity}` : "Hết hàng"}
         </div>
       </div>
 
-      <div className="product-content">
-        <div className="product-title">{name}</div>
-
-        <div className="product-duration">
-          <span>⏱</span>
-          {duration}
+      <div className="product-body">
+        <div className="product-type">
+          {type === "android"
+            ? "ANDROID"
+            : type === "iphone"
+            ? "IPHONE"
+            : type === "pc"
+            ? "PC"
+            : "KEY"}
         </div>
 
-        <div className="product-description">{description}</div>
+        <h3>
+          {product.name ||
+            product.title ||
+            "Sản phẩm XENOVA"}
+        </h3>
+
+        <div className="product-info">
+          <span>
+            {formatDuration(product) || "KEY bản quyền"}
+          </span>
+          <span>•</span>
+          <span>
+            {quantity > 0 ? "Có sẵn" : "Tạm hết"}
+          </span>
+        </div>
 
         <div className="product-bottom">
-          <div>
-            <div className="price-label">Giá bán</div>
-            <div className="product-price">{formatPrice(price)}</div>
+          <div className="price">
+            {formatPrice(
+              product.price ??
+                product.sell_price ??
+                product.amount
+            )}
           </div>
 
           <button
             className="buy-button"
-            disabled={!available}
+            disabled={quantity <= 0}
             onClick={() => onBuy(product)}
           >
-            {available ? "MUA NGAY" : "HẾT HÀNG"}
+            {quantity > 0 ? "Mua ngay" : "Hết hàng"}
           </button>
         </div>
       </div>
@@ -217,12 +245,11 @@ function ProductCard({ product, stock, onBuy }) {
 function ProductSkeleton() {
   return (
     <div className="product-card skeleton-card">
-      <div className="skeleton skeleton-image" />
-
-      <div className="skeleton-content">
-        <div className="skeleton skeleton-title" />
+      <div className="skeleton skeleton-cover" />
+      <div className="skeleton-body">
+        <div className="skeleton skeleton-line small" />
         <div className="skeleton skeleton-line" />
-        <div className="skeleton skeleton-line short" />
+        <div className="skeleton skeleton-line medium" />
         <div className="skeleton skeleton-button" />
       </div>
     </div>
@@ -233,19 +260,24 @@ export default function ShopPage() {
   const router = useRouter();
 
   const [user, setUser] = useState(null);
-  const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
-  const [stock, setStock] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [stock, setStock] = useState({});
   const [wallet, setWallet] = useState(0);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("all");
+
+  const [selectedCategory, setSelectedCategory] =
+    useState("all");
+
+  const [search, setSearch] = useState("");
 
   const [buyModal, setBuyModal] = useState(null);
   const [successModal, setSuccessModal] = useState(null);
   const [buying, setBuying] = useState(false);
-  const [message, setMessage] = useState("");
+
+  const [darkMode, setDarkMode] = useState(false);
 
   async function loadWallet(currentUser) {
     if (!currentUser?.id) {
@@ -253,29 +285,26 @@ export default function ShopPage() {
       return;
     }
 
-    try {
-      const { data, error: walletError } = await supabase
-        .from("wallets")
-        .select("*")
-        .eq("user_id", currentUser.id)
-        .maybeSingle();
+    const { data, error: walletError } = await supabase
+      .from("wallets")
+      .select("*")
+      .eq("user_id", currentUser.id)
+      .maybeSingle();
 
-      if (walletError) {
-        console.error("Wallet error:", walletError);
-        return;
-      }
-
-      const balance =
-        data?.balance ??
-        data?.amount ??
-        data?.money ??
-        data?.balance_amount ??
-        0;
-
-      setWallet(Number(balance) || 0);
-    } catch (walletError) {
-      console.error("Wallet load error:", walletError);
+    if (walletError) {
+      setWallet(0);
+      return;
     }
+
+    setWallet(
+      Number(
+        data?.balance ??
+          data?.amount ??
+          data?.money ??
+          data?.wallet_balance ??
+          0
+      )
+    );
   }
 
   async function loadShop() {
@@ -283,9 +312,8 @@ export default function ShopPage() {
     setError("");
 
     try {
-      const [{ data: sessionData }, catalogResponse, stockResponse] =
+      const [catalogResponse, stockResponse] =
         await Promise.all([
-          supabase.auth.getSession(),
           fetch("/api/shop/catalog", {
             cache: "no-store",
           }),
@@ -294,233 +322,289 @@ export default function ShopPage() {
           }),
         ]);
 
-      const currentUser = sessionData?.session?.user || null;
-
-      setUser(currentUser);
-
-      if (currentUser) {
-        await loadWallet(currentUser);
-      } else {
-        setWallet(0);
-      }
-
       if (!catalogResponse.ok) {
         throw new Error("Không thể tải danh sách sản phẩm.");
       }
 
       const catalogData = await catalogResponse.json();
 
-      const categoryData =
-        catalogData?.categories ||
-        catalogData?.data?.categories ||
-        catalogData?.result?.categories ||
-        [];
-
-      const productData =
+      const catalog =
         catalogData?.products ||
-        catalogData?.data?.products ||
-        catalogData?.result?.products ||
+        catalogData?.data ||
+        catalogData?.catalog ||
         [];
 
-      setCategories(Array.isArray(categoryData) ? categoryData : []);
-      setProducts(Array.isArray(productData) ? productData : []);
+      setProducts(
+        Array.isArray(catalog) ? catalog : []
+      );
+
+      const categoryData =
+        catalogData?.categories || [];
+
+      setCategories(
+        Array.isArray(categoryData)
+          ? categoryData
+          : []
+      );
 
       if (stockResponse.ok) {
         const stockData = await stockResponse.json();
 
-        const stockList =
-          stockData?.stock ||
-          stockData?.stocks ||
-          stockData?.data ||
-          stockData?.result ||
-          [];
-
-        setStock(Array.isArray(stockList) ? stockList : stockList || []);
-      } else {
-        setStock([]);
+        setStock(
+          stockData?.stock ??
+            stockData?.data ??
+            stockData ??
+            {}
+        );
       }
-    } catch (loadError) {
-      console.error("Shop load error:", loadError);
-      setError(loadError?.message || "Không thể tải cửa hàng.");
+    } catch (err) {
+      setError(
+        err?.message ||
+          "Không thể tải cửa hàng."
+      );
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    loadShop();
+    let mounted = true;
+
+    async function init() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!mounted) return;
+
+      setUser(session?.user || null);
+
+      if (session?.user) {
+        await loadWallet(session.user);
+      }
+
+      await loadShop();
+    }
+
+    init();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      const currentUser = session?.user || null;
+    } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        if (!mounted) return;
 
-      setUser(currentUser);
+        setUser(session?.user || null);
 
-      if (currentUser) {
-        await loadWallet(currentUser);
-      } else {
-        setWallet(0);
+        if (session?.user) {
+          await loadWallet(session.user);
+        } else {
+          setWallet(0);
+        }
       }
-    });
+    );
 
     return () => {
-      subscription?.unsubscribe();
+      mounted = false;
+      subscription.unsubscribe();
     };
   }, []);
 
-  const visibleProducts = useMemo(() => {
-    if (selectedCategory === "all") {
-      return products;
+  const categoryList = useMemo(() => {
+    const result = [
+      {
+        id: "all",
+        name: "Tất cả sản phẩm",
+        count: products.length,
+      },
+    ];
+
+    const seen = new Set(["all"]);
+
+    for (const product of products) {
+      const type = getProductType(product);
+
+      if (seen.has(type)) continue;
+
+      seen.add(type);
+
+      const count = products.filter(
+        (item) => getProductType(item) === type
+      ).length;
+
+      result.push({
+        id: type,
+        name:
+          type === "android"
+            ? "KEY Android"
+            : type === "iphone"
+            ? "KEY iPhone"
+            : type === "pc"
+            ? "KEY PC"
+            : "Sản phẩm khác",
+        count,
+      });
     }
 
-    return products.filter((product) => {
-      const productCategory =
-        product?.category_id ??
-        product?.categoryId ??
-        product?.category ??
-        product?.category_name;
+    for (const category of categories) {
+      if (!category) continue;
 
-      const selected = categories.find(
-        (category) =>
-          String(category?.id) === String(selectedCategory) ||
-          String(category?.name) === String(selectedCategory) ||
-          String(category?.slug) === String(selectedCategory)
+      const id = String(
+        category.id ??
+          category.slug ??
+          category.name ??
+          ""
+      ).toLowerCase();
+
+      if (!id || seen.has(id)) continue;
+
+      result.push({
+        id,
+        name:
+          category.name ||
+          category.title ||
+          id,
+        count: products.filter((product) =>
+          normalize(
+            product.category ||
+              product.category_id
+          ).includes(normalize(id))
+        ).length,
+      });
+    }
+
+    return result;
+  }, [products, categories]);
+
+  const filteredProducts = useMemo(() => {
+    let list = [...products];
+
+    if (selectedCategory !== "all") {
+      const selected = normalize(
+        selectedCategory
       );
 
-      if (!selected) {
-        return String(productCategory) === String(selectedCategory);
-      }
+      list = list.filter((product) => {
+        const type = getProductType(product);
 
-      return (
-        String(productCategory) === String(selected?.id) ||
-        normalize(productCategory) === normalize(selected?.name) ||
-        normalize(productCategory) === normalize(selected?.slug)
+        if (
+          selected === "android" ||
+          selected === "iphone" ||
+          selected === "pc"
+        ) {
+          return type === selected;
+        }
+
+        return normalize(
+          product.category ||
+            product.category_id ||
+            ""
+        ).includes(selected);
+      });
+    }
+
+    const query = normalize(search.trim());
+
+    if (query) {
+      list = list.filter((product) =>
+        normalize(
+          [
+            product.name,
+            product.title,
+            product.category,
+            product.type,
+            product.platform,
+            product.description,
+          ].join(" ")
+        ).includes(query)
       );
-    });
-  }, [products, categories, selectedCategory]);
-
-  function getProductStock(productId) {
-    if (!stock) return 0;
-
-    if (!Array.isArray(stock)) {
-      const direct =
-        stock?.[productId] ||
-        stock?.[String(productId)] ||
-        stock?.products?.[productId];
-
-      return getStockValue(direct);
     }
 
-    const found = stock.find((item) => {
-      const id =
-        item?.product_id ??
-        item?.productId ??
-        item?.id ??
-        item?.key_product_id;
+    return list;
+  }, [
+    products,
+    selectedCategory,
+    search,
+  ]);
 
-      return String(id) === String(productId);
-    });
-
-    return getStockValue(found);
+  function handleNavigation(path) {
+    router.push(path);
   }
 
-  function getCategoryStock(categoryId) {
-    const categoryProducts = products.filter((product) => {
-      const productCategory =
-        product?.category_id ??
-        product?.categoryId ??
-        product?.category;
-
-      return String(productCategory) === String(categoryId);
-    });
-
-    return categoryProducts.reduce(
-      (total, product) => total + getProductStock(product.id),
-      0
-    );
-  }
-
-  function handleBuyClick(product) {
-    const productStock = getProductStock(product?.id);
-
-    if (productStock <= 0) {
-      setMessage("Sản phẩm này hiện đã hết KEY.");
-      return;
-    }
-
+  function handleBuy(product) {
     if (!user) {
-      router.push("/login");
+      router.push("/login?next=/shop");
       return;
     }
 
-    setMessage("");
-    setBuyModal({
-      product,
-      stock: productStock,
-    });
+    const quantity = getStock(stock, product);
+
+    if (quantity <= 0) {
+      return;
+    }
+
+    setBuyModal(product);
   }
 
   async function confirmBuy() {
-    if (!buyModal?.product || buying) return;
-
-    const product = buyModal.product;
-    const price = getProductPrice(product);
-    const currentStock = getProductStock(product.id);
+    if (!buyModal || buying) return;
 
     if (!user) {
-      setBuyModal(null);
-      router.push("/login");
+      router.push("/login?next=/shop");
       return;
     }
 
-    if (currentStock <= 0) {
-      setBuyModal(null);
-      setMessage("Sản phẩm này vừa hết KEY.");
-      return;
-    }
+    const product = buyModal;
+
+    const price = Number(
+      product.price ??
+        product.sell_price ??
+        product.amount ??
+        0
+    );
 
     if (wallet < price) {
       setBuyModal(null);
-      setMessage(
-        `Số dư không đủ. Bạn cần ${formatPrice(
-          price
-        )}, hiện có ${formatPrice(wallet)}.`
+      setError(
+        "Số dư ví không đủ. Vui lòng nạp thêm tiền."
       );
       return;
     }
 
     setBuying(true);
-    setMessage("");
+    setError("");
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData?.session?.access_token;
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-      if (!accessToken) {
-        setBuyModal(null);
-        router.push("/login");
+      if (!session?.access_token) {
+        router.push("/login?next=/shop");
         return;
       }
 
-      const response = await fetch("/api/buy-key", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          product_id: Number(product.id),
-        }),
-      });
+      const response = await fetch(
+        "/api/buy-key",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            product_id: Number(product.id),
+          }),
+        }
+      );
 
-      const data = await response.json().catch(() => ({}));
+      const data = await response.json();
 
       if (!response.ok) {
         throw new Error(
           data?.error ||
             data?.message ||
-            "Mua KEY thất bại. Vui lòng thử lại."
+            "Mua KEY thất bại."
         );
       }
 
@@ -535,400 +619,534 @@ export default function ShopPage() {
 
       setSuccessModal({
         key,
-        product,
+        product:
+          product.name ||
+          product.title ||
+          "KEY XENOVA",
       });
 
+      await loadWallet(user);
       await loadShop();
-    } catch (buyError) {
-      console.error("Buy key error:", buyError);
-      setMessage(buyError?.message || "Không thể mua KEY.");
+    } catch (err) {
+      setError(
+        err?.message ||
+          "Mua KEY thất bại."
+      );
     } finally {
       setBuying(false);
     }
   }
 
-  async function copyKey() {
-    const key = successModal?.key;
-
-    if (!key) return;
-
-    try {
-      await navigator.clipboard.writeText(key);
-      setMessage("Đã sao chép KEY.");
-    } catch {
-      setMessage("Không thể tự động sao chép KEY.");
-    }
-  }
-
-  function goDeposit() {
-    router.push("/deposit");
-  }
-
-  function goHome() {
-    router.push("/");
-  }
-
-  function go(path) {
-    router.push(path);
+  function getUserName() {
+    return (
+      user?.user_metadata?.full_name ||
+      user?.user_metadata?.name ||
+      user?.email?.split("@")[0] ||
+      "Khách"
+    );
   }
 
   return (
-    <>
-      <div className="page">
-        <header className="topbar">
-          <div className="topbar-inner">
-            <button className="brand" onClick={goHome}>
-              <div className="brand-logo">X</div>
+    <main className={darkMode ? "xenova dark" : "xenova"}>
+      <div className="petals" aria-hidden="true">
+        {Array.from({ length: 18 }).map(
+          (_, index) => (
+            <span
+              key={index}
+              className={`petal petal-${index + 1}`}
+            />
+          )
+        )}
+      </div>
 
-              <div className="brand-text">
-                <strong>XENOVA</strong>
-                <span>PLAY</span>
-              </div>
+      <header className="topbar">
+        <div className="topbar-inner">
+          <button
+            className="brand"
+            onClick={() => handleNavigation("/")}
+          >
+            <div className="brand-mark">
+              X
+            </div>
+
+            <div className="brand-text">
+              <strong>XENOVA</strong>
+              <span>PLAY STORE</span>
+            </div>
+          </button>
+
+          <nav className="desktop-nav">
+            {NAV_ITEMS.map((item) => (
+              <button
+                key={item.path}
+                className={
+                  item.path === "/shop"
+                    ? "nav-item active"
+                    : "nav-item"
+                }
+                onClick={() =>
+                  handleNavigation(item.path)
+                }
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
+
+          <div className="top-actions">
+            <button
+              className="theme-button"
+              onClick={() =>
+                setDarkMode((value) => !value)
+              }
+              title="Đổi giao diện"
+            >
+              {darkMode ? "☀" : "☾"}
             </button>
 
-            <nav className="desktop-nav">
-              {NAV_ITEMS.map((item) => (
-                <button
-                  key={item.path}
-                  className={item.path === "/shop" ? "nav-active" : ""}
-                  onClick={() => go(item.path)}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </nav>
+            <button
+              className="wallet-pill"
+              onClick={() =>
+                handleNavigation("/deposit")
+              }
+            >
+              <span className="wallet-icon">
+                ₫
+              </span>
+              <span>
+                {formatPrice(wallet)}
+              </span>
+            </button>
 
-            <div className="top-actions">
-              <button className="wallet-button" onClick={goDeposit}>
-                <span className="wallet-icon">₫</span>
-                <span>{formatPrice(wallet)}</span>
+            <button
+              className="user-pill"
+              onClick={() =>
+                handleNavigation(
+                  user
+                    ? "/account"
+                    : "/login?next=/shop"
+                )
+              }
+            >
+              <span className="avatar">
+                {getUserName()
+                  .charAt(0)
+                  .toUpperCase()}
+              </span>
+
+              <span className="user-name">
+                {getUserName()}
+              </span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <section className="hero-wrap">
+        <div className="hero">
+          <div className="hero-glow glow-one" />
+          <div className="hero-glow glow-two" />
+
+          <div className="hero-content">
+            <div className="hero-tag">
+              XENOVA PLAY STORE
+            </div>
+
+            <h1>
+              MUA KEY
+              <br />
+              <span>NHANH - AN TOÀN - TỰ ĐỘNG</span>
+            </h1>
+
+            <p>
+              Kho KEY chính hãng cho Android,
+              iPhone và PC.
+              <br />
+              Thanh toán bằng số dư ví và nhận
+              KEY ngay sau khi mua.
+            </p>
+
+            <div className="hero-buttons">
+              <button
+                onClick={() =>
+                  handleNavigation("/deposit")
+                }
+                className="hero-primary"
+              >
+                Nạp tiền ngay
               </button>
 
               <button
-                className="avatar-button"
-                onClick={() => go(user ? "/account" : "/login")}
+                onClick={() =>
+                  document
+                    .getElementById("products")
+                    ?.scrollIntoView({
+                      behavior: "smooth",
+                    })
+                }
+                className="hero-secondary"
               >
-                {user?.email?.charAt(0)?.toUpperCase() || "U"}
+                Xem sản phẩm
               </button>
             </div>
           </div>
-        </header>
 
-        <main className="container">
-          <section className="hero">
-            <div className="hero-content">
-              <div className="hero-small">XENOVA PLAY</div>
+          <div className="hero-art">
+            <div className="circle circle-one" />
+            <div className="circle circle-two" />
 
-              <h1>
-                CỬA HÀNG
-                <br />
-                <span>KEY PREMIUM</span>
-              </h1>
-
-              <p>
-                Mua KEY nhanh chóng, thanh toán bằng số dư tài khoản và nhận
-                KEY ngay sau khi giao dịch thành công.
-              </p>
-
-              <div className="hero-buttons">
-                <button className="hero-primary" onClick={goDeposit}>
-                  <span>+</span>
-                  NẠP TIỀN
-                </button>
-
-                <button className="hero-secondary" onClick={() => go("/keys")}>
-                  KEY CỦA TÔI
-                </button>
+            <div className="anime-card">
+              <div className="anime-hair" />
+              <div className="anime-face">
+                <span className="eye left" />
+                <span className="eye right" />
+                <span className="mouth" />
+              </div>
+              <div className="anime-body">
+                X
               </div>
             </div>
 
-            <div className="hero-image-box">
-              <img
-                src={SAMPLE_IMAGE}
-                alt="XENOVA PLAY"
-                className="hero-image"
+            <div className="floating-card card-a">
+              <span>⚡</span>
+              <div>
+                <b>KEY AUTO</b>
+                <small>Nhận KEY tức thì</small>
+              </div>
+            </div>
+
+            <div className="floating-card card-b">
+              <span>✓</span>
+              <div>
+                <b>AN TOÀN</b>
+                <small>Giao dịch bảo mật</small>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="shop-area" id="products">
+        <aside className="sidebar">
+          <div className="sidebar-card">
+            <div className="side-title">
+              <span>☰</span>
+              DANH MỤC
+            </div>
+
+            <div className="category-list">
+              {categoryList.map((category) => (
+                <button
+                  key={category.id}
+                  className={
+                    selectedCategory ===
+                    category.id
+                      ? "category active"
+                      : "category"
+                  }
+                  onClick={() =>
+                    setSelectedCategory(
+                      category.id
+                    )
+                  }
+                >
+                  <span className="category-icon">
+                    {CATEGORY_ICONS[
+                      category.id
+                    ] || "◆"}
+                  </span>
+
+                  <span className="category-name">
+                    {category.name}
+                  </span>
+
+                  <span className="category-count">
+                    {category.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="vip-card">
+            <div className="vip-star">✦</div>
+
+            <h3>THÀNH VIÊN XENOVA</h3>
+
+            <p>
+              Mua KEY nhanh chóng,
+              <br />
+              quản lý đơn hàng dễ dàng.
+            </p>
+
+            <button
+              onClick={() =>
+                handleNavigation("/account")
+              }
+            >
+              Tài khoản của tôi
+            </button>
+          </div>
+
+          <div className="support-card">
+            <div className="support-icon">
+              ?
+            </div>
+
+            <div>
+              <b>Cần hỗ trợ?</b>
+              <span>Liên hệ Admin XENOVA</span>
+            </div>
+
+            <button
+              onClick={() =>
+                window.open(
+                  "https://zalo.me/84365717262",
+                  "_blank"
+                )
+              }
+            >
+              →
+            </button>
+          </div>
+        </aside>
+
+        <section className="products-area">
+          <div className="products-heading">
+            <div>
+              <div className="small-heading">
+                XENOVA STORE
+              </div>
+
+              <h2>Sản phẩm nổi bật</h2>
+
+              <p>
+                Chọn sản phẩm phù hợp với thiết bị
+                của bạn.
+              </p>
+            </div>
+
+            <div className="search-box">
+              <span>⌕</span>
+
+              <input
+                value={search}
+                onChange={(event) =>
+                  setSearch(event.target.value)
+                }
+                placeholder="Tìm sản phẩm..."
               />
-
-              <div className="hero-glow" />
             </div>
-          </section>
-
-          {message && (
-            <div className="message-box">
-              <span>{message}</span>
-
-              <button onClick={() => setMessage("")}>×</button>
-            </div>
-          )}
+          </div>
 
           {error && (
             <div className="error-box">
-              <strong>Không thể tải cửa hàng</strong>
-              <span>{error}</span>
-
-              <button onClick={loadShop}>Thử lại</button>
+              <span>!</span>
+              <div>{error}</div>
+              <button
+                onClick={() => setError("")}
+              >
+                ×
+              </button>
             </div>
           )}
 
-          <section className="shop-layout">
-            <aside className="sidebar">
-              <div className="side-card">
-                <div className="side-title">
-                  <span className="pink-dot" />
-                  DANH MỤC
+          <div className="products-grid">
+            {loading ? (
+              <>
+                <ProductSkeleton />
+                <ProductSkeleton />
+                <ProductSkeleton />
+                <ProductSkeleton />
+              </>
+            ) : filteredProducts.length === 0 ? (
+              <div className="empty-products">
+                <div className="empty-icon">
+                  ◇
                 </div>
 
-                <button
-                  className={`category-item ${
-                    selectedCategory === "all" ? "category-active" : ""
-                  }`}
-                  onClick={() => setSelectedCategory("all")}
-                >
-                  <span className="category-icon">◈</span>
-                  <span>Tất cả sản phẩm</span>
-                  <small>{products.length}</small>
-                </button>
+                <h3>Không có sản phẩm</h3>
 
-                {categories.map((category) => {
-                  const categoryId = category?.id ?? category?.slug;
-                  const categoryName =
-                    category?.name ||
-                    category?.title ||
-                    category?.category_name ||
-                    "Danh mục";
-
-                  return (
-                    <button
-                      key={String(categoryId)}
-                      className={`category-item ${
-                        String(selectedCategory) === String(categoryId)
-                          ? "category-active"
-                          : ""
-                      }`}
-                      onClick={() => setSelectedCategory(categoryId)}
-                    >
-                      <span className="category-icon">
-                        {normalize(categoryName).includes("iphone") ||
-                        normalize(categoryName).includes("ios")
-                          ? ""
-                          : normalize(categoryName).includes("android")
-                          ? "◆"
-                          : normalize(categoryName).includes("pc")
-                          ? "▣"
-                          : "◇"}
-                      </span>
-
-                      <span>{categoryName}</span>
-
-                      <small>{getCategoryStock(categoryId)}</small>
-                    </button>
-                  );
-                })}
+                <p>
+                  Không tìm thấy sản phẩm phù hợp.
+                </p>
               </div>
-
-              <div className="vip-card">
-                <div className="vip-icon">♛</div>
-
-                <div>
-                  <strong>VIP MEMBER</strong>
-                  <p>Ưu đãi dành cho thành viên</p>
-                </div>
-              </div>
-
-              <div className="support-card">
-                <div className="support-icon">?</div>
-
-                <div>
-                  <strong>CẦN HỖ TRỢ?</strong>
-                  <p>Liên hệ Admin nếu cần hỗ trợ</p>
-                </div>
-
-                <a
-                  href="https://zalo.me/84365717262"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  CHAT ADMIN
-                </a>
-              </div>
-            </aside>
-
-            <section className="products-section">
-              <div className="section-heading">
-                <div>
-                  <div className="section-kicker">XENOVA STORE</div>
-                  <h2>
-                    {selectedCategory === "all"
-                      ? "Tất cả sản phẩm"
-                      : categories.find(
-                          (category) =>
-                            String(category?.id ?? category?.slug) ===
-                            String(selectedCategory)
-                        )?.name || "Sản phẩm"}
-                  </h2>
-                </div>
-
-                <div className="product-count">
-                  {visibleProducts.length} sản phẩm
-                </div>
-              </div>
-
-              {loading ? (
-                <div className="product-grid">
-                  {Array.from({ length: 6 }).map((_, index) => (
-                    <ProductSkeleton key={index} />
-                  ))}
-                </div>
-              ) : visibleProducts.length > 0 ? (
-                <div className="product-grid">
-                  {visibleProducts.map((product) => (
-                    <ProductCard
-                      key={String(product.id)}
-                      product={product}
-                      stock={getProductStock(product.id)}
-                      onBuy={handleBuyClick}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="empty-products">
-                  <div className="empty-icon">⌁</div>
-                  <h3>Chưa có sản phẩm</h3>
-                  <p>Danh mục này hiện chưa có sản phẩm.</p>
-
-                  <button onClick={() => setSelectedCategory("all")}>
-                    XEM TẤT CẢ
-                  </button>
-                </div>
-              )}
-            </section>
-          </section>
-
-          <section className="quick-section">
-            <div className="quick-card">
-              <div className="quick-icon">₫</div>
-
-              <div>
-                <strong>Nạp tiền nhanh</strong>
-                <span>Nạp tiền vào ví để mua KEY</span>
-              </div>
-
-              <button onClick={goDeposit}>NẠP TIỀN</button>
-            </div>
-
-            <div className="quick-card">
-              <div className="quick-icon">⌁</div>
-
-              <div>
-                <strong>KEY của tôi</strong>
-                <span>Xem các KEY đã mua</span>
-              </div>
-
-              <button onClick={() => go("/keys")}>XEM KEY</button>
-            </div>
-
-            <div className="quick-card">
-              <div className="quick-icon">◷</div>
-
-              <div>
-                <strong>Lịch sử đơn hàng</strong>
-                <span>Kiểm tra giao dịch đã mua</span>
-              </div>
-
-              <button onClick={() => go("/orders")}>XEM ĐƠN</button>
-            </div>
-          </section>
-        </main>
-
-        <a
-          href="https://zalo.me/84365717262"
-          target="_blank"
-          rel="noreferrer"
-          className="floating-chat"
-        >
-          <span>💬</span>
-          <div>
-            <strong>Chat Admin</strong>
-            <small>Hỗ trợ trực tuyến</small>
+            ) : (
+              filteredProducts.map((product) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  stock={stock}
+                  onBuy={handleBuy}
+                />
+              ))
+            )}
           </div>
-        </a>
+        </section>
+      </section>
 
-        <nav className="mobile-nav">
-          {NAV_ITEMS.slice(0, 5).map((item) => (
-            <button
-              key={item.path}
-              className={item.path === "/shop" ? "mobile-active" : ""}
-              onClick={() => go(item.path)}
-            >
-              <span>
-                {item.path === "/"
-                  ? "⌂"
-                  : item.path === "/shop"
-                  ? "▣"
-                  : item.path === "/deposit"
-                  ? "₫"
-                  : item.path === "/keys"
-                  ? "⌁"
-                  : "◷"}
-              </span>
+      <section className="quick-services">
+        <button
+          onClick={() =>
+            handleNavigation("/deposit")
+          }
+          className="service-card"
+        >
+          <div className="service-icon pink">
+            ₫
+          </div>
+          <div>
+            <b>Nạp tiền</b>
+            <span>Nạp vào ví XENOVA</span>
+          </div>
+          <strong>→</strong>
+        </button>
 
-              <small>{item.label}</small>
-            </button>
-          ))}
-        </nav>
-      </div>
+        <button
+          onClick={() =>
+            handleNavigation("/keys")
+          }
+          className="service-card"
+        >
+          <div className="service-icon purple">
+            🔑
+          </div>
+          <div>
+            <b>KEY của tôi</b>
+            <span>Quản lý KEY đã mua</span>
+          </div>
+          <strong>→</strong>
+        </button>
+
+        <button
+          onClick={() =>
+            handleNavigation("/orders")
+          }
+          className="service-card"
+        >
+          <div className="service-icon blue">
+            ◷
+          </div>
+          <div>
+            <b>Đơn hàng</b>
+            <span>Xem lịch sử mua hàng</span>
+          </div>
+          <strong>→</strong>
+        </button>
+
+        <button
+          onClick={() =>
+            window.open(
+              "https://zalo.me/84365717262",
+              "_blank"
+            )
+          }
+          className="service-card"
+        >
+          <div className="service-icon green">
+            Z
+          </div>
+          <div>
+            <b>Chat Admin</b>
+            <span>Hỗ trợ qua Zalo</span>
+          </div>
+          <strong>→</strong>
+        </button>
+      </section>
+
+      <footer>
+        <div className="footer-brand">
+          <div className="brand-mark">
+            X
+          </div>
+
+          <div>
+            <b>XENOVA PLAY</b>
+            <span>KEY STORE</span>
+          </div>
+        </div>
+
+        <p>
+          © {new Date().getFullYear()} XENOVA
+          PLAY. All rights reserved.
+        </p>
+      </footer>
+
+      <button
+        className="floating-chat"
+        onClick={() =>
+          window.open(
+            "https://zalo.me/84365717262",
+            "_blank"
+          )
+        }
+      >
+        <span>💬</span>
+        <b>Chat Admin</b>
+      </button>
 
       {buyModal && (
         <div
-          className="modal-overlay"
-          onClick={() => {
-            if (!buying) setBuyModal(null);
-          }}
+          className="modal-backdrop"
+          onClick={() =>
+            !buying && setBuyModal(null)
+          }
         >
-          <div className="modal" onClick={(event) => event.stopPropagation()}>
+          <div
+            className="modal"
+            onClick={(event) =>
+              event.stopPropagation()
+            }
+          >
             <button
               className="modal-close"
-              onClick={() => !buying && setBuyModal(null)}
+              disabled={buying}
+              onClick={() =>
+                setBuyModal(null)
+              }
             >
               ×
             </button>
 
-            <div className="modal-icon">🛒</div>
+            <div className="modal-icon">
+              🔑
+            </div>
 
-            <div className="modal-kicker">XENOVA STORE</div>
+            <div className="modal-label">
+              XÁC NHẬN MUA
+            </div>
 
-            <h3>Xác nhận mua KEY</h3>
+            <h3>
+              {buyModal.name ||
+                buyModal.title ||
+                "KEY XENOVA"}
+            </h3>
 
-            <p className="modal-product">
-              {getProductName(buyModal.product)}
-            </p>
+            <div className="confirm-row">
+              <span>Giá sản phẩm</span>
+              <b>
+                {formatPrice(
+                  buyModal.price ??
+                    buyModal.sell_price ??
+                    buyModal.amount
+                )}
+              </b>
+            </div>
 
-            <div className="confirm-info">
-              <div>
-                <span>Giá sản phẩm</span>
-                <strong>
-                  {formatPrice(getProductPrice(buyModal.product))}
-                </strong>
-              </div>
-
-              <div>
-                <span>Số dư hiện tại</span>
-                <strong>{formatPrice(wallet)}</strong>
-              </div>
-
-              <div>
-                <span>Tồn kho</span>
-                <strong>{buyModal.stock} KEY</strong>
-              </div>
+            <div className="confirm-row">
+              <span>Số dư hiện tại</span>
+              <b>{formatPrice(wallet)}</b>
             </div>
 
             <div className="modal-actions">
               <button
                 className="cancel-button"
                 disabled={buying}
-                onClick={() => setBuyModal(null)}
+                onClick={() =>
+                  setBuyModal(null)
+                }
               >
-                HỦY
+                Hủy
               </button>
 
               <button
@@ -936,7 +1154,9 @@ export default function ShopPage() {
                 disabled={buying}
                 onClick={confirmBuy}
               >
-                {buying ? "ĐANG XỬ LÝ..." : "XÁC NHẬN MUA"}
+                {buying
+                  ? "Đang xử lý..."
+                  : "Xác nhận mua"}
               </button>
             </div>
           </div>
@@ -944,51 +1164,38 @@ export default function ShopPage() {
       )}
 
       {successModal && (
-        <div className="modal-overlay">
-          <div className="modal success-modal">
-            <button
-              className="modal-close"
-              onClick={() => setSuccessModal(null)}
-            >
-              ×
-            </button>
+        <div className="modal-backdrop">
+          <div className="modal success">
+            <div className="success-icon">
+              ✓
+            </div>
 
-            <div className="success-icon">✓</div>
+            <div className="modal-label">
+              MUA THÀNH CÔNG
+            </div>
 
-            <div className="modal-kicker">GIAO DỊCH THÀNH CÔNG</div>
+            <h3>{successModal.product}</h3>
 
-            <h3>Mua KEY thành công</h3>
-
-            <p className="modal-product">
-              {getProductName(successModal.product)}
+            <p className="success-text">
+              KEY của bạn đã được tạo thành công.
             </p>
 
-            {successModal.key ? (
-              <>
-                <div className="key-box">
-                  <span>KEY CỦA BẠN</span>
-                  <strong>{successModal.key}</strong>
-                </div>
-
-                <button className="copy-button" onClick={copyKey}>
-                  SAO CHÉP KEY
-                </button>
-              </>
-            ) : (
-              <div className="key-box">
-                <span>Đơn hàng đã được xử lý</span>
-                <strong>Vui lòng kiểm tra mục KEY của tôi</strong>
-              </div>
-            )}
+            <div className="key-box">
+              <span>KEY</span>
+              <strong>
+                {successModal.key ||
+                  "KEY đã được lưu trong tài khoản"}
+              </strong>
+            </div>
 
             <button
-              className="done-button"
+              className="confirm-button full"
               onClick={() => {
                 setSuccessModal(null);
-                go("/keys");
+                router.push("/keys");
               }}
             >
-              XEM KEY CỦA TÔI
+              Xem KEY của tôi
             </button>
           </div>
         </div>
@@ -999,12 +1206,14 @@ export default function ShopPage() {
           box-sizing: border-box;
         }
 
-        html,
+        html {
+          scroll-behavior: smooth;
+        }
+
         body {
           margin: 0;
-          padding: 0;
-          background: #fff8fc;
-          color: #29202a;
+          background: #fff8fb;
+          color: #292331;
           font-family:
             Inter,
             ui-sans-serif,
@@ -1021,1041 +1230,1351 @@ export default function ShopPage() {
         }
 
         button {
-          border: 0;
           cursor: pointer;
         }
 
-        a {
-          text-decoration: none;
-        }
-
-        .page {
+        .xenova {
           min-height: 100vh;
+          overflow: hidden;
           background:
             radial-gradient(
-              circle at 10% 0%,
-              rgba(255, 105, 170, 0.1),
-              transparent 30%
-            ),
-            radial-gradient(
-              circle at 90% 15%,
-              rgba(255, 190, 225, 0.18),
+              circle at 90% 12%,
+              rgba(255, 180, 211, 0.18),
               transparent 28%
             ),
-            #fff8fc;
-          padding-bottom: 40px;
+            #fff8fb;
+          position: relative;
+        }
+
+        .xenova.dark {
+          background: #15121a;
+          color: #f8edf4;
         }
 
         .topbar {
+          height: 76px;
           position: sticky;
           top: 0;
           z-index: 50;
           background: rgba(255, 255, 255, 0.92);
+          border-bottom: 1px solid #f0e5eb;
           backdrop-filter: blur(18px);
-          border-bottom: 1px solid #f4dce9;
+        }
+
+        .dark .topbar {
+          background: rgba(27, 23, 31, 0.94);
+          border-color: #302933;
         }
 
         .topbar-inner {
-          width: min(1400px, calc(100% - 32px));
-          min-height: 76px;
+          width: min(1420px, calc(100% - 40px));
+          height: 100%;
           margin: auto;
           display: flex;
           align-items: center;
-          gap: 28px;
+          gap: 26px;
         }
 
         .brand {
+          border: 0;
+          background: transparent;
           display: flex;
           align-items: center;
           gap: 10px;
-          background: transparent;
           padding: 0;
-          color: #231a24;
-          flex-shrink: 0;
+          color: inherit;
+          min-width: 190px;
+          text-align: left;
         }
 
-        .brand-logo {
+        .brand-mark {
           width: 42px;
           height: 42px;
-          border-radius: 14px;
           display: grid;
           place-items: center;
-          background: linear-gradient(145deg, #ff5ca8, #ff2f87);
+          border-radius: 13px;
+          background:
+            linear-gradient(
+              145deg,
+              #ff4f9a,
+              #ff7db7
+            );
           color: white;
-          font-size: 21px;
-          font-weight: 900;
-          box-shadow: 0 9px 25px rgba(255, 47, 135, 0.25);
+          font-weight: 1000;
+          font-size: 22px;
+          box-shadow:
+            0 8px 22px
+              rgba(255, 76, 148, 0.28);
         }
 
         .brand-text {
           display: flex;
           flex-direction: column;
-          line-height: 0.9;
-          text-align: left;
+          line-height: 1.05;
         }
 
         .brand-text strong {
-          font-size: 18px;
-          letter-spacing: 0.04em;
+          font-size: 17px;
+          letter-spacing: 1px;
         }
 
         .brand-text span {
-          color: #ff4a9a;
-          font-size: 12px;
-          font-weight: 900;
-          letter-spacing: 0.2em;
-          margin-left: 1px;
+          margin-top: 4px;
+          color: #b38c9f;
+          font-size: 9px;
+          font-weight: 800;
+          letter-spacing: 2px;
         }
 
         .desktop-nav {
+          flex: 1;
           display: flex;
           align-items: center;
-          gap: 4px;
-          flex: 1;
+          justify-content: center;
+          gap: 2px;
         }
 
-        .desktop-nav button {
+        .nav-item {
+          border: 0;
           background: transparent;
-          color: #756a74;
-          padding: 11px 13px;
-          border-radius: 10px;
-          font-size: 13px;
+          color: #786b75;
           font-weight: 700;
-          transition: 0.2s ease;
+          font-size: 13px;
+          padding: 11px 12px;
+          border-radius: 11px;
+          transition: 0.2s;
         }
 
-        .desktop-nav button:hover {
-          color: #ff3d91;
-          background: #fff1f8;
+        .nav-item:hover {
+          color: #ef418b;
+          background: #fff1f7;
         }
 
-        .desktop-nav .nav-active {
-          color: #ff318a;
-          background: #fff0f7;
+        .nav-item.active {
+          color: #ef418b;
+          background: #fff0f6;
+        }
+
+        .dark .nav-item {
+          color: #bcaeba;
+        }
+
+        .dark .nav-item.active,
+        .dark .nav-item:hover {
+          color: #ff72ad;
+          background: #30232c;
         }
 
         .top-actions {
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 8px;
         }
 
-        .wallet-button {
+        .theme-button {
+          width: 39px;
+          height: 39px;
+          border: 1px solid #eee1e8;
+          border-radius: 12px;
+          background: white;
+          color: #746672;
+        }
+
+        .dark .theme-button {
+          background: #28212a;
+          border-color: #3b303b;
+          color: #ffb5d2;
+        }
+
+        .wallet-pill,
+        .user-pill {
+          border: 1px solid #f0e3e9;
+          background: white;
+          border-radius: 13px;
           height: 42px;
-          padding: 0 15px;
           display: flex;
           align-items: center;
           gap: 8px;
-          color: #ec277f;
-          background: #fff0f7;
-          border: 1px solid #ffd4e9;
-          border-radius: 12px;
+          padding: 0 11px;
+          color: #453943;
           font-weight: 800;
-          font-size: 13px;
+        }
+
+        .dark .wallet-pill,
+        .dark .user-pill {
+          background: #28212a;
+          border-color: #3b303b;
+          color: #f8eaf1;
         }
 
         .wallet-icon {
-          width: 24px;
-          height: 24px;
+          width: 25px;
+          height: 25px;
+          border-radius: 8px;
           display: grid;
           place-items: center;
-          border-radius: 8px;
-          background: #ff3f92;
-          color: white;
+          background: #fff0f6;
+          color: #ed438c;
           font-size: 12px;
         }
 
-        .avatar-button {
-          width: 42px;
-          height: 42px;
-          border-radius: 50%;
+        .avatar {
+          width: 27px;
+          height: 27px;
+          border-radius: 9px;
+          display: grid;
+          place-items: center;
           color: white;
-          background: linear-gradient(145deg, #ff6cb1, #ff2d88);
-          font-weight: 900;
-          box-shadow: 0 8px 20px rgba(255, 45, 136, 0.22);
+          background: linear-gradient(
+            135deg,
+            #ff589d,
+            #a76cff
+          );
+          font-size: 12px;
         }
 
-        .container {
-          width: min(1400px, calc(100% - 32px));
-          margin: auto;
+        .user-name {
+          max-width: 100px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .hero-wrap {
+          width: min(1420px, calc(100% - 40px));
+          margin: 26px auto 0;
         }
 
         .hero {
-          min-height: 330px;
-          margin-top: 28px;
-          border: 1px solid #f6d7e8;
-          border-radius: 26px;
-          overflow: hidden;
+          min-height: 390px;
           position: relative;
-          display: flex;
-          align-items: center;
+          overflow: hidden;
+          border-radius: 28px;
           background:
+            radial-gradient(
+              circle at 72% 30%,
+              rgba(255, 255, 255, 0.9),
+              transparent 22%
+            ),
             linear-gradient(
               110deg,
-              rgba(255, 255, 255, 0.98),
-              rgba(255, 241, 248, 0.94)
+              #fff0f7 0%,
+              #ffe0ef 48%,
+              #f4d8ff 100%
             );
-          box-shadow: 0 20px 60px rgba(82, 37, 63, 0.07);
+          border: 1px solid #f3dbe6;
+          box-shadow:
+            0 22px 60px
+              rgba(181, 95, 139, 0.13);
+        }
+
+        .dark .hero {
+          background:
+            radial-gradient(
+              circle at 72% 30%,
+              rgba(255, 120, 181, 0.14),
+              transparent 25%
+            ),
+            linear-gradient(
+              110deg,
+              #35232f,
+              #291e2d
+            );
+          border-color: #493344;
         }
 
         .hero-content {
-          width: 55%;
-          padding: 48px 52px;
           position: relative;
-          z-index: 2;
+          z-index: 5;
+          padding: 60px 0 55px 68px;
+          max-width: 700px;
         }
 
-        .hero-small {
-          display: inline-flex;
-          padding: 7px 12px;
-          border-radius: 999px;
-          color: #ed3c8e;
-          background: #fff0f7;
-          border: 1px solid #ffd2e8;
-          font-size: 11px;
+        .hero-tag,
+        .small-heading {
+          color: #ef438c;
           font-weight: 900;
-          letter-spacing: 0.12em;
+          font-size: 11px;
+          letter-spacing: 2.4px;
         }
 
         .hero h1 {
-          margin: 18px 0 12px;
-          font-size: clamp(36px, 4vw, 62px);
+          margin: 15px 0 14px;
+          font-size: clamp(35px, 4.3vw, 63px);
           line-height: 0.98;
-          letter-spacing: -0.045em;
+          letter-spacing: -2.5px;
+          color: #2d2430;
+        }
+
+        .dark .hero h1 {
+          color: #fff0f7;
         }
 
         .hero h1 span {
-          color: #ff3b91;
+          color: #e84288;
         }
 
         .hero p {
-          max-width: 570px;
           margin: 0;
-          color: #786d76;
+          color: #806d78;
+          line-height: 1.75;
           font-size: 14px;
-          line-height: 1.7;
+          font-weight: 600;
+        }
+
+        .dark .hero p {
+          color: #cdbac6;
         }
 
         .hero-buttons {
           display: flex;
           gap: 10px;
-          margin-top: 24px;
+          margin-top: 27px;
         }
 
         .hero-primary,
         .hero-secondary {
-          height: 44px;
-          padding: 0 18px;
-          border-radius: 11px;
-          font-size: 12px;
+          border-radius: 12px;
+          padding: 13px 21px;
+          font-size: 13px;
           font-weight: 900;
         }
 
         .hero-primary {
-          display: flex;
-          gap: 8px;
-          align-items: center;
-          background: #ff3d91;
+          border: 0;
           color: white;
-          box-shadow: 0 12px 25px rgba(255, 61, 145, 0.23);
-        }
-
-        .hero-primary span {
-          font-size: 17px;
+          background: linear-gradient(
+            135deg,
+            #f4428c,
+            #ff6eaa
+          );
+          box-shadow:
+            0 11px 25px
+              rgba(244, 66, 140, 0.26);
         }
 
         .hero-secondary {
-          color: #ee3a8c;
-          background: white;
-          border: 1px solid #ffd1e5;
+          border: 1px solid #efc9da;
+          background: rgba(255, 255, 255, 0.72);
+          color: #d83e80;
         }
 
-        .hero-image-box {
+        .hero-art {
           position: absolute;
+          width: 55%;
+          height: 100%;
           right: 0;
           top: 0;
-          width: 48%;
-          height: 100%;
+        }
+
+        .circle {
+          position: absolute;
+          border-radius: 50%;
+          border: 1px solid rgba(239, 82, 145, 0.18);
+        }
+
+        .circle-one {
+          width: 360px;
+          height: 360px;
+          right: 100px;
+          top: 18px;
+        }
+
+        .circle-two {
+          width: 260px;
+          height: 260px;
+          right: 150px;
+          top: 68px;
+          background: rgba(255, 255, 255, 0.32);
+        }
+
+        .anime-card {
+          position: absolute;
+          right: 190px;
+          bottom: -15px;
+          width: 205px;
+          height: 300px;
+          border-radius: 110px 110px 30px 30px;
+          background:
+            linear-gradient(
+              160deg,
+              #f8b5cf,
+              #c29bed
+            );
+          transform: rotate(5deg);
+          box-shadow:
+            0 35px 50px
+              rgba(128, 66, 117, 0.18);
           overflow: hidden;
         }
 
-        .hero-image {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-          opacity: 0.92;
-          mask-image: linear-gradient(to right, transparent 0%, black 35%);
-          -webkit-mask-image: linear-gradient(
-            to right,
-            transparent 0%,
-            black 35%
-          );
-        }
-
-        .hero-glow {
+        .anime-hair {
           position: absolute;
-          inset: 0;
+          width: 175px;
+          height: 180px;
+          left: 14px;
+          top: 10px;
+          border-radius: 52% 48% 42% 43%;
           background:
-            radial-gradient(
-              circle at 70% 50%,
-              rgba(255, 70, 151, 0.18),
-              transparent 45%
-            ),
-            linear-gradient(to right, #fff1f8 0%, transparent 45%);
-          pointer-events: none;
+            linear-gradient(
+              140deg,
+              #654f86,
+              #302846
+            );
         }
 
-        .message-box,
-        .error-box {
-          margin-top: 18px;
-          padding: 13px 16px;
-          border-radius: 13px;
+        .anime-face {
+          position: absolute;
+          width: 122px;
+          height: 132px;
+          left: 41px;
+          top: 57px;
+          border-radius: 48% 48% 46% 46%;
+          background: #ffe0d2;
+        }
+
+        .eye {
+          position: absolute;
+          top: 59px;
+          width: 8px;
+          height: 14px;
+          border-radius: 50%;
+          background: #49334d;
+        }
+
+        .eye.left {
+          left: 33px;
+        }
+
+        .eye.right {
+          right: 33px;
+        }
+
+        .mouth {
+          position: absolute;
+          left: 53px;
+          top: 91px;
+          width: 17px;
+          height: 7px;
+          border-bottom: 2px solid #b9687d;
+          border-radius: 50%;
+        }
+
+        .anime-body {
+          position: absolute;
+          bottom: -40px;
+          left: 19px;
+          width: 167px;
+          height: 150px;
+          border-radius: 48% 48% 0 0;
+          background: #fff;
+          color: #ef5795;
+          display: grid;
+          place-items: center;
+          font-size: 52px;
+          font-weight: 1000;
+        }
+
+        .floating-card {
+          position: absolute;
+          z-index: 10;
           display: flex;
           align-items: center;
-          gap: 12px;
-          font-size: 13px;
-          font-weight: 700;
+          gap: 9px;
+          background: rgba(255, 255, 255, 0.91);
+          padding: 11px 13px;
+          border-radius: 13px;
+          box-shadow:
+            0 15px 30px
+              rgba(120, 63, 105, 0.14);
+          border: 1px solid rgba(255, 255, 255, 0.9);
         }
 
-        .message-box {
-          color: #c12c70;
-          background: #fff0f7;
-          border: 1px solid #ffd2e6;
-        }
-
-        .error-box {
-          color: #a82f55;
-          background: #fff1f4;
-          border: 1px solid #ffd1dd;
-        }
-
-        .error-box span {
-          color: #765e68;
-          font-weight: 500;
-          flex: 1;
-        }
-
-        .message-box span {
-          flex: 1;
-        }
-
-        .message-box button {
-          background: transparent;
-          color: #b52b6b;
-          font-size: 20px;
-        }
-
-        .error-box button {
-          margin-left: auto;
-          background: #ff4c88;
-          color: white;
-          padding: 8px 12px;
-          border-radius: 8px;
-          font-size: 11px;
-          font-weight: 900;
-        }
-
-        .shop-layout {
-          margin-top: 28px;
+        .floating-card > span {
+          width: 32px;
+          height: 32px;
           display: grid;
-          grid-template-columns: 260px minmax(0, 1fr);
-          gap: 24px;
-          align-items: start;
+          place-items: center;
+          border-radius: 10px;
+          background: #fff0f6;
+          color: #ec448b;
+        }
+
+        .floating-card div {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .floating-card b {
+          font-size: 10px;
+          color: #453541;
+        }
+
+        .floating-card small {
+          color: #9b8692;
+          margin-top: 2px;
+          font-size: 8px;
+        }
+
+        .card-a {
+          right: 385px;
+          top: 80px;
+        }
+
+        .card-b {
+          right: 72px;
+          bottom: 74px;
+        }
+
+        .shop-area {
+          width: min(1420px, calc(100% - 40px));
+          margin: 28px auto 0;
+          display: grid;
+          grid-template-columns: 265px minmax(0, 1fr);
+          gap: 25px;
         }
 
         .sidebar {
           display: flex;
           flex-direction: column;
-          gap: 14px;
+          gap: 17px;
         }
 
-        .side-card {
-          padding: 14px;
-          border-radius: 18px;
+        .sidebar-card {
           background: white;
-          border: 1px solid #f1dbe7;
-          box-shadow: 0 12px 35px rgba(86, 43, 67, 0.05);
+          border: 1px solid #f0e2e9;
+          border-radius: 20px;
+          padding: 18px;
+          box-shadow:
+            0 10px 30px
+              rgba(173, 88, 129, 0.06);
+        }
+
+        .dark .sidebar-card,
+        .dark .service-card,
+        .dark .product-card {
+          background: #211b23;
+          border-color: #382d36;
         }
 
         .side-title {
-          padding: 8px 9px 13px;
           display: flex;
           align-items: center;
           gap: 8px;
-          color: #5b4c57;
-          font-size: 11px;
-          font-weight: 900;
-          letter-spacing: 0.12em;
+          padding: 4px 5px 14px;
+          font-size: 12px;
+          font-weight: 950;
+          letter-spacing: 1px;
         }
 
-        .pink-dot {
-          width: 7px;
-          height: 7px;
-          border-radius: 50%;
-          background: #ff3d91;
-          box-shadow: 0 0 0 5px #fff0f7;
+        .side-title span {
+          color: #ef438c;
         }
 
-        .category-item {
+        .category-list {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .category {
           width: 100%;
-          min-height: 47px;
-          padding: 0 10px;
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 9px;
+          border: 0;
           background: transparent;
           border-radius: 11px;
-          color: #766a74;
+          padding: 11px 9px;
+          color: #7f707a;
           text-align: left;
           font-size: 12px;
-          font-weight: 700;
-          transition: 0.2s ease;
+          font-weight: 750;
         }
 
-        .category-item:hover {
-          color: #f03388;
-          background: #fff4f9;
+        .category:hover,
+        .category.active {
+          color: #e53d83;
+          background: #fff0f6;
         }
 
-        .category-item small {
-          margin-left: auto;
-          min-width: 24px;
-          text-align: center;
-          color: #a696a1;
-          font-size: 10px;
+        .dark .category {
+          color: #b8a7b3;
+        }
+
+        .dark .category:hover,
+        .dark .category.active {
+          color: #ff70aa;
+          background: #33242e;
         }
 
         .category-icon {
-          width: 27px;
-          height: 27px;
+          width: 25px;
+          height: 25px;
           display: grid;
           place-items: center;
           border-radius: 8px;
-          background: #faf2f7;
-          color: #ef4a96;
-          font-size: 12px;
+          background: #fff5f8;
+          color: #ef5496;
         }
 
-        .category-active {
-          color: #ed3388;
-          background: #fff0f7;
+        .category-name {
+          flex: 1;
         }
 
-        .category-active .category-icon {
-          color: white;
-          background: #ff4194;
-        }
-
-        .vip-card,
-        .support-card {
-          border-radius: 18px;
-          padding: 17px;
-          display: flex;
-          align-items: center;
-          gap: 12px;
+        .category-count {
+          color: #ad9da6;
+          font-size: 10px;
         }
 
         .vip-card {
-          background: linear-gradient(135deg, #ff3f92, #ff75b5);
+          position: relative;
+          overflow: hidden;
+          padding: 23px;
+          border-radius: 20px;
+          background:
+            linear-gradient(
+              140deg,
+              #312537,
+              #5a3150
+            );
           color: white;
-          box-shadow: 0 15px 35px rgba(255, 61, 145, 0.2);
+          box-shadow:
+            0 15px 35px
+              rgba(68, 34, 62, 0.16);
         }
 
-        .vip-icon,
-        .support-icon {
-          width: 39px;
-          height: 39px;
-          flex-shrink: 0;
-          display: grid;
-          place-items: center;
-          border-radius: 12px;
-          font-weight: 900;
+        .vip-star {
+          position: absolute;
+          right: 18px;
+          top: 10px;
+          color: #ff91bd;
+          font-size: 35px;
+          opacity: 0.35;
         }
 
-        .vip-icon {
-          background: rgba(255, 255, 255, 0.2);
-          font-size: 19px;
+        .vip-card h3 {
+          margin: 0;
+          font-size: 13px;
+          letter-spacing: 1px;
         }
 
-        .vip-card strong,
-        .support-card strong {
-          display: block;
-          font-size: 12px;
+        .vip-card p {
+          color: #dbc7d4;
+          line-height: 1.6;
+          font-size: 11px;
         }
 
-        .vip-card p,
-        .support-card p {
-          margin: 4px 0 0;
-          font-size: 10px;
-          opacity: 0.8;
+        .vip-card button {
+          border: 0;
+          border-radius: 9px;
+          padding: 9px 12px;
+          color: white;
+          background: rgba(255, 255, 255, 0.14);
+          font-size: 11px;
+          font-weight: 800;
         }
 
         .support-card {
+          display: flex;
+          align-items: center;
+          gap: 9px;
+          padding: 14px;
+          border-radius: 16px;
+          border: 1px solid #f0e2e9;
           background: white;
-          border: 1px solid #f1dbe7;
-          flex-wrap: wrap;
         }
 
         .support-icon {
-          color: #f03d8c;
-          background: #fff0f7;
-        }
-
-        .support-card a {
-          width: 100%;
-          height: 36px;
+          width: 34px;
+          height: 34px;
+          border-radius: 10px;
           display: grid;
           place-items: center;
-          border-radius: 9px;
-          color: white;
-          background: #ff4194;
-          font-size: 10px;
+          background: #fff0f6;
+          color: #ec4389;
           font-weight: 900;
-          margin-top: 3px;
         }
 
-        .products-section {
+        .support-card div:nth-child(2) {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+        }
+
+        .support-card b {
+          font-size: 11px;
+        }
+
+        .support-card span {
+          margin-top: 2px;
+          color: #9b8992;
+          font-size: 9px;
+        }
+
+        .support-card button {
+          width: 29px;
+          height: 29px;
+          border: 0;
+          border-radius: 8px;
+          background: #fff0f6;
+          color: #ef438c;
+        }
+
+        .products-area {
           min-width: 0;
         }
 
-        .section-heading {
-          min-height: 55px;
+        .products-heading {
           display: flex;
-          justify-content: space-between;
           align-items: end;
-          margin-bottom: 15px;
+          justify-content: space-between;
+          gap: 20px;
+          margin-bottom: 17px;
         }
 
-        .section-kicker {
-          color: #ee4a96;
-          font-size: 10px;
-          font-weight: 900;
-          letter-spacing: 0.14em;
-          margin-bottom: 5px;
-        }
-
-        .section-heading h2 {
-          margin: 0;
-          color: #2c222b;
+        .products-heading h2 {
+          margin: 5px 0 3px;
           font-size: 25px;
-          letter-spacing: -0.025em;
+          letter-spacing: -0.7px;
         }
 
-        .product-count {
-          color: #a0929c;
+        .products-heading p {
+          margin: 0;
+          color: #96838d;
           font-size: 11px;
-          font-weight: 700;
         }
 
-        .product-grid {
+        .dark .products-heading p {
+          color: #b6a5b0;
+        }
+
+        .search-box {
+          width: 245px;
+          height: 42px;
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          padding: 0 12px;
+          border-radius: 12px;
+          background: white;
+          border: 1px solid #f0e2e9;
+        }
+
+        .dark .search-box {
+          background: #211b23;
+          border-color: #382d36;
+        }
+
+        .search-box span {
+          color: #b49ca8;
+          font-size: 20px;
+        }
+
+        .search-box input {
+          width: 100%;
+          border: 0;
+          outline: 0;
+          background: transparent;
+          color: inherit;
+          font-size: 11px;
+        }
+
+        .products-grid {
           display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
+          grid-template-columns:
+            repeat(3, minmax(0, 1fr));
           gap: 16px;
         }
 
         .product-card {
-          min-width: 0;
           overflow: hidden;
           border-radius: 17px;
+          border: 1px solid #f0e2e9;
           background: white;
-          border: 1px solid #f1dbe7;
-          box-shadow: 0 12px 35px rgba(86, 43, 67, 0.05);
+          box-shadow:
+            0 9px 25px
+              rgba(173, 88, 129, 0.055);
           transition:
-            transform 0.2s ease,
-            box-shadow 0.2s ease;
+            transform 0.2s,
+            box-shadow 0.2s;
         }
 
         .product-card:hover {
-          transform: translateY(-3px);
-          box-shadow: 0 18px 45px rgba(86, 43, 67, 0.09);
+          transform: translateY(-4px);
+          box-shadow:
+            0 18px 35px
+              rgba(173, 88, 129, 0.12);
         }
 
-        .product-image-wrap {
-          height: 160px;
+        .product-cover {
+          height: 145px;
           position: relative;
           overflow: hidden;
-          background: #fff1f8;
+          background:
+            radial-gradient(
+              circle at 20% 30%,
+              #fff,
+              transparent 28%
+            ),
+            linear-gradient(
+              135deg,
+              #ffe0ed,
+              #e9d9ff
+            );
+          display: grid;
+          place-items: center;
         }
 
         .product-image {
           width: 100%;
           height: 100%;
-          display: block;
           object-fit: cover;
-          transition: transform 0.35s ease;
         }
 
-        .product-card:hover .product-image {
-          transform: scale(1.04);
-        }
-
-        .product-badge,
         .stock-badge {
           position: absolute;
-          top: 10px;
-          padding: 6px 8px;
+          right: 9px;
+          top: 9px;
+          padding: 5px 8px;
           border-radius: 7px;
-          font-size: 9px;
+          font-size: 8px;
           font-weight: 900;
-          backdrop-filter: blur(8px);
+          backdrop-filter: blur(10px);
         }
 
-        .product-badge {
-          left: 10px;
-          color: #e72f82;
-          background: rgba(255, 255, 255, 0.9);
+        .stock-ok {
+          color: #258d63;
+          background: rgba(230, 255, 243, 0.9);
         }
 
-        .stock-badge {
-          right: 10px;
+        .stock-out {
+          color: #b64b65;
+          background: rgba(255, 234, 239, 0.94);
+        }
+
+        .product-icon {
+          width: 76px;
+          height: 76px;
+          border-radius: 25px;
+          display: grid;
+          place-items: center;
           color: white;
+          background:
+            linear-gradient(
+              145deg,
+              #ff5d9f,
+              #9d73e9
+            );
+          box-shadow:
+            0 18px 30px
+              rgba(170, 83, 140, 0.2);
         }
 
-        .stock-badge.in-stock {
-          background: rgba(39, 174, 111, 0.9);
+        .product-icon span {
+          font-size: 34px;
         }
 
-        .stock-badge.out-stock {
-          background: rgba(100, 91, 97, 0.88);
+        .icon-android {
+          background:
+            linear-gradient(
+              145deg,
+              #5cc98a,
+              #39a870
+            );
         }
 
-        .product-content {
-          padding: 14px;
+        .icon-iphone {
+          background:
+            linear-gradient(
+              145deg,
+              #7d83ff,
+              #a64fe9
+            );
         }
 
-        .product-title {
-          color: #30252e;
-          font-size: 14px;
-          font-weight: 900;
-          line-height: 1.35;
-          min-height: 38px;
+        .icon-pc {
+          background:
+            linear-gradient(
+              145deg,
+              #5c9df6,
+              #6a62db
+            );
         }
 
-        .product-duration {
-          margin-top: 8px;
+        .product-body {
+          padding: 15px;
+        }
+
+        .product-type {
+          color: #ed478d;
+          font-size: 8px;
+          font-weight: 950;
+          letter-spacing: 1.5px;
+        }
+
+        .product-body h3 {
+          margin: 5px 0;
+          font-size: 13px;
+          line-height: 1.3;
+        }
+
+        .product-info {
           display: flex;
-          align-items: center;
           gap: 5px;
-          color: #ef4b96;
-          font-size: 10px;
-          font-weight: 800;
-        }
-
-        .product-description {
-          margin-top: 7px;
-          min-height: 31px;
-          color: #9a8d96;
-          font-size: 10px;
-          line-height: 1.45;
+          color: #9b8a94;
+          font-size: 9px;
+          margin-bottom: 13px;
         }
 
         .product-bottom {
-          margin-top: 14px;
-          padding-top: 12px;
-          border-top: 1px solid #f5e6ee;
           display: flex;
-          align-items: end;
+          align-items: center;
           justify-content: space-between;
           gap: 8px;
         }
 
-        .price-label {
-          color: #aaa0a7;
-          font-size: 9px;
-          margin-bottom: 2px;
-        }
-
-        .product-price {
-          color: #ef3288;
-          font-size: 17px;
+        .price {
+          color: #e83d83;
+          font-size: 15px;
           font-weight: 950;
         }
 
         .buy-button {
-          min-width: 92px;
-          height: 36px;
-          padding: 0 10px;
+          border: 0;
           border-radius: 9px;
-          color: white;
-          background: #ff3e91;
+          padding: 8px 11px;
+          background: #fff0f6;
+          color: #e63d83;
           font-size: 9px;
           font-weight: 900;
-          box-shadow: 0 8px 18px rgba(255, 62, 145, 0.2);
         }
 
-        .buy-button:hover {
-          background: #f32f85;
+        .buy-button:hover:not(:disabled) {
+          background: #e94388;
+          color: white;
         }
 
         .buy-button:disabled {
+          opacity: 0.55;
           cursor: not-allowed;
-          color: #aaa0a7;
-          background: #f0ebee;
-          box-shadow: none;
         }
 
         .empty-products {
-          min-height: 300px;
-          border: 1px dashed #edccdc;
-          border-radius: 18px;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          background: rgba(255, 255, 255, 0.65);
+          grid-column: 1 / -1;
+          padding: 80px 20px;
           text-align: center;
+          background: white;
+          border: 1px solid #f0e2e9;
+          border-radius: 18px;
+        }
+
+        .dark .empty-products {
+          background: #211b23;
+          border-color: #382d36;
         }
 
         .empty-icon {
-          width: 60px;
-          height: 60px;
-          display: grid;
-          place-items: center;
-          border-radius: 50%;
-          color: #ef4a96;
-          background: #fff0f7;
-          font-size: 26px;
+          font-size: 45px;
+          color: #ef6a9f;
         }
 
         .empty-products h3 {
-          margin: 14px 0 5px;
-          font-size: 16px;
+          margin: 10px 0 5px;
         }
 
         .empty-products p {
           margin: 0;
-          color: #9b9098;
+          color: #9a8993;
           font-size: 12px;
         }
 
-        .empty-products button {
-          margin-top: 17px;
-          padding: 10px 15px;
-          border-radius: 9px;
-          color: white;
-          background: #ff3f92;
-          font-size: 10px;
-          font-weight: 900;
-        }
-
-        .quick-section {
-          margin-top: 24px;
+        .quick-services {
+          width: min(1420px, calc(100% - 40px));
+          margin: 27px auto;
           display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 14px;
+          grid-template-columns:
+            repeat(4, minmax(0, 1fr));
+          gap: 13px;
         }
 
-        .quick-card {
-          padding: 17px;
-          border-radius: 16px;
-          background: white;
-          border: 1px solid #f1dbe7;
+        .service-card {
           display: flex;
           align-items: center;
           gap: 11px;
+          border: 1px solid #f0e2e9;
+          background: white;
+          border-radius: 15px;
+          padding: 14px;
+          text-align: left;
+          color: inherit;
         }
 
-        .quick-icon {
-          width: 39px;
-          height: 39px;
-          flex-shrink: 0;
+        .service-card:hover {
+          border-color: #f1bfd4;
+        }
+
+        .service-icon {
+          width: 38px;
+          height: 38px;
+          flex: 0 0 auto;
           display: grid;
           place-items: center;
           border-radius: 11px;
-          color: #ed3c8d;
-          background: #fff0f7;
-          font-weight: 900;
+          font-weight: 950;
         }
 
-        .quick-card div:nth-child(2) {
+        .service-icon.pink {
+          color: #ed438b;
+          background: #fff0f6;
+        }
+
+        .service-icon.purple {
+          color: #8c58dc;
+          background: #f2eaff;
+        }
+
+        .service-icon.blue {
+          color: #4b88dd;
+          background: #eaf4ff;
+        }
+
+        .service-icon.green {
+          color: #299e6c;
+          background: #e9fff4;
+        }
+
+        .service-card div:nth-child(2) {
           flex: 1;
-          min-width: 0;
+          display: flex;
+          flex-direction: column;
         }
 
-        .quick-card strong,
-        .quick-card span {
-          display: block;
-        }
-
-        .quick-card strong {
-          color: #40333d;
+        .service-card b {
           font-size: 11px;
         }
 
-        .quick-card span {
+        .service-card span {
+          color: #9a8993;
+          font-size: 8px;
           margin-top: 3px;
-          color: #9d929a;
-          font-size: 9px;
         }
 
-        .quick-card button {
+        .service-card > strong {
+          color: #bdabb5;
+        }
+
+        footer {
+          width: min(1420px, calc(100% - 40px));
+          margin: 45px auto 90px;
+          padding-top: 23px;
+          border-top: 1px solid #efdee6;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+
+        .dark footer {
+          border-color: #372d35;
+        }
+
+        .footer-brand {
+          display: flex;
+          align-items: center;
+          gap: 9px;
+        }
+
+        .footer-brand .brand-mark {
+          width: 32px;
           height: 32px;
-          padding: 0 10px;
-          border-radius: 8px;
-          color: #ed388b;
-          background: #fff0f7;
+          font-size: 16px;
+          border-radius: 9px;
+        }
+
+        .footer-brand div:last-child {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .footer-brand b {
+          font-size: 11px;
+        }
+
+        .footer-brand span {
+          color: #aa95a1;
+          font-size: 7px;
+          letter-spacing: 1.5px;
+          margin-top: 2px;
+        }
+
+        footer p {
+          margin: 0;
+          color: #a18d98;
           font-size: 9px;
-          font-weight: 900;
         }
 
         .floating-chat {
           position: fixed;
+          z-index: 70;
           right: 22px;
           bottom: 22px;
-          z-index: 45;
-          min-width: 155px;
-          padding: 10px 13px;
           display: flex;
           align-items: center;
-          gap: 9px;
+          gap: 8px;
+          border: 0;
           border-radius: 14px;
+          padding: 12px 15px;
           color: white;
-          background: #ff3d91;
-          box-shadow: 0 13px 30px rgba(255, 61, 145, 0.3);
-        }
-
-        .floating-chat > span {
-          font-size: 20px;
-        }
-
-        .floating-chat strong,
-        .floating-chat small {
-          display: block;
-        }
-
-        .floating-chat strong {
+          background:
+            linear-gradient(
+              135deg,
+              #ef438c,
+              #ff6aab
+            );
+          box-shadow:
+            0 13px 30px
+              rgba(239, 67, 140, 0.32);
           font-size: 11px;
         }
 
-        .floating-chat small {
-          margin-top: 2px;
-          opacity: 0.78;
-          font-size: 8px;
+        .floating-chat span {
+          font-size: 15px;
         }
 
-        .mobile-nav {
-          display: none;
-        }
-
-        .modal-overlay {
+        .modal-backdrop {
           position: fixed;
-          inset: 0;
           z-index: 100;
+          inset: 0;
           padding: 20px;
           display: grid;
           place-items: center;
-          background: rgba(40, 23, 35, 0.58);
+          background: rgba(31, 20, 28, 0.5);
           backdrop-filter: blur(8px);
         }
 
         .modal {
           width: min(430px, 100%);
           position: relative;
-          padding: 28px;
-          border-radius: 23px;
+          border-radius: 22px;
+          padding: 27px;
           background: white;
-          border: 1px solid #f2d9e6;
-          box-shadow: 0 30px 90px rgba(44, 23, 37, 0.2);
-          text-align: center;
+          box-shadow:
+            0 35px 80px
+              rgba(45, 22, 38, 0.28);
         }
 
         .modal-close {
           position: absolute;
-          top: 13px;
-          right: 14px;
-          width: 32px;
-          height: 32px;
-          border-radius: 50%;
-          color: #8e7e88;
-          background: #f8f1f5;
-          font-size: 19px;
+          right: 15px;
+          top: 15px;
+          width: 31px;
+          height: 31px;
+          border: 0;
+          border-radius: 9px;
+          background: #f8eef3;
+          color: #8d7884;
+          font-size: 18px;
         }
 
         .modal-icon,
         .success-icon {
-          width: 57px;
-          height: 57px;
-          margin: 0 auto 12px;
+          width: 52px;
+          height: 52px;
           display: grid;
           place-items: center;
-          border-radius: 18px;
-          font-size: 25px;
-        }
-
-        .modal-icon {
-          background: #fff0f7;
+          border-radius: 16px;
+          background: #fff0f6;
+          color: #ed438b;
+          font-size: 23px;
+          margin-bottom: 15px;
         }
 
         .success-icon {
           color: white;
-          background: #30ba78;
-          box-shadow: 0 10px 25px rgba(48, 186, 120, 0.2);
-          font-weight: 900;
+          background:
+            linear-gradient(
+              135deg,
+              #31b77a,
+              #5bd39b
+            );
         }
 
-        .modal-kicker {
-          color: #ef3c8e;
+        .modal-label {
+          color: #ed438b;
           font-size: 9px;
-          font-weight: 900;
-          letter-spacing: 0.14em;
+          font-weight: 950;
+          letter-spacing: 1.5px;
         }
 
         .modal h3 {
-          margin: 7px 0 5px;
-          color: #30252e;
-          font-size: 22px;
+          margin: 6px 0 20px;
+          font-size: 20px;
         }
 
-        .modal-product {
-          margin: 0;
-          color: #8c8089;
-          font-size: 12px;
-        }
-
-        .confirm-info {
-          margin-top: 20px;
-          border-radius: 13px;
-          overflow: hidden;
-          border: 1px solid #f1e0e9;
-        }
-
-        .confirm-info div {
-          padding: 11px 13px;
+        .confirm-row {
           display: flex;
           justify-content: space-between;
-          gap: 12px;
-          border-bottom: 1px solid #f4e6ed;
-        }
-
-        .confirm-info div:last-child {
-          border-bottom: 0;
-        }
-
-        .confirm-info span {
-          color: #988b94;
-          font-size: 10px;
-        }
-
-        .confirm-info strong {
-          color: #3e323b;
+          padding: 12px 0;
+          border-bottom: 1px solid #f1e7eb;
+          color: #887681;
           font-size: 11px;
         }
 
+        .confirm-row b {
+          color: #302731;
+        }
+
         .modal-actions {
-          margin-top: 16px;
           display: grid;
           grid-template-columns: 1fr 1.5fr;
           gap: 9px;
+          margin-top: 20px;
         }
 
         .cancel-button,
-        .confirm-button,
-        .copy-button,
-        .done-button {
+        .confirm-button {
           height: 43px;
-          border-radius: 10px;
-          font-size: 10px;
+          border-radius: 11px;
+          border: 0;
           font-weight: 900;
+          font-size: 11px;
         }
 
         .cancel-button {
-          color: #766a73;
-          background: #f5f0f3;
+          background: #f6edf2;
+          color: #7d6c76;
         }
 
-        .confirm-button,
-        .done-button,
-        .copy-button {
+        .confirm-button {
           color: white;
-          background: #ff3d91;
+          background:
+            linear-gradient(
+              135deg,
+              #ee438b,
+              #ff6daa
+            );
+          box-shadow:
+            0 9px 20px
+              rgba(238, 67, 139, 0.2);
         }
 
-        .confirm-button:disabled {
-          cursor: wait;
-          opacity: 0.6;
+        .confirm-button.full {
+          width: 100%;
+          margin-top: 15px;
+        }
+
+        .success {
+          text-align: left;
+        }
+
+        .success-text {
+          color: #887681;
+          font-size: 11px;
         }
 
         .key-box {
-          margin-top: 20px;
-          padding: 15px;
-          border-radius: 13px;
-          border: 1px dashed #f3a4c9;
+          margin-top: 15px;
+          padding: 14px;
+          border: 1px dashed #f0b6d0;
+          border-radius: 12px;
           background: #fff6fa;
-          text-align: left;
         }
 
         .key-box span {
           display: block;
-          color: #b397a5;
+          color: #e84388;
           font-size: 8px;
-          font-weight: 900;
-          letter-spacing: 0.12em;
+          font-weight: 950;
+          letter-spacing: 1px;
+          margin-bottom: 6px;
         }
 
         .key-box strong {
           display: block;
-          margin-top: 7px;
-          color: #df2f80;
-          font-size: 14px;
-          line-height: 1.45;
           word-break: break-all;
+          color: #3d3038;
+          font-size: 12px;
         }
 
-        .copy-button {
-          width: 100%;
-          margin-top: 10px;
+        .error-box {
+          display: flex;
+          align-items: center;
+          gap: 9px;
+          margin-bottom: 15px;
+          padding: 11px 13px;
+          border-radius: 12px;
+          color: #a33f59;
+          background: #fff0f3;
+          border: 1px solid #ffd4df;
+          font-size: 11px;
         }
 
-        .done-button {
-          width: 100%;
-          margin-top: 9px;
+        .error-box span {
+          width: 22px;
+          height: 22px;
+          display: grid;
+          place-items: center;
+          border-radius: 50%;
+          background: #f7b7c8;
+          color: white;
+          font-weight: 900;
         }
 
-        .skeleton {
-          background: linear-gradient(
-            90deg,
-            #f6eef3,
-            #fff,
-            #f6eef3
-          );
-          background-size: 200% 100%;
-          animation: skeleton 1.4s infinite;
+        .error-box div {
+          flex: 1;
+        }
+
+        .error-box button {
+          border: 0;
+          background: transparent;
+          color: #a33f59;
+          font-size: 18px;
         }
 
         .skeleton-card {
           overflow: hidden;
         }
 
-        .skeleton-image {
-          height: 160px;
+        .skeleton {
+          background:
+            linear-gradient(
+              90deg,
+              #f7edf2 25%,
+              #fff8fb 50%,
+              #f7edf2 75%
+            );
+          background-size: 200% 100%;
+          animation: skeleton 1.3s infinite;
         }
 
-        .skeleton-content {
+        .skeleton-cover {
+          height: 145px;
+        }
+
+        .skeleton-body {
           padding: 15px;
         }
 
-        .skeleton-title {
-          width: 70%;
-          height: 17px;
-          border-radius: 5px;
-        }
-
         .skeleton-line {
-          width: 90%;
-          height: 10px;
-          margin-top: 12px;
+          height: 11px;
+          width: 80%;
           border-radius: 5px;
+          margin-bottom: 10px;
         }
 
-        .skeleton-line.short {
+        .skeleton-line.small {
+          width: 35%;
+        }
+
+        .skeleton-line.medium {
           width: 55%;
         }
 
         .skeleton-button {
-          width: 100%;
-          height: 35px;
-          margin-top: 18px;
-          border-radius: 8px;
+          height: 32px;
+          width: 80px;
+          border-radius: 9px;
+          margin-top: 16px;
         }
 
         @keyframes skeleton {
@@ -2068,7 +2587,82 @@ export default function ShopPage() {
           }
         }
 
-        @media (max-width: 1100px) {
+        .petals {
+          position: fixed;
+          inset: 0;
+          z-index: 1;
+          pointer-events: none;
+          overflow: hidden;
+        }
+
+        .petal {
+          position: absolute;
+          top: -30px;
+          width: 9px;
+          height: 13px;
+          border-radius: 70% 20% 70% 20%;
+          background: rgba(255, 128, 179, 0.45);
+          transform: rotate(30deg);
+          animation:
+            fall linear infinite,
+            sway ease-in-out infinite;
+        }
+
+        .petal-1 { left: 4%; animation-duration: 9s, 2.5s; }
+        .petal-2 { left: 10%; animation-duration: 13s, 3s; animation-delay: -4s; }
+        .petal-3 { left: 17%; animation-duration: 11s, 2.8s; animation-delay: -7s; }
+        .petal-4 { left: 26%; animation-duration: 15s, 3.5s; animation-delay: -2s; }
+        .petal-5 { left: 34%; animation-duration: 10s, 2.2s; animation-delay: -6s; }
+        .petal-6 { left: 43%; animation-duration: 14s, 3.1s; animation-delay: -9s; }
+        .petal-7 { left: 51%; animation-duration: 12s, 2.6s; animation-delay: -3s; }
+        .petal-8 { left: 59%; animation-duration: 16s, 3.7s; animation-delay: -10s; }
+        .petal-9 { left: 67%; animation-duration: 11s, 2.4s; animation-delay: -5s; }
+        .petal-10 { left: 74%; animation-duration: 14s, 3s; animation-delay: -8s; }
+        .petal-11 { left: 82%; animation-duration: 10s, 2.8s; animation-delay: -1s; }
+        .petal-12 { left: 91%; animation-duration: 13s, 3.2s; animation-delay: -6s; }
+        .petal-13 { left: 23%; animation-duration: 17s, 3.6s; animation-delay: -12s; }
+        .petal-14 { left: 47%; animation-duration: 12s, 2.7s; animation-delay: -11s; }
+        .petal-15 { left: 70%; animation-duration: 15s, 3.2s; animation-delay: -7s; }
+        .petal-16 { left: 87%; animation-duration: 11s, 2.4s; animation-delay: -9s; }
+        .petal-17 { left: 14%; animation-duration: 16s, 3.5s; animation-delay: -14s; }
+        .petal-18 { left: 62%; animation-duration: 13s, 2.9s; animation-delay: -13s; }
+
+        @keyframes fall {
+          0% {
+            transform:
+              translate3d(0, -40px, 0)
+              rotate(0deg);
+            opacity: 0;
+          }
+
+          10% {
+            opacity: 0.7;
+          }
+
+          90% {
+            opacity: 0.55;
+          }
+
+          100% {
+            transform:
+              translate3d(80px, 110vh, 0)
+              rotate(560deg);
+            opacity: 0;
+          }
+        }
+
+        @keyframes sway {
+          0%,
+          100% {
+            margin-left: -12px;
+          }
+
+          50% {
+            margin-left: 18px;
+          }
+        }
+
+        @media (max-width: 1150px) {
           .desktop-nav {
             display: none;
           }
@@ -2077,237 +2671,159 @@ export default function ShopPage() {
             justify-content: space-between;
           }
 
-          .shop-layout {
-            grid-template-columns: 220px minmax(0, 1fr);
+          .hero-art {
+            opacity: 0.72;
           }
 
-          .product-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-
-          .quick-section {
-            grid-template-columns: 1fr;
+          .products-grid {
+            grid-template-columns:
+              repeat(2, minmax(0, 1fr));
           }
         }
 
-        @media (max-width: 760px) {
-          .page {
-            padding-bottom: 82px;
+        @media (max-width: 850px) {
+          .topbar {
+            height: 64px;
           }
 
           .topbar-inner,
-          .container {
-            width: min(100% - 20px, 1400px);
-          }
-
-          .topbar-inner {
-            min-height: 66px;
-          }
-
-          .wallet-button {
-            padding: 0 10px;
-          }
-
-          .wallet-button span:last-child {
-            display: none;
-          }
-
-          .hero {
-            min-height: 430px;
-            margin-top: 14px;
-            display: block;
-          }
-
-          .hero-content {
-            width: 100%;
-            padding: 30px 24px;
-          }
-
-          .hero h1 {
-            font-size: 40px;
-          }
-
-          .hero-image-box {
-            top: auto;
-            bottom: 0;
-            width: 100%;
-            height: 46%;
-          }
-
-          .hero-image {
-            mask-image: linear-gradient(to bottom, transparent 0%, black 35%);
-            -webkit-mask-image: linear-gradient(
-              to bottom,
-              transparent 0%,
-              black 35%
+          .hero-wrap,
+          .shop-area,
+          .quick-services,
+          footer {
+            width: min(
+              100% - 24px,
+              680px
             );
           }
 
-          .hero-glow {
-            background: linear-gradient(to bottom, #fff1f8 0%, transparent 65%);
+          .brand {
+            min-width: auto;
           }
 
-          .shop-layout {
-            margin-top: 18px;
-            display: block;
-          }
-
-          .sidebar {
-            margin-bottom: 20px;
-          }
-
-          .side-card {
-            overflow-x: auto;
-            display: flex;
-            gap: 6px;
-            padding: 9px;
-          }
-
-          .side-title {
+          .brand-text span,
+          .user-name {
             display: none;
           }
 
-          .category-item {
-            min-width: max-content;
-            min-height: 40px;
-            padding: 0 9px;
+          .wallet-pill {
+            padding: 0 8px;
           }
 
-          .category-item small {
-            display: none;
+          .hero {
+            min-height: 460px;
           }
 
-          .vip-card,
-          .support-card {
-            display: none;
+          .hero-content {
+            padding: 38px 28px;
           }
 
-          .section-heading h2 {
-            font-size: 21px;
+          .hero-art {
+            width: 100%;
+            opacity: 0.25;
           }
 
-          .product-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 10px;
+          .hero h1 {
+            font-size: 42px;
           }
 
-          .product-image-wrap {
-            height: 125px;
+          .shop-area {
+            grid-template-columns: 1fr;
           }
 
-          .product-content {
-            padding: 11px;
-          }
-
-          .product-title {
-            font-size: 12px;
-          }
-
-          .product-description {
-            font-size: 9px;
-          }
-
-          .product-price {
-            font-size: 14px;
-          }
-
-          .buy-button {
-            min-width: 70px;
-            height: 32px;
-            font-size: 8px;
-          }
-
-          .quick-section {
-            display: none;
-          }
-
-          .floating-chat {
-            right: 12px;
-            bottom: 75px;
-          }
-
-          .mobile-nav {
-            position: fixed;
-            left: 8px;
-            right: 8px;
-            bottom: 8px;
-            z-index: 60;
-            min-height: 62px;
-            padding: 6px;
+          .category-list {
             display: grid;
-            grid-template-columns: repeat(5, 1fr);
-            gap: 3px;
-            border: 1px solid #f0d8e5;
-            border-radius: 17px;
-            background: rgba(255, 255, 255, 0.94);
-            backdrop-filter: blur(15px);
-            box-shadow: 0 15px 40px rgba(61, 29, 48, 0.13);
+            grid-template-columns:
+              repeat(2, minmax(0, 1fr));
           }
 
-          .mobile-nav button {
-            display: flex;
+          .quick-services {
+            grid-template-columns:
+              repeat(2, minmax(0, 1fr));
+          }
+
+          footer {
             flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 3px;
-            border-radius: 11px;
-            color: #968a93;
-            background: transparent;
-          }
-
-          .mobile-nav button span {
-            font-size: 17px;
-          }
-
-          .mobile-nav button small {
-            font-size: 8px;
-            font-weight: 700;
-          }
-
-          .mobile-nav .mobile-active {
-            color: #ef3589;
-            background: #fff0f7;
+            align-items: flex-start;
+            gap: 12px;
           }
         }
 
-        @media (max-width: 430px) {
+        @media (max-width: 560px) {
+          .topbar-inner {
+            gap: 8px;
+          }
+
           .brand-text {
             display: none;
           }
 
+          .theme-button {
+            display: none;
+          }
+
+          .wallet-pill span:last-child {
+            font-size: 10px;
+          }
+
+          .hero {
+            border-radius: 20px;
+            min-height: 455px;
+          }
+
+          .hero-content {
+            padding: 35px 23px;
+          }
+
+          .hero h1 {
+            font-size: 37px;
+            letter-spacing: -1.8px;
+          }
+
+          .hero p {
+            font-size: 12px;
+          }
+
           .hero-buttons {
-            position: relative;
-            z-index: 3;
+            flex-direction: column;
           }
 
           .hero-primary,
           .hero-secondary {
-            padding: 0 13px;
-            font-size: 10px;
-          }
-
-          .product-card {
-            border-radius: 13px;
-          }
-
-          .product-image-wrap {
-            height: 112px;
-          }
-
-          .product-bottom {
-            display: block;
-          }
-
-          .buy-button {
             width: 100%;
-            margin-top: 9px;
+          }
+
+          .products-heading {
+            align-items: stretch;
+            flex-direction: column;
+          }
+
+          .search-box {
+            width: 100%;
+          }
+
+          .products-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .quick-services {
+            grid-template-columns: 1fr;
+          }
+
+          .floating-chat {
+            right: 13px;
+            bottom: 13px;
+          }
+
+          .floating-chat b {
+            display: none;
           }
 
           .modal {
-            padding: 23px 18px;
+            padding: 22px;
           }
         }
       `}</style>
-    </>
+    </main>
   );
 }
