@@ -110,35 +110,72 @@ export default function AdminOrdersPage() {
     setMessage("");
 
     try {
-      const response = await fetch("/api/admin/approve-order", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          orderId,
-        }),
-      });
+      // LẤY SESSION ADMIN
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        console.error(sessionError);
+
+        throw new Error(
+          "Không thể kiểm tra phiên đăng nhập."
+        );
+      }
+
+      if (!session?.access_token) {
+        throw new Error(
+          "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
+        );
+      }
+
+      // GỌI API DUYỆT ĐƠN KÈM TOKEN
+      const response = await fetch(
+        "/api/admin/approve-order",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type": "application/json",
+
+            Authorization:
+              `Bearer ${session.access_token}`,
+          },
+
+          body: JSON.stringify({
+            orderId,
+          }),
+        }
+      );
 
       const result = await response.json();
 
       if (!response.ok || !result.success) {
         throw new Error(
-          result.message || "Không thể duyệt đơn hàng"
+          result.message ||
+            result.error ||
+            "Không thể duyệt đơn hàng"
         );
       }
 
       showMessage(
-        `Đơn #${orderId} đã hoàn thành. KEY: ${result.key || "Đã cấp"}`,
+        `Đơn #${orderId} đã hoàn thành. KEY: ${
+          result.key || "Đã cấp"
+        }`,
         "success"
       );
 
       await loadData();
     } catch (error) {
-      console.error(error);
+      console.error(
+        "APPROVE ORDER ERROR:",
+        error
+      );
 
       showMessage(
-        error.message || "Có lỗi xảy ra khi duyệt đơn",
+        error.message ||
+          "Có lỗi xảy ra khi duyệt đơn",
         "error"
       );
     } finally {
@@ -171,7 +208,9 @@ export default function AdminOrdersPage() {
 
       if (error) {
         console.error(error);
-        throw new Error("Không thể cập nhật đơn hàng");
+        throw new Error(
+          "Không thể cập nhật đơn hàng"
+        );
       }
 
       showMessage(
@@ -181,8 +220,11 @@ export default function AdminOrdersPage() {
 
       await loadData();
     } catch (error) {
+      console.error(error);
+
       showMessage(
-        error.message || "Có lỗi xảy ra",
+        error.message ||
+          "Có lỗi xảy ra",
         "error"
       );
     } finally {
@@ -215,7 +257,9 @@ export default function AdminOrdersPage() {
 
       if (error) {
         console.error(error);
-        throw new Error("Không thể khôi phục đơn");
+        throw new Error(
+          "Không thể khôi phục đơn"
+        );
       }
 
       showMessage(
@@ -225,8 +269,11 @@ export default function AdminOrdersPage() {
 
       await loadData();
     } catch (error) {
+      console.error(error);
+
       showMessage(
-        error.message || "Có lỗi xảy ra",
+        error.message ||
+          "Có lỗi xảy ra",
         "error"
       );
     } finally {
@@ -239,19 +286,25 @@ export default function AdminOrdersPage() {
   // =========================
 
   const filteredOrders = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
+    const keyword =
+      search.trim().toLowerCase();
 
     return orders.filter((order) => {
-      const product = getProduct(order.product_id);
-      const profile = getProfile(order.user_id);
+      const product =
+        getProduct(order.product_id);
+
+      const profile =
+        getProfile(order.user_id);
 
       const matchesSearch =
         !keyword ||
-        String(order.id).includes(keyword) ||
+        String(order.id)
+          .includes(keyword) ||
         String(order.user_id || "")
           .toLowerCase()
           .includes(keyword) ||
-        String(order.amount || "").includes(keyword) ||
+        String(order.amount || "")
+          .includes(keyword) ||
         String(order.transaction_id || "")
           .toLowerCase()
           .includes(keyword) ||
@@ -271,7 +324,8 @@ export default function AdminOrdersPage() {
 
       const matchesProduct =
         productFilter === "all" ||
-        String(order.product_id) === String(productFilter);
+        String(order.product_id) ===
+          String(productFilter);
 
       return (
         matchesSearch &&
@@ -293,24 +347,39 @@ export default function AdminOrdersPage() {
   // =========================
 
   const stats = useMemo(() => {
-    const pending = orders.filter(
-      (order) => order.status === "pending"
-    ).length;
+    const pending =
+      orders.filter(
+        (order) =>
+          order.status === "pending"
+      ).length;
 
-    const completed = orders.filter(
-      (order) => order.status === "completed"
-    ).length;
+    const completed =
+      orders.filter(
+        (order) =>
+          order.status === "completed"
+      ).length;
 
-    const failed = orders.filter(
-      (order) => order.status === "failed"
-    ).length;
+    const failed =
+      orders.filter(
+        (order) =>
+          order.status === "failed"
+      ).length;
 
-    const revenue = orders
-      .filter((order) => order.status === "completed")
-      .reduce(
-        (sum, order) => sum + Number(order.amount || 0),
-        0
-      );
+    const revenue =
+      orders
+        .filter(
+          (order) =>
+            order.status ===
+            "completed"
+        )
+        .reduce(
+          (sum, order) =>
+            sum +
+            Number(
+              order.amount || 0
+            ),
+          0
+        );
 
     return {
       total: orders.length,
@@ -326,13 +395,19 @@ export default function AdminOrdersPage() {
   // =========================
 
   function formatMoney(value) {
-    return Number(value || 0).toLocaleString("vi-VN") + "đ";
+    return (
+      Number(value || 0)
+        .toLocaleString("vi-VN") +
+      "đ"
+    );
   }
 
   function formatDate(value) {
     if (!value) return "-";
 
-    return new Date(value).toLocaleString("vi-VN");
+    return new Date(
+      value
+    ).toLocaleString("vi-VN");
   }
 
   function statusLabel(status) {
@@ -381,10 +456,17 @@ export default function AdminOrdersPage() {
   return (
     <main className="page">
       <div className="container">
+
         <div className="top">
           <div>
-            <h1>QUẢN LÝ ĐƠN HÀNG</h1>
-            <p>Kiểm tra giao dịch và duyệt đơn thủ công</p>
+            <h1>
+              QUẢN LÝ ĐƠN HÀNG
+            </h1>
+
+            <p>
+              Kiểm tra giao dịch và
+              duyệt đơn thủ công
+            </p>
           </div>
 
           <button
@@ -409,69 +491,116 @@ export default function AdminOrdersPage() {
         )}
 
         <section className="stats">
+
           <div className="stat">
             <span>TỔNG ĐƠN</span>
-            <strong>{stats.total}</strong>
+            <strong>
+              {stats.total}
+            </strong>
           </div>
 
           <div className="stat pendingStat">
             <span>ĐANG CHỜ</span>
-            <strong>{stats.pending}</strong>
+            <strong>
+              {stats.pending}
+            </strong>
           </div>
 
           <div className="stat completedStat">
             <span>HOÀN THÀNH</span>
-            <strong>{stats.completed}</strong>
+            <strong>
+              {stats.completed}
+            </strong>
           </div>
 
           <div className="stat failedStat">
             <span>THẤT BẠI</span>
-            <strong>{stats.failed}</strong>
+            <strong>
+              {stats.failed}
+            </strong>
           </div>
 
           <div className="stat">
             <span>DOANH THU</span>
-            <strong>{formatMoney(stats.revenue)}</strong>
+            <strong>
+              {formatMoney(
+                stats.revenue
+              )}
+            </strong>
           </div>
+
         </section>
 
         <section className="filters">
+
           <input
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) =>
+              setSearch(
+                e.target.value
+              )
+            }
             placeholder="Tìm mã đơn, username, email, sản phẩm..."
           />
 
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) =>
+              setStatusFilter(
+                e.target.value
+              )
+            }
           >
-            <option value="all">Tất cả trạng thái</option>
-            <option value="pending">Đang chờ</option>
-            <option value="completed">Hoàn thành</option>
-            <option value="failed">Thất bại</option>
+            <option value="all">
+              Tất cả trạng thái
+            </option>
+
+            <option value="pending">
+              Đang chờ
+            </option>
+
+            <option value="completed">
+              Hoàn thành
+            </option>
+
+            <option value="failed">
+              Thất bại
+            </option>
           </select>
 
           <select
             value={productFilter}
-            onChange={(e) => setProductFilter(e.target.value)}
+            onChange={(e) =>
+              setProductFilter(
+                e.target.value
+              )
+            }
           >
-            <option value="all">Tất cả sản phẩm</option>
+            <option value="all">
+              Tất cả sản phẩm
+            </option>
 
-            {products.map((product) => (
-              <option
-                key={product.id}
-                value={product.id}
-              >
-                {product.name}
-              </option>
-            ))}
+            {products.map(
+              (product) => (
+                <option
+                  key={product.id}
+                  value={product.id}
+                >
+                  {product.name}
+                </option>
+              )
+            )}
           </select>
+
         </section>
 
         <section className="orders">
+
           <div className="ordersHeader">
-            <h2>DANH SÁCH ĐƠN</h2>
+            <h2>
+              DANH SÁCH ĐƠN
+            </h2>
+
             <span>
               {filteredOrders.length} đơn
             </span>
@@ -481,105 +610,164 @@ export default function AdminOrdersPage() {
             <div className="empty">
               Đang tải đơn hàng...
             </div>
-          ) : filteredOrders.length === 0 ? (
+          ) : filteredOrders.length ===
+            0 ? (
             <div className="empty">
               Không có đơn hàng.
             </div>
           ) : (
             <div className="tableWrap">
+
               <table>
+
                 <thead>
                   <tr>
                     <th>ĐƠN</th>
-                    <th>KHÁCH HÀNG</th>
+                    <th>
+                      KHÁCH HÀNG
+                    </th>
                     <th>SẢN PHẨM</th>
                     <th>SỐ TIỀN</th>
-                    <th>TRẠNG THÁI</th>
-                    <th>NGÀY TẠO</th>
-                    <th>THAO TÁC</th>
+                    <th>
+                      TRẠNG THÁI
+                    </th>
+                    <th>
+                      NGÀY TẠO
+                    </th>
+                    <th>
+                      THAO TÁC
+                    </th>
                   </tr>
                 </thead>
 
                 <tbody>
-                  {filteredOrders.map((order) => {
-                    const product = getProduct(
-                      order.product_id
-                    );
 
-                    const profile = getProfile(
-                      order.user_id
-                    );
+                  {filteredOrders.map(
+                    (order) => {
 
-                    const isProcessing =
-                      processingId === order.id;
+                      const product =
+                        getProduct(
+                          order.product_id
+                        );
 
-                    return (
-                      <tr key={order.id}>
-                        <td>
-                          <strong>
-                            #{order.id}
-                          </strong>
+                      const profile =
+                        getProfile(
+                          order.user_id
+                        );
 
-                          <small>
-                            XENOVA {order.id}
-                          </small>
-                        </td>
+                      const isProcessing =
+                        processingId ===
+                        order.id;
 
-                        <td>
-                          <strong>
-                            {profile?.username ||
-                              "Không rõ"}
-                          </strong>
+                      return (
+                        <tr
+                          key={order.id}
+                        >
 
-                          <small>
-                            {profile?.email ||
-                              order.user_id ||
-                              "-"}
-                          </small>
-                        </td>
+                          <td>
+                            <strong>
+                              #{order.id}
+                            </strong>
 
-                        <td>
-                          <strong>
-                            {product?.name ||
-                              `Product #${order.product_id}`}
-                          </strong>
-                        </td>
+                            <small>
+                              XENOVA{" "}
+                              {order.id}
+                            </small>
+                          </td>
 
-                        <td>
-                          <strong>
-                            {formatMoney(
-                              order.amount
+                          <td>
+                            <strong>
+                              {profile?.username ||
+                                "Không rõ"}
+                            </strong>
+
+                            <small>
+                              {profile?.email ||
+                                order.user_id ||
+                                "-"}
+                            </small>
+                          </td>
+
+                          <td>
+                            <strong>
+                              {product?.name ||
+                                `Product #${order.product_id}`}
+                            </strong>
+                          </td>
+
+                          <td>
+                            <strong>
+                              {formatMoney(
+                                order.amount
+                              )}
+                            </strong>
+                          </td>
+
+                          <td>
+                            <span
+                              className={`status ${statusClass(
+                                order.status
+                              )}`}
+                            >
+                              {statusLabel(
+                                order.status
+                              )}
+                            </span>
+                          </td>
+
+                          <td>
+                            {formatDate(
+                              order.created_at
                             )}
-                          </strong>
-                        </td>
+                          </td>
 
-                        <td>
-                          <span
-                            className={`status ${statusClass(
-                              order.status
-                            )}`}
-                          >
-                            {statusLabel(
-                              order.status
-                            )}
-                          </span>
-                        </td>
+                          <td>
 
-                        <td>
-                          {formatDate(
-                            order.created_at
-                          )}
-                        </td>
+                            <div className="actions">
 
-                        <td>
-                          <div className="actions">
-                            {order.status ===
-                              "pending" && (
-                              <>
+                              {order.status ===
+                                "pending" && (
+                                <>
+
+                                  <button
+                                    className="approve"
+                                    onClick={() =>
+                                      approveOrder(
+                                        order.id
+                                      )
+                                    }
+                                    disabled={
+                                      isProcessing
+                                    }
+                                  >
+                                    {isProcessing
+                                      ? "ĐANG XỬ LÝ..."
+                                      : "✓ DUYỆT & CẤP KEY"}
+                                  </button>
+
+                                  <button
+                                    className="fail"
+                                    onClick={() =>
+                                      failOrder(
+                                        order.id
+                                      )
+                                    }
+                                    disabled={
+                                      isProcessing
+                                    }
+                                  >
+                                    ✕ THẤT BẠI
+                                  </button>
+
+                                </>
+                              )}
+
+                              {order.status ===
+                                "failed" && (
                                 <button
-                                  className="approve"
+                                  className="restore"
                                   onClick={() =>
-                                    approveOrder(
+                                    restoreOrder(
                                       order.id
                                     )
                                   }
@@ -587,64 +775,39 @@ export default function AdminOrdersPage() {
                                     isProcessing
                                   }
                                 >
-                                  {isProcessing
-                                    ? "ĐANG XỬ LÝ..."
-                                    : "✓ DUYỆT & CẤP KEY"}
+                                  ↶ TRỞ LẠI CHỜ
                                 </button>
+                              )}
 
-                                <button
-                                  className="fail"
-                                  onClick={() =>
-                                    failOrder(
-                                      order.id
-                                    )
-                                  }
-                                  disabled={
-                                    isProcessing
-                                  }
-                                >
-                                  ✕ THẤT BẠI
-                                </button>
-                              </>
-                            )}
+                              {(
+                                order.status ===
+                                  "completed" ||
+                                order.status ===
+                                  "paid"
+                              ) && (
+                                <span className="done">
+                                  ✓ ĐÃ HOÀN THÀNH
+                                </span>
+                              )}
 
-                            {order.status ===
-                              "failed" && (
-                              <button
-                                className="restore"
-                                onClick={() =>
-                                  restoreOrder(
-                                    order.id
-                                  )
-                                }
-                                disabled={
-                                  isProcessing
-                                }
-                              >
-                                ↶ TRỞ LẠI CHỜ
-                              </button>
-                            )}
+                            </div>
 
-                            {(
-                              order.status ===
-                                "completed" ||
-                              order.status ===
-                                "paid"
-                            ) && (
-                              <span className="done">
-                                ✓ ĐÃ HOÀN THÀNH
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                          </td>
+
+                        </tr>
+                      );
+                    }
+                  )}
+
                 </tbody>
+
               </table>
+
             </div>
           )}
+
         </section>
+
       </div>
 
       <style jsx>{`
@@ -725,20 +888,43 @@ export default function AdminOrdersPage() {
         }
 
         .messageSuccess {
-          background: rgba(0, 200, 120, 0.1);
-          border: 1px solid rgba(0, 200, 120, 0.3);
+          background: rgba(
+            0,
+            200,
+            120,
+            0.1
+          );
+          border: 1px solid
+            rgba(
+              0,
+              200,
+              120,
+              0.3
+            );
           color: #5cffb2;
         }
 
         .messageError {
-          background: rgba(255, 70, 70, 0.1);
-          border: 1px solid rgba(255, 70, 70, 0.3);
+          background: rgba(
+            255,
+            70,
+            70,
+            0.1
+          );
+          border: 1px solid
+            rgba(
+              255,
+              70,
+              70,
+              0.3
+            );
           color: #ff7777;
         }
 
         .stats {
           display: grid;
-          grid-template-columns: repeat(5, 1fr);
+          grid-template-columns:
+            repeat(5, 1fr);
           gap: 12px;
           margin-bottom: 20px;
         }
@@ -776,7 +962,8 @@ export default function AdminOrdersPage() {
 
         .filters {
           display: grid;
-          grid-template-columns: 1fr 190px 220px;
+          grid-template-columns:
+            1fr 190px 220px;
           gap: 10px;
           margin-bottom: 20px;
         }
@@ -878,25 +1065,63 @@ export default function AdminOrdersPage() {
         }
 
         .status.pending {
-          background: rgba(255, 190, 50, 0.1);
+          background: rgba(
+            255,
+            190,
+            50,
+            0.1
+          );
           color: #ffc44d;
-          border: 1px solid rgba(255, 190, 50, 0.2);
+          border: 1px solid
+            rgba(
+              255,
+              190,
+              50,
+              0.2
+            );
         }
 
         .status.completed {
-          background: rgba(50, 230, 140, 0.1);
+          background: rgba(
+            50,
+            230,
+            140,
+            0.1
+          );
           color: #45f29a;
-          border: 1px solid rgba(50, 230, 140, 0.2);
+          border: 1px solid
+            rgba(
+              50,
+              230,
+              140,
+              0.2
+            );
         }
 
         .status.failed {
-          background: rgba(255, 70, 70, 0.1);
+          background: rgba(
+            255,
+            70,
+            70,
+            0.1
+          );
           color: #ff6868;
-          border: 1px solid rgba(255, 70, 70, 0.2);
+          border: 1px solid
+            rgba(
+              255,
+              70,
+              70,
+              0.2
+            );
         }
 
         .status.unknown {
-          background: rgba(150, 150, 150, 0.1);
+          background: rgba(
+            150,
+            150,
+            150,
+            0.1
+          );
           color: #aaa;
         }
 
@@ -943,7 +1168,8 @@ export default function AdminOrdersPage() {
 
         @media (max-width: 900px) {
           .stats {
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns:
+              repeat(2, 1fr);
           }
 
           .filters {
@@ -970,7 +1196,8 @@ export default function AdminOrdersPage() {
           }
 
           .stats {
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns:
+              1fr 1fr;
           }
 
           .stat {
