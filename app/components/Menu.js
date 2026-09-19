@@ -11,11 +11,31 @@ export default function Menu() {
 
   const [open, setOpen] = useState(false);
   const [user, setUser] = useState(null);
+  const [balance, setBalance] = useState(0);
   const [dark, setDark] = useState(false);
   const [themeReady, setThemeReady] = useState(false);
 
   useEffect(() => {
     let mounted = true;
+
+    async function loadBalance(userId) {
+      if (!userId) {
+        if (mounted) setBalance(0);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("wallets")
+        .select("balance")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (!mounted) return;
+
+      if (!error) {
+        setBalance(Number(data?.balance || 0));
+      }
+    }
 
     async function loadUser() {
       const {
@@ -25,8 +45,20 @@ export default function Menu() {
 
       if (!mounted) return;
 
-      if (!error) {
-        setUser(data?.user || null);
+      if (error) {
+        setUser(null);
+        setBalance(0);
+        return;
+      }
+
+      const currentUser = data?.user || null;
+
+      setUser(currentUser);
+
+      if (currentUser) {
+        await loadBalance(currentUser.id);
+      } else {
+        setBalance(0);
       }
     }
 
@@ -36,8 +68,16 @@ export default function Menu() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(
       (_event, session) => {
-        if (mounted) {
-          setUser(session?.user || null);
+        if (!mounted) return;
+
+        const currentUser = session?.user || null;
+
+        setUser(currentUser);
+
+        if (currentUser) {
+          loadBalance(currentUser.id);
+        } else {
+          setBalance(0);
         }
       }
     );
@@ -57,13 +97,36 @@ export default function Menu() {
 
     setThemeReady(true);
 
-    const handler = () => {
+    const openMenuHandler = () => {
       setOpen(true);
+    };
+
+    const walletHandler = () => {
+      loadUser();
+    };
+
+    const visibilityHandler = () => {
+      if (
+        document.visibilityState ===
+        "visible"
+      ) {
+        loadUser();
+      }
     };
 
     window.addEventListener(
       "xenova-open-menu",
-      handler
+      openMenuHandler
+    );
+
+    window.addEventListener(
+      "xenova-wallet-updated",
+      walletHandler
+    );
+
+    document.addEventListener(
+      "visibilitychange",
+      visibilityHandler
     );
 
     return () => {
@@ -73,7 +136,17 @@ export default function Menu() {
 
       window.removeEventListener(
         "xenova-open-menu",
-        handler
+        openMenuHandler
+      );
+
+      window.removeEventListener(
+        "xenova-wallet-updated",
+        walletHandler
+      );
+
+      document.removeEventListener(
+        "visibilitychange",
+        visibilityHandler
       );
     };
   }, []);
@@ -98,6 +171,7 @@ export default function Menu() {
     await supabase.auth.signOut();
 
     setUser(null);
+    setBalance(0);
     setOpen(false);
 
     router.push("/");
@@ -116,16 +190,11 @@ export default function Menu() {
 
   return (
     <>
-      {/* =========================
-          TOP MENU BUTTON
-      ========================= */}
+      {/* =================================
+          TOP RIGHT BUTTONS
+      ================================= */}
 
-      <div
-        className="global-menu-buttons"
-        style={{
-          display: "flex",
-        }}
-      >
+      <div className="global-menu-buttons">
         {themeReady && (
           <button
             type="button"
@@ -151,9 +220,9 @@ export default function Menu() {
         </button>
       </div>
 
-      {/* =========================
+      {/* =================================
           DRAWER MENU
-      ========================= */}
+      ================================= */}
 
       {open && (
         <div
@@ -233,6 +302,8 @@ export default function Menu() {
                 </span>
               </Link>
             )}
+
+            {/* MENU */}
 
             <div className="drawer-title">
               MENU CHÍNH
@@ -318,6 +389,26 @@ export default function Menu() {
               />
             </nav>
 
+            {/* BALANCE */}
+
+            {user && (
+              <div className="drawer-balance">
+                <span className="drawer-balance-icon">
+                  💰
+                </span>
+
+                <div>
+                  <small>
+                    SỐ DƯ VÍ
+                  </small>
+
+                  <strong>
+                    {formatPrice(balance)}
+                  </strong>
+                </div>
+              </div>
+            )}
+
             {/* THEME */}
 
             <div className="drawer-section">
@@ -348,7 +439,7 @@ export default function Menu() {
               </button>
             </div>
 
-            {/* BOTTOM */}
+            {/* LOGIN / LOGOUT */}
 
             <div className="drawer-bottom">
               {user ? (
@@ -357,9 +448,7 @@ export default function Menu() {
                   className="drawer-logout"
                   onClick={logout}
                 >
-                  <span>
-                    🚪
-                  </span>
+                  <span>🚪</span>
 
                   <span>
                     Đăng xuất
@@ -373,9 +462,7 @@ export default function Menu() {
                     setOpen(false)
                   }
                 >
-                  <span>
-                    🔐
-                  </span>
+                  <span>🔐</span>
 
                   <span>
                     Đăng nhập
@@ -387,68 +474,90 @@ export default function Menu() {
         </div>
       )}
 
-      {/* =========================
-          BOTTOM TOOLBAR
-      ========================= */}
+      {/* =================================
+          BOTTOM 3 BUTTONS
+      ================================= */}
 
       <nav
         className="mobile-bottom-bar"
         aria-label="Thanh điều hướng"
       >
-        <BottomLink
-          href="/"
-          icon="⌂"
-          label="Trang chủ"
-          active={isActive("/")}
-        />
+        {/* LEFT - BALANCE */}
 
-        <BottomLink
-          href="/shop"
-          icon="🛒"
-          label="Cửa hàng"
-          active={isActive("/shop")}
-        />
-
-        <button
-          type="button"
-          className="bottom-main-button"
-          onClick={() => setOpen(true)}
-          aria-label="Mở menu"
+        <Link
+          href="/deposit"
+          className={
+            isActive("/deposit")
+              ? "bottom-wallet active"
+              : "bottom-wallet"
+          }
         >
-          <span className="bottom-menu-icon">
-            ☰
+          <span className="bottom-nav-icon">
+            💰
+          </span>
+
+          <span className="bottom-wallet-text">
+            <small>SỐ DƯ</small>
+
+            <strong>
+              {formatPrice(balance)}
+            </strong>
+          </span>
+        </Link>
+
+        {/* CENTER - ACCOUNT */}
+
+        <Link
+          href={
+            user
+              ? "/dashboard"
+              : "/login"
+          }
+          className={
+            user
+              ? isActive("/dashboard")
+                ? "bottom-nav-link active"
+                : "bottom-nav-link"
+              : isActive("/login")
+              ? "bottom-nav-link active"
+              : "bottom-nav-link"
+          }
+        >
+          <span className="bottom-nav-icon">
+            👤
           </span>
 
           <small>
-            MENU
-          </small>
-        </button>
-
-        <BottomLink
-          href="/keys"
-          icon="🔑"
-          label="KEY"
-          active={isActive("/keys")}
-        />
-
-        <BottomLink
-          href={user ? "/dashboard" : "/login"}
-          icon="👤"
-          label={
-            user
+            {user
               ? "Tài khoản"
-              : "Đăng nhập"
+              : "Đăng nhập"}
+          </small>
+        </Link>
+
+        {/* RIGHT - KEY */}
+
+        <Link
+          href="/keys"
+          className={
+            isActive("/keys")
+              ? "bottom-nav-link active"
+              : "bottom-nav-link"
           }
-          active={
-            user
-              ? isActive("/dashboard")
-              : isActive("/login")
-          }
-        />
+        >
+          <span className="bottom-nav-icon">
+            🔑
+          </span>
+
+          <small>KEY</small>
+        </Link>
       </nav>
     </>
   );
 }
+
+/* =================================
+   MENU LINK
+================================= */
 
 function MenuLink({
   href,
@@ -482,28 +591,14 @@ function MenuLink({
   );
 }
 
-function BottomLink({
-  href,
-  icon,
-  label,
-  active,
-}) {
-  return (
-    <Link
-      href={href}
-      className={
-        active
-          ? "bottom-nav-link active"
-          : "bottom-nav-link"
-      }
-    >
-      <span className="bottom-nav-icon">
-        {icon}
-      </span>
+/* =================================
+   PRICE
+================================= */
 
-      <small>
-        {label}
-      </small>
-    </Link>
+function formatPrice(value) {
+  return (
+    new Intl.NumberFormat("vi-VN").format(
+      Number(value || 0)
+    ) + "đ"
   );
 }
