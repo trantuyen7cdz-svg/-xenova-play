@@ -109,7 +109,10 @@ export default function DepositPage() {
       if (!error) {
         setRequests(data || []);
       } else {
-        console.error("LOAD DEPOSIT HISTORY ERROR:", error);
+        console.error(
+          "LOAD DEPOSIT HISTORY ERROR:",
+          error
+        );
       }
     } catch (error) {
       console.error(error);
@@ -128,13 +131,15 @@ export default function DepositPage() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session?.user) {
-        router.replace("/login");
-      } else {
-        setUser(session.user);
+    } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (!session?.user) {
+          router.replace("/login");
+        } else {
+          setUser(session.user);
+        }
       }
-    });
+    );
 
     return () => {
       subscription.unsubscribe();
@@ -182,7 +187,9 @@ export default function DepositPage() {
     }
 
     if (money > 100000000) {
-      setMessage("Số tiền nạp tối đa là 100.000.000đ.");
+      setMessage(
+        "Số tiền nạp tối đa là 100.000.000đ."
+      );
       return;
     }
 
@@ -198,18 +205,21 @@ export default function DepositPage() {
         return;
       }
 
-      const response = await fetch("/api/deposit/create", {
-        method: "POST",
+      const response = await fetch(
+        "/api/deposit/create",
+        {
+          method: "POST",
 
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
 
-        body: JSON.stringify({
-          amount: money,
-        }),
-      });
+          body: JSON.stringify({
+            amount: money,
+          }),
+        }
+      );
 
       const result = await response.json();
 
@@ -226,12 +236,22 @@ export default function DepositPage() {
 
       setDepositInfo({
         depositId: result.depositId,
+        orderCode: result.orderCode,
         amount: result.amount,
-        transferContent: result.transferContent,
+        transferContent:
+          result.transferContent,
+
+        // PayOS
+        checkoutUrl:
+          result.checkoutUrl || "",
+        qrCode:
+          result.qrCode || "",
+        paymentLinkId:
+          result.paymentLinkId || "",
       });
 
       setMessage(
-        "Đã tạo yêu cầu nạp tiền. Hãy chuyển khoản đúng nội dung."
+        "Đã tạo yêu cầu nạp tiền. Vui lòng chuyển khoản đúng số tiền và nội dung."
       );
 
       // ===============================================
@@ -240,10 +260,13 @@ export default function DepositPage() {
 
       await loadData();
     } catch (error) {
-      console.error(error);
+      console.error(
+        "CREATE DEPOSIT ERROR:",
+        error
+      );
 
       setMessage(
-        error.message ||
+        error?.message ||
           "Có lỗi xảy ra khi tạo yêu cầu nạp tiền."
       );
     } finally {
@@ -252,7 +275,7 @@ export default function DepositPage() {
   }
 
   // ===================================================
-  // TẠO LINK VIETQR
+  // TẠO LINK VIETQR DỰ PHÒNG
   // ===================================================
 
   function getQrUrl() {
@@ -262,7 +285,8 @@ export default function DepositPage() {
 
     const params = new URLSearchParams({
       amount: String(depositInfo.amount),
-      addInfo: depositInfo.transferContent,
+      addInfo:
+        depositInfo.transferContent,
       accountName: ACCOUNT_NAME,
     });
 
@@ -270,12 +294,29 @@ export default function DepositPage() {
   }
 
   // ===================================================
+  // QR PAYOS
+  // ===================================================
+
+  function getPaymentQr() {
+    if (!depositInfo?.qrCode) {
+      return "";
+    }
+
+    return String(depositInfo.qrCode);
+  }
+
+  // ===================================================
   // COPY
   // ===================================================
 
-  async function copyText(text, successMessage) {
+  async function copyText(
+    text,
+    successMessage
+  ) {
     try {
-      await navigator.clipboard.writeText(String(text));
+      await navigator.clipboard.writeText(
+        String(text)
+      );
 
       setMessage(successMessage);
     } catch {
@@ -286,6 +327,25 @@ export default function DepositPage() {
   }
 
   // ===================================================
+  // MỞ PAYOS
+  // ===================================================
+
+  function openPayOS() {
+    if (!depositInfo?.checkoutUrl) {
+      setMessage(
+        "Chưa có liên kết thanh toán PayOS."
+      );
+      return;
+    }
+
+    window.open(
+      depositInfo.checkoutUrl,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  }
+
+  // ===================================================
   // LOADING
   // ===================================================
 
@@ -293,7 +353,9 @@ export default function DepositPage() {
     return (
       <main className="loading-page">
         <div className="loader-card">
-          <div className="loader">✦</div>
+          <div className="loader">
+            ✦
+          </div>
 
           <div>
             Đang tải XENOVA PLAY...
@@ -343,6 +405,7 @@ export default function DepositPage() {
 
   return (
     <main className="page">
+
       <div className="petals">
         ✿　❀　✿　❀　✿
       </div>
@@ -352,6 +415,7 @@ export default function DepositPage() {
       ================================================= */}
 
       <header className="header">
+
         <div className="header-inner">
 
           <button
@@ -359,10 +423,12 @@ export default function DepositPage() {
             onClick={() => router.push("/")}
             type="button"
           >
-            XENOVA <span>PLAY</span>
+            XENOVA{" "}
+            <span>PLAY</span>
           </button>
 
           <nav className="desktop-nav">
+
             {NAV_ITEMS.map(
               ([icon, label, href]) => (
                 <button
@@ -373,14 +439,16 @@ export default function DepositPage() {
                       ? "nav-item active"
                       : "nav-item"
                   }
-                  onClick={() => router.push(href)}
+                  onClick={() =>
+                    router.push(href)
+                  }
                 >
                   <span>{icon}</span>
-
                   {label}
                 </button>
               )
             )}
+
           </nav>
 
           <div className="user-area">
@@ -403,7 +471,9 @@ export default function DepositPage() {
             </button>
 
           </div>
+
         </div>
+
       </header>
 
       {/* =================================================
@@ -418,7 +488,9 @@ export default function DepositPage() {
 
           <button
             type="button"
-            onClick={() => router.push("/")}
+            onClick={() =>
+              router.push("/")
+            }
           >
             Trang chủ
           </button>
@@ -690,6 +762,7 @@ export default function DepositPage() {
         ================================================= */}
 
         {depositInfo && (
+
           <section className="card payment-card">
 
             <div className="payment-header">
@@ -717,6 +790,41 @@ export default function DepositPage() {
 
             </div>
 
+            {/* PAYOS */}
+
+            {depositInfo.checkoutUrl && (
+
+              <div className="payos-box">
+
+                <div className="payos-left">
+
+                  <div className="payos-badge">
+                    PAYOS
+                  </div>
+
+                  <strong>
+                    Thanh toán qua PayOS
+                  </strong>
+
+                  <span>
+                    Quét mã QR hoặc mở trang
+                    thanh toán PayOS để chuyển khoản.
+                  </span>
+
+                </div>
+
+                <button
+                  type="button"
+                  className="payos-button"
+                  onClick={openPayOS}
+                >
+                  MỞ THANH TOÁN PAYOS
+                </button>
+
+              </div>
+
+            )}
+
             <div className="payment-layout">
 
               {/* QR */}
@@ -725,16 +833,30 @@ export default function DepositPage() {
 
                 <div className="qr-box">
 
-                  <img
-                    src={getQrUrl()}
-                    alt="QR thanh toán BIDV"
-                  />
+                  {getPaymentQr() ? (
+
+                    <img
+                      src={getPaymentQr()}
+                      alt="QR thanh toán PayOS"
+                    />
+
+                  ) : (
+
+                    <img
+                      src={getQrUrl()}
+                      alt="QR thanh toán BIDV"
+                    />
+
+                  )}
 
                 </div>
 
                 <div className="qr-note">
-                  Quét mã QR bằng ứng dụng
-                  ngân hàng
+
+                  {getPaymentQr()
+                    ? "Quét mã QR PayOS bằng ứng dụng ngân hàng"
+                    : "Quét mã QR bằng ứng dụng ngân hàng"}
+
                 </div>
 
               </div>
@@ -791,6 +913,27 @@ export default function DepositPage() {
                   }
                 />
 
+                {/* ORDER CODE */}
+
+                {depositInfo.orderCode && (
+
+                  <InfoRow
+                    label="Mã đơn PayOS"
+                    value={String(
+                      depositInfo.orderCode
+                    )}
+                    onCopy={() =>
+                      copyText(
+                        String(
+                          depositInfo.orderCode
+                        ),
+                        "Đã sao chép mã đơn."
+                      )
+                    }
+                  />
+
+                )}
+
                 {/* NỘI DUNG */}
 
                 <div className="transfer-row">
@@ -827,7 +970,30 @@ export default function DepositPage() {
 
             </div>
 
+            {/* NOTE */}
+
+            <div className="payment-note">
+
+              <span>⚡</span>
+
+              <div>
+
+                <strong>
+                  Tự động cộng tiền
+                </strong>
+
+                <p>
+                  Sau khi thanh toán thành công,
+                  hệ thống sẽ nhận thông báo PayOS
+                  và tự động cập nhật số dư ví.
+                </p>
+
+              </div>
+
+            </div>
+
           </section>
+
         )}
 
         {/* =================================================
@@ -903,6 +1069,7 @@ export default function DepositPage() {
                 }
 
                 return (
+
                   <div
                     className="history-item"
                     key={item.id}
@@ -963,6 +1130,7 @@ export default function DepositPage() {
                     </div>
 
                   </div>
+
                 );
               })}
 
@@ -1031,6 +1199,7 @@ export default function DepositPage() {
       ================================================= */}
 
       <style jsx global>{`
+
         * {
           box-sizing: border-box;
         }
@@ -1060,12 +1229,22 @@ export default function DepositPage() {
           background:
             radial-gradient(
               circle at 10% 15%,
-              rgba(255, 160, 199, 0.12),
+              rgba(
+                255,
+                160,
+                199,
+                0.12
+              ),
               transparent 25%
             ),
             radial-gradient(
               circle at 90% 10%,
-              rgba(255, 120, 175, 0.1),
+              rgba(
+                255,
+                120,
+                175,
+                0.1
+              ),
               transparent 25%
             ),
             #fff7fb;
@@ -1079,7 +1258,12 @@ export default function DepositPage() {
           right: 0;
           pointer-events: none;
           text-align: center;
-          color: rgba(255, 94, 155, 0.16);
+          color: rgba(
+            255,
+            94,
+            155,
+            0.16
+          );
           font-size: 22px;
           letter-spacing: 20px;
           z-index: 0;
@@ -1089,7 +1273,12 @@ export default function DepositPage() {
           position: sticky;
           top: 0;
           z-index: 50;
-          background: rgba(255, 255, 255, 0.9);
+          background: rgba(
+            255,
+            255,
+            255,
+            0.9
+          );
           backdrop-filter: blur(16px);
           border-bottom: 1px solid #f3dce7;
         }
@@ -1224,7 +1413,11 @@ export default function DepositPage() {
 
         h1 {
           margin: 4px 0 7px;
-          font-size: clamp(30px, 5vw, 44px);
+          font-size: clamp(
+            30px,
+            5vw,
+            44px
+          );
           letter-spacing: -1.8px;
         }
 
@@ -1492,6 +1685,71 @@ export default function DepositPage() {
           white-space: nowrap;
         }
 
+        /* ===============================================
+           PAYOS BOX
+        =============================================== */
+
+        .payos-box {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 18px;
+          margin-bottom: 20px;
+          padding: 15px 17px;
+          border: 1px solid #ead7e2;
+          border-radius: 16px;
+          background:
+            linear-gradient(
+              135deg,
+              #fff6fa,
+              #ffffff
+            );
+        }
+
+        .payos-left {
+          display: grid;
+          gap: 4px;
+          min-width: 0;
+        }
+
+        .payos-badge {
+          width: fit-content;
+          padding: 4px 8px;
+          border-radius: 6px;
+          background: #111;
+          color: #fff;
+          font-size: 9px;
+          font-weight: 900;
+          letter-spacing: 1px;
+        }
+
+        .payos-left strong {
+          color: #29242a;
+          font-size: 13px;
+        }
+
+        .payos-left span {
+          color: #928a93;
+          font-size: 11px;
+          line-height: 1.45;
+        }
+
+        .payos-button {
+          flex: 0 0 auto;
+          border: 0;
+          border-radius: 11px;
+          padding: 11px 14px;
+          background: #111;
+          color: white;
+          font-size: 10px;
+          font-weight: 900;
+          white-space: nowrap;
+        }
+
+        .payos-button:hover {
+          opacity: 0.88;
+        }
+
         .payment-layout {
           display: grid;
           grid-template-columns:
@@ -1514,7 +1772,12 @@ export default function DepositPage() {
           border-radius: 18px;
           box-shadow:
             0 10px 30px
-              rgba(0, 0, 0, 0.05);
+              rgba(
+                0,
+                0,
+                0,
+                0.05
+              );
         }
 
         .qr-box img {
@@ -1528,6 +1791,7 @@ export default function DepositPage() {
           margin-top: 10px;
           color: #99929a;
           font-size: 11px;
+          line-height: 1.4;
         }
 
         .bank-info {
@@ -1577,6 +1841,42 @@ export default function DepositPage() {
           font-size: 10px;
           font-weight: 900;
           white-space: nowrap;
+        }
+
+        /* ===============================================
+           PAYMENT NOTE
+        =============================================== */
+
+        .payment-note {
+          display: flex;
+          align-items: flex-start;
+          gap: 10px;
+          margin-top: 18px;
+          padding: 13px 15px;
+          border-radius: 13px;
+          background: #fff5f9;
+          border: 1px solid #f4dce7;
+        }
+
+        .payment-note > span {
+          font-size: 18px;
+        }
+
+        .payment-note div {
+          display: grid;
+          gap: 3px;
+        }
+
+        .payment-note strong {
+          color: #d93876;
+          font-size: 12px;
+        }
+
+        .payment-note p {
+          margin: 0;
+          color: #948b93;
+          font-size: 11px;
+          line-height: 1.5;
         }
 
         .history-header > span {
@@ -1719,6 +2019,7 @@ export default function DepositPage() {
         }
 
         @media (max-width: 900px) {
+
           .desktop-nav {
             display: none;
           }
@@ -1734,9 +2035,11 @@ export default function DepositPage() {
           .payment-layout {
             grid-template-columns: 1fr;
           }
+
         }
 
         @media (max-width: 600px) {
+
           .header-inner {
             min-height: 62px;
             padding: 0 15px;
@@ -1794,6 +2097,15 @@ export default function DepositPage() {
             bottom: 74px;
           }
 
+          .payos-box {
+            display: grid;
+            gap: 12px;
+          }
+
+          .payos-button {
+            width: 100%;
+          }
+
           .mobile-nav {
             position: fixed;
             left: 10px;
@@ -1845,8 +2157,11 @@ export default function DepositPage() {
           .mobile-nav button.mobile-active {
             color: #ed3d80;
           }
+
         }
+
       `}</style>
+
     </main>
   );
 }
@@ -1865,9 +2180,13 @@ function InfoRow({
 
       <div>
 
-        <small>{label}</small>
+        <small>
+          {label}
+        </small>
 
-        <strong>{value}</strong>
+        <strong>
+          {value}
+        </strong>
 
       </div>
 
