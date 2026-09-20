@@ -4,9 +4,18 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
-const BANK_NAME = "VIETCOMBANK";
+// =====================================================
+// THÔNG TIN THANH TOÁN XENOVA
+// =====================================================
+
+const BANK_NAME = "BIDV";
 const ACCOUNT_NAME = "TRAN VAN TUYEN";
-const ACCOUNT_NUMBER = "9365717262";
+const ACCOUNT_NUMBER = "8940252048";
+const BANK_BIN = "970418";
+
+// =====================================================
+// MENU
+// =====================================================
 
 const NAV_ITEMS = [
   ["⌂", "Trang chủ", "/"],
@@ -18,6 +27,10 @@ const NAV_ITEMS = [
   ["⚙", "Cài đặt", "/settings"],
 ];
 
+// =====================================================
+// MỆNH GIÁ NẠP NHANH
+// =====================================================
+
 const QUICK_AMOUNTS = [
   10000,
   20000,
@@ -27,18 +40,35 @@ const QUICK_AMOUNTS = [
   500000,
 ];
 
+// =====================================================
+// FORMAT TIỀN
+// =====================================================
+
 function formatMoney(value) {
   return Number(value || 0).toLocaleString("vi-VN") + "đ";
 }
 
+// =====================================================
+// FORMAT NGÀY
+// =====================================================
+
 function formatDate(value) {
   if (!value) return "";
+
   return new Date(value).toLocaleString("vi-VN");
 }
+
+// =====================================================
+// LỌC SỐ
+// =====================================================
 
 function cleanAmount(value) {
   return String(value || "").replace(/\D/g, "");
 }
+
+// =====================================================
+// TRANG NẠP TIỀN
+// =====================================================
 
 export default function DepositPage() {
   const router = useRouter();
@@ -50,6 +80,10 @@ export default function DepositPage() {
   const [message, setMessage] = useState("");
   const [requests, setRequests] = useState([]);
   const [depositInfo, setDepositInfo] = useState(null);
+
+  // ===================================================
+  // LOAD DỮ LIỆU
+  // ===================================================
 
   async function loadData() {
     try {
@@ -74,6 +108,8 @@ export default function DepositPage() {
 
       if (!error) {
         setRequests(data || []);
+      } else {
+        console.error("LOAD DEPOSIT HISTORY ERROR:", error);
       }
     } catch (error) {
       console.error(error);
@@ -82,6 +118,10 @@ export default function DepositPage() {
       setLoading(false);
     }
   }
+
+  // ===================================================
+  // AUTH
+  // ===================================================
 
   useEffect(() => {
     loadData();
@@ -101,16 +141,29 @@ export default function DepositPage() {
     };
   }, [router]);
 
+  // ===================================================
+  // NHẬP SỐ TIỀN
+  // ===================================================
+
   function handleAmountChange(event) {
     const value = cleanAmount(event.target.value);
+
     setAmount(value);
     setMessage("");
   }
+
+  // ===================================================
+  // CHỌN NHANH
+  // ===================================================
 
   function selectQuickAmount(value) {
     setAmount(String(value));
     setMessage("");
   }
+
+  // ===================================================
+  // TẠO ĐƠN NẠP
+  // ===================================================
 
   async function createDeposit() {
     setMessage("");
@@ -147,10 +200,12 @@ export default function DepositPage() {
 
       const response = await fetch("/api/deposit/create", {
         method: "POST",
+
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.access_token}`,
         },
+
         body: JSON.stringify({
           amount: money,
         }),
@@ -160,9 +215,14 @@ export default function DepositPage() {
 
       if (!response.ok || !result?.success) {
         throw new Error(
-          result?.message || "Không thể tạo yêu cầu nạp tiền."
+          result?.message ||
+            "Không thể tạo yêu cầu nạp tiền."
         );
       }
+
+      // ===============================================
+      // LƯU THÔNG TIN ĐƠN
+      // ===============================================
 
       setDepositInfo({
         depositId: result.depositId,
@@ -170,19 +230,35 @@ export default function DepositPage() {
         transferContent: result.transferContent,
       });
 
-      setMessage("Đã tạo yêu cầu nạp tiền. Hãy chuyển khoản đúng nội dung.");
+      setMessage(
+        "Đã tạo yêu cầu nạp tiền. Hãy chuyển khoản đúng nội dung."
+      );
+
+      // ===============================================
+      // LOAD LẠI LỊCH SỬ
+      // ===============================================
 
       await loadData();
     } catch (error) {
       console.error(error);
-      setMessage(error.message || "Có lỗi xảy ra khi tạo yêu cầu nạp tiền.");
+
+      setMessage(
+        error.message ||
+          "Có lỗi xảy ra khi tạo yêu cầu nạp tiền."
+      );
     } finally {
       setSubmitting(false);
     }
   }
 
+  // ===================================================
+  // TẠO LINK VIETQR
+  // ===================================================
+
   function getQrUrl() {
-    if (!depositInfo) return "";
+    if (!depositInfo) {
+      return "";
+    }
 
     const params = new URLSearchParams({
       amount: String(depositInfo.amount),
@@ -190,24 +266,38 @@ export default function DepositPage() {
       accountName: ACCOUNT_NAME,
     });
 
-    return `https://img.vietqr.io/image/VCB-${ACCOUNT_NUMBER}-compact2.png?${params.toString()}`;
+    return `https://img.vietqr.io/image/${BANK_BIN}-${ACCOUNT_NUMBER}-compact2.png?${params.toString()}`;
   }
+
+  // ===================================================
+  // COPY
+  // ===================================================
 
   async function copyText(text, successMessage) {
     try {
       await navigator.clipboard.writeText(String(text));
+
       setMessage(successMessage);
     } catch {
-      setMessage("Không thể sao chép. Vui lòng giữ và sao chép thủ công.");
+      setMessage(
+        "Không thể sao chép. Vui lòng giữ và sao chép thủ công."
+      );
     }
   }
+
+  // ===================================================
+  // LOADING
+  // ===================================================
 
   if (loading) {
     return (
       <main className="loading-page">
         <div className="loader-card">
           <div className="loader">✦</div>
-          <div>Đang tải XENOVA PLAY...</div>
+
+          <div>
+            Đang tải XENOVA PLAY...
+          </div>
         </div>
 
         <style jsx>{`
@@ -247,12 +337,23 @@ export default function DepositPage() {
     );
   }
 
+  // ===================================================
+  // GIAO DIỆN
+  // ===================================================
+
   return (
     <main className="page">
-      <div className="petals">✿　❀　✿　❀　✿</div>
+      <div className="petals">
+        ✿　❀　✿　❀　✿
+      </div>
+
+      {/* =================================================
+          HEADER
+      ================================================= */}
 
       <header className="header">
         <div className="header-inner">
+
           <button
             className="logo"
             onClick={() => router.push("/")}
@@ -262,20 +363,28 @@ export default function DepositPage() {
           </button>
 
           <nav className="desktop-nav">
-            {NAV_ITEMS.map(([icon, label, href]) => (
-              <button
-                key={href}
-                type="button"
-                className={href === "/deposit" ? "nav-item active" : "nav-item"}
-                onClick={() => router.push(href)}
-              >
-                <span>{icon}</span>
-                {label}
-              </button>
-            ))}
+            {NAV_ITEMS.map(
+              ([icon, label, href]) => (
+                <button
+                  key={href}
+                  type="button"
+                  className={
+                    href === "/deposit"
+                      ? "nav-item active"
+                      : "nav-item"
+                  }
+                  onClick={() => router.push(href)}
+                >
+                  <span>{icon}</span>
+
+                  {label}
+                </button>
+              )
+            )}
           </nav>
 
           <div className="user-area">
+
             <div className="wallet">
               <span>💰</span>
               <span>Nạp tiền</span>
@@ -284,53 +393,120 @@ export default function DepositPage() {
             <button
               type="button"
               className="avatar"
-              onClick={() => router.push("/dashboard")}
+              onClick={() =>
+                router.push("/dashboard")
+              }
             >
-              {user?.email?.charAt(0)?.toUpperCase() || "U"}
+              {user?.email
+                ?.charAt(0)
+                ?.toUpperCase() || "U"}
             </button>
+
           </div>
         </div>
       </header>
 
+      {/* =================================================
+          CONTENT
+      ================================================= */}
+
       <section className="content">
+
+        {/* BREADCRUMB */}
+
         <div className="breadcrumb">
-          <button type="button" onClick={() => router.push("/")}>
+
+          <button
+            type="button"
+            onClick={() => router.push("/")}
+          >
             Trang chủ
           </button>
+
           <span>/</span>
+
           <strong>Nạp tiền</strong>
+
         </div>
+
+        {/* TITLE */}
 
         <div className="title-area">
+
           <div>
-            <div className="small-title">XENOVA PLAY</div>
-            <h1>Nạp tiền</h1>
-            <p>
-              Nạp tiền vào ví để mua KEY và sử dụng các dịch vụ trên hệ thống.
-            </p>
-          </div>
-        </div>
 
-        <div className="grid">
-          <section className="card deposit-card">
-            <div className="card-title">
-              <div className="icon-box">💳</div>
-
-              <div>
-                <h2>Số tiền muốn nạp</h2>
-                <p>Nhập số tiền bạn muốn nạp vào tài khoản.</p>
-              </div>
+            <div className="small-title">
+              XENOVA PLAY
             </div>
 
-            <label className="label">Số tiền</label>
+            <h1>Nạp tiền</h1>
+
+            <p>
+              Nạp tiền vào ví để mua KEY và
+              sử dụng các dịch vụ trên hệ thống.
+            </p>
+
+          </div>
+
+        </div>
+
+        {/* =================================================
+            MAIN GRID
+        ================================================= */}
+
+        <div className="grid">
+
+          {/* =================================================
+              CREATE DEPOSIT
+          ================================================= */}
+
+          <section className="card deposit-card">
+
+            <div className="card-title">
+
+              <div className="icon-box">
+                💳
+              </div>
+
+              <div>
+
+                <h2>
+                  Số tiền muốn nạp
+                </h2>
+
+                <p>
+                  Nhập số tiền bạn muốn nạp
+                  vào tài khoản.
+                </p>
+
+              </div>
+
+            </div>
+
+            <label className="label">
+              Số tiền
+            </label>
 
             <div className="amount-input">
+
               <input
-                value={amount ? Number(amount).toLocaleString("vi-VN") : ""}
+                value={
+                  amount
+                    ? Number(
+                        amount
+                      ).toLocaleString(
+                        "vi-VN"
+                      )
+                    : ""
+                }
                 onChange={(event) =>
                   handleAmountChange({
                     target: {
-                      value: event.target.value.replace(/\./g, ""),
+                      value:
+                        event.target.value.replace(
+                          /\./g,
+                          ""
+                        ),
                     },
                   })
                 }
@@ -339,25 +515,37 @@ export default function DepositPage() {
               />
 
               <span>VNĐ</span>
+
             </div>
 
-            <div className="quick-title">Chọn nhanh</div>
+            <div className="quick-title">
+              Chọn nhanh
+            </div>
 
             <div className="quick-grid">
-              {QUICK_AMOUNTS.map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  className={
-                    amount === String(value)
-                      ? "quick-button selected"
-                      : "quick-button"
-                  }
-                  onClick={() => selectQuickAmount(value)}
-                >
-                  {formatMoney(value)}
-                </button>
-              ))}
+
+              {QUICK_AMOUNTS.map(
+                (value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={
+                      amount ===
+                      String(value)
+                        ? "quick-button selected"
+                        : "quick-button"
+                    }
+                    onClick={() =>
+                      selectQuickAmount(
+                        value
+                      )
+                    }
+                  >
+                    {formatMoney(value)}
+                  </button>
+                )
+              )}
+
             </div>
 
             <button
@@ -366,54 +554,122 @@ export default function DepositPage() {
               onClick={createDeposit}
               disabled={submitting}
             >
-              {submitting ? "Đang tạo yêu cầu..." : "TẠO YÊU CẦU NẠP TIỀN"}
+              {submitting
+                ? "Đang tạo yêu cầu..."
+                : "TẠO YÊU CẦU NẠP TIỀN"}
             </button>
 
-            {message && <div className="message">{message}</div>}
+            {message && (
+              <div className="message">
+                {message}
+              </div>
+            )}
+
           </section>
 
+          {/* =================================================
+              GUIDE
+          ================================================= */}
+
           <aside className="card guide-card">
+
             <div className="card-title">
-              <div className="icon-box">💡</div>
+
+              <div className="icon-box">
+                💡
+              </div>
 
               <div>
+
                 <h2>Hướng dẫn</h2>
-                <p>Thực hiện theo các bước bên dưới.</p>
+
+                <p>
+                  Thực hiện theo các bước
+                  bên dưới.
+                </p>
+
               </div>
+
             </div>
 
             <div className="steps">
+
               <div className="step">
+
                 <b>1</b>
+
                 <div>
-                  <strong>Nhập số tiền</strong>
-                  <span>Nhập số tiền bạn muốn nạp.</span>
+
+                  <strong>
+                    Nhập số tiền
+                  </strong>
+
+                  <span>
+                    Nhập số tiền bạn muốn
+                    nạp.
+                  </span>
+
                 </div>
+
               </div>
 
               <div className="step">
+
                 <b>2</b>
+
                 <div>
-                  <strong>Tạo yêu cầu</strong>
-                  <span>Bấm nút tạo yêu cầu nạp tiền.</span>
+
+                  <strong>
+                    Tạo yêu cầu
+                  </strong>
+
+                  <span>
+                    Bấm nút tạo yêu cầu
+                    nạp tiền.
+                  </span>
+
                 </div>
+
               </div>
 
               <div className="step">
+
                 <b>3</b>
+
                 <div>
-                  <strong>Chuyển khoản</strong>
-                  <span>Chuyển đúng số tiền và nội dung.</span>
+
+                  <strong>
+                    Chuyển khoản
+                  </strong>
+
+                  <span>
+                    Chuyển đúng số tiền và
+                    nội dung.
+                  </span>
+
                 </div>
+
               </div>
 
               <div className="step">
+
                 <b>4</b>
+
                 <div>
-                  <strong>Chờ hệ thống xử lý</strong>
-                  <span>Kiểm tra lịch sử nạp tiền bên dưới.</span>
+
+                  <strong>
+                    Chờ hệ thống xử lý
+                  </strong>
+
+                  <span>
+                    Kiểm tra lịch sử nạp
+                    tiền bên dưới.
+                  </span>
+
                 </div>
+
               </div>
+
             </div>
 
             <a
@@ -424,49 +680,88 @@ export default function DepositPage() {
             >
               💬 Chat Admin
             </a>
+
           </aside>
+
         </div>
+
+        {/* =================================================
+            PAYMENT INFORMATION
+        ================================================= */}
 
         {depositInfo && (
           <section className="card payment-card">
+
             <div className="payment-header">
+
               <div>
-                <div className="small-title">PAYMENT</div>
-                <h2>Thông tin chuyển khoản</h2>
+
+                <div className="small-title">
+                  PAYMENT
+                </div>
+
+                <h2>
+                  Thông tin chuyển khoản
+                </h2>
+
                 <p>
-                  Vui lòng chuyển đúng số tiền và đúng nội dung chuyển khoản.
+                  Vui lòng chuyển đúng số tiền
+                  và đúng nội dung chuyển khoản.
                 </p>
+
               </div>
 
-              <div className="payment-status">CHỜ THANH TOÁN</div>
+              <div className="payment-status">
+                CHỜ THANH TOÁN
+              </div>
+
             </div>
 
             <div className="payment-layout">
+
+              {/* QR */}
+
               <div className="qr-area">
+
                 <div className="qr-box">
+
                   <img
                     src={getQrUrl()}
-                    alt="QR thanh toán Vietcombank"
+                    alt="QR thanh toán BIDV"
                   />
+
                 </div>
 
                 <div className="qr-note">
-                  Quét mã QR bằng ứng dụng ngân hàng
+                  Quét mã QR bằng ứng dụng
+                  ngân hàng
                 </div>
+
               </div>
 
+              {/* BANK INFO */}
+
               <div className="bank-info">
+
                 <InfoRow
                   label="Ngân hàng"
                   value={BANK_NAME}
-                  onCopy={() => copyText(BANK_NAME, "Đã sao chép tên ngân hàng.")}
+                  onCopy={() =>
+                    copyText(
+                      BANK_NAME,
+                      "Đã sao chép tên ngân hàng."
+                    )
+                  }
                 />
 
                 <InfoRow
                   label="Chủ tài khoản"
                   value={ACCOUNT_NAME}
                   onCopy={() =>
-                    copyText(ACCOUNT_NAME, "Đã sao chép tên tài khoản.")
+                    copyText(
+                      ACCOUNT_NAME,
+                      "Đã sao chép tên tài khoản."
+                    )
                   }
                 />
 
@@ -474,25 +769,44 @@ export default function DepositPage() {
                   label="Số tài khoản"
                   value={ACCOUNT_NUMBER}
                   onCopy={() =>
-                    copyText(ACCOUNT_NUMBER, "Đã sao chép số tài khoản.")
+                    copyText(
+                      ACCOUNT_NUMBER,
+                      "Đã sao chép số tài khoản."
+                    )
                   }
                 />
 
                 <InfoRow
                   label="Số tiền"
-                  value={formatMoney(depositInfo.amount)}
+                  value={formatMoney(
+                    depositInfo.amount
+                  )}
                   onCopy={() =>
                     copyText(
-                      String(depositInfo.amount),
+                      String(
+                        depositInfo.amount
+                      ),
                       "Đã sao chép số tiền."
                     )
                   }
                 />
 
+                {/* NỘI DUNG */}
+
                 <div className="transfer-row">
+
                   <div>
-                    <small>Nội dung chuyển khoản</small>
-                    <strong>{depositInfo.transferContent}</strong>
+
+                    <small>
+                      Nội dung chuyển khoản
+                    </small>
+
+                    <strong>
+                      {
+                        depositInfo.transferContent
+                      }
+                    </strong>
+
                   </div>
 
                   <button
@@ -506,68 +820,131 @@ export default function DepositPage() {
                   >
                     Sao chép
                   </button>
+
                 </div>
+
               </div>
+
             </div>
+
           </section>
         )}
 
+        {/* =================================================
+            HISTORY
+        ================================================= */}
+
         <section className="card history-card">
+
           <div className="history-header">
+
             <div>
-              <div className="small-title">HISTORY</div>
-              <h2>Lịch sử nạp tiền</h2>
+
+              <div className="small-title">
+                HISTORY
+              </div>
+
+              <h2>
+                Lịch sử nạp tiền
+              </h2>
+
             </div>
 
-            <span>{requests.length} giao dịch</span>
+            <span>
+              {requests.length} giao dịch
+            </span>
+
           </div>
 
           {requests.length === 0 ? (
-            <div className="empty">
-              <div>♡</div>
-              <strong>Chưa có giao dịch</strong>
-              <span>Lịch sử nạp tiền của bạn sẽ xuất hiện ở đây.</span>
-            </div>
-          ) : (
-            <div className="history-list">
-              {requests.map((item) => {
-                const status = String(item.status || "").toLowerCase();
 
-                let statusText = "Đang xử lý";
+            <div className="empty">
+
+              <div>♡</div>
+
+              <strong>
+                Chưa có giao dịch
+              </strong>
+
+              <span>
+                Lịch sử nạp tiền của bạn
+                sẽ xuất hiện ở đây.
+              </span>
+
+            </div>
+
+          ) : (
+
+            <div className="history-list">
+
+              {requests.map((item) => {
+
+                const status = String(
+                  item.status || ""
+                ).toLowerCase();
+
+                let statusText =
+                  "Đang xử lý";
 
                 if (
                   status === "approved" ||
                   status === "success" ||
                   status === "completed"
                 ) {
-                  statusText = "Thành công";
+                  statusText =
+                    "Thành công";
                 } else if (
                   status === "rejected" ||
                   status === "failed" ||
                   status === "cancelled"
                 ) {
-                  statusText = "Từ chối";
+                  statusText =
+                    "Từ chối";
                 }
 
                 return (
-                  <div className="history-item" key={item.id}>
-                    <div className="history-icon">₫</div>
+                  <div
+                    className="history-item"
+                    key={item.id}
+                  >
+
+                    <div className="history-icon">
+                      ₫
+                    </div>
 
                     <div className="history-main">
-                      <strong>{formatMoney(item.amount)}</strong>
-                      <span>{formatDate(item.created_at)}</span>
+
+                      <strong>
+                        {formatMoney(
+                          item.amount
+                        )}
+                      </strong>
+
+                      <span>
+                        {formatDate(
+                          item.created_at
+                        )}
+                      </span>
+
                     </div>
 
                     <div className="history-right">
+
                       <span
                         className={
-                          status === "approved" ||
-                          status === "success" ||
-                          status === "completed"
+                          status ===
+                            "approved" ||
+                          status ===
+                            "success" ||
+                          status ===
+                            "completed"
                             ? "status success"
-                            : status === "rejected" ||
-                              status === "failed" ||
-                              status === "cancelled"
+                            : status ===
+                                "rejected" ||
+                              status ===
+                                "failed" ||
+                              status ===
+                                "cancelled"
                             ? "status failed"
                             : "status pending"
                         }
@@ -576,16 +953,30 @@ export default function DepositPage() {
                       </span>
 
                       {item.transfer_content && (
-                        <small>{item.transfer_content}</small>
+                        <small>
+                          {
+                            item.transfer_content
+                          }
+                        </small>
                       )}
+
                     </div>
+
                   </div>
                 );
               })}
+
             </div>
+
           )}
+
         </section>
+
       </section>
+
+      {/* =================================================
+          FLOATING ZALO
+      ================================================= */}
 
       <a
         className="floating-chat"
@@ -594,22 +985,50 @@ export default function DepositPage() {
         rel="noreferrer"
       >
         <span>💬</span>
-        <strong>Chat Admin</strong>
+
+        <strong>
+          Chat Admin
+        </strong>
       </a>
 
+      {/* =================================================
+          MOBILE MENU
+      ================================================= */}
+
       <nav className="mobile-nav">
-        {NAV_ITEMS.slice(0, 5).map(([icon, label, href]) => (
-          <button
-            type="button"
-            key={href}
-            className={href === "/deposit" ? "mobile-active" : ""}
-            onClick={() => router.push(href)}
-          >
-            <span>{icon}</span>
-            <small>{label}</small>
-          </button>
-        ))}
+
+        {NAV_ITEMS.slice(0, 5).map(
+          ([icon, label, href]) => (
+
+            <button
+              type="button"
+              key={href}
+              className={
+                href === "/deposit"
+                  ? "mobile-active"
+                  : ""
+              }
+              onClick={() =>
+                router.push(href)
+              }
+            >
+
+              <span>{icon}</span>
+
+              <small>
+                {label}
+              </small>
+
+            </button>
+
+          )
+        )}
+
       </nav>
+
+      {/* =================================================
+          CSS
+      ================================================= */}
 
       <style jsx global>{`
         * {
@@ -750,7 +1169,11 @@ export default function DepositPage() {
           height: 38px;
           border: 0;
           border-radius: 50%;
-          background: linear-gradient(135deg, #ff77ac, #ef3f83);
+          background: linear-gradient(
+            135deg,
+            #ff77ac,
+            #ef3f83
+          );
           color: white;
           font-weight: 900;
         }
@@ -813,15 +1236,29 @@ export default function DepositPage() {
 
         .grid {
           display: grid;
-          grid-template-columns: minmax(0, 1.5fr) minmax(300px, 0.9fr);
+          grid-template-columns:
+            minmax(0, 1.5fr)
+            minmax(300px, 0.9fr);
           gap: 18px;
         }
 
         .card {
-          background: rgba(255, 255, 255, 0.94);
+          background: rgba(
+            255,
+            255,
+            255,
+            0.94
+          );
           border: 1px solid #f0dce6;
           border-radius: 22px;
-          box-shadow: 0 12px 40px rgba(219, 76, 133, 0.07);
+          box-shadow:
+            0 12px 40px
+              rgba(
+                219,
+                76,
+                133,
+                0.07
+              );
         }
 
         .deposit-card,
@@ -881,7 +1318,14 @@ export default function DepositPage() {
 
         .amount-input:focus-within {
           border-color: #f25b96;
-          box-shadow: 0 0 0 4px rgba(242, 91, 150, 0.09);
+          box-shadow:
+            0 0 0 4px
+              rgba(
+                242,
+                91,
+                150,
+                0.09
+              );
         }
 
         .amount-input input {
@@ -912,7 +1356,8 @@ export default function DepositPage() {
 
         .quick-grid {
           display: grid;
-          grid-template-columns: repeat(3, 1fr);
+          grid-template-columns:
+            repeat(3, 1fr);
           gap: 8px;
         }
 
@@ -939,10 +1384,22 @@ export default function DepositPage() {
           border: 0;
           border-radius: 14px;
           padding: 15px;
-          background: linear-gradient(135deg, #f65c98, #ed3b80);
+          background:
+            linear-gradient(
+              135deg,
+              #f65c98,
+              #ed3b80
+            );
           color: white;
           font-weight: 900;
-          box-shadow: 0 9px 22px rgba(237, 59, 128, 0.2);
+          box-shadow:
+            0 9px 22px
+              rgba(
+                237,
+                59,
+                128,
+                0.2
+              );
         }
 
         .deposit-button:disabled {
@@ -1037,7 +1494,8 @@ export default function DepositPage() {
 
         .payment-layout {
           display: grid;
-          grid-template-columns: 290px 1fr;
+          grid-template-columns:
+            290px 1fr;
           gap: 30px;
           align-items: center;
         }
@@ -1054,7 +1512,9 @@ export default function DepositPage() {
           background: white;
           border: 1px solid #eadbe3;
           border-radius: 18px;
-          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+          box-shadow:
+            0 10px 30px
+              rgba(0, 0, 0, 0.05);
         }
 
         .qr-box img {
@@ -1243,7 +1703,14 @@ export default function DepositPage() {
           background: #ed3d80;
           color: white;
           text-decoration: none;
-          box-shadow: 0 12px 30px rgba(237, 61, 128, 0.3);
+          box-shadow:
+            0 12px 30px
+              rgba(
+                237,
+                61,
+                128,
+                0.3
+              );
           font-size: 12px;
         }
 
@@ -1296,7 +1763,8 @@ export default function DepositPage() {
           }
 
           .quick-grid {
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns:
+              repeat(2, 1fr);
           }
 
           .payment-header,
@@ -1333,13 +1801,26 @@ export default function DepositPage() {
             bottom: 9px;
             z-index: 60;
             display: grid;
-            grid-template-columns: repeat(5, 1fr);
+            grid-template-columns:
+              repeat(5, 1fr);
             padding: 7px;
             border: 1px solid #efdce5;
             border-radius: 18px;
-            background: rgba(255, 255, 255, 0.94);
+            background: rgba(
+              255,
+              255,
+              255,
+              0.94
+            );
             backdrop-filter: blur(15px);
-            box-shadow: 0 10px 35px rgba(210, 70, 125, 0.14);
+            box-shadow:
+              0 10px 35px
+                rgba(
+                  210,
+                  70,
+                  125,
+                  0.14
+                );
           }
 
           .mobile-nav button {
@@ -1370,17 +1851,33 @@ export default function DepositPage() {
   );
 }
 
-function InfoRow({ label, value, onCopy }) {
+// =====================================================
+// INFO ROW
+// =====================================================
+
+function InfoRow({
+  label,
+  value,
+  onCopy,
+}) {
   return (
     <div className="info-row">
+
       <div>
+
         <small>{label}</small>
+
         <strong>{value}</strong>
+
       </div>
 
-      <button type="button" onClick={onCopy}>
+      <button
+        type="button"
+        onClick={onCopy}
+      >
         Sao chép
       </button>
+
     </div>
   );
 }
