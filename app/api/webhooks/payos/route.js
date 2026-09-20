@@ -477,3 +477,10 @@ export async function POST(request) {
     );
   }
 }
+export async function GET() {
+  return NextResponse.json({
+    ok: true,
+    service: "XENOVA PAYOS WEBHOOK",
+    status: "ready",
+  });
+}
