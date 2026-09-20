@@ -3,377 +3,248 @@ import { createClient } from "@supabase/supabase-js";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  }
 );
 
-function normalizeText(value) {
-  return String(value || "")
-    .trim()
-    .replace(/\s+/g, " ")
-    .toUpperCase();
+function json(data, status = 200) {
+  return NextResponse.json(data, { status });
 }
 
 export async function POST(request) {
   try {
-    // =================================================
-    // BẢO MẬT WEBHOOK
-    // =================================================
+    /* =========================================================
+       1. KIỂM TRA WEBHOOK TOKEN
+    ========================================================= */
 
-    const webhookToken =
-      process.env.VIETQR_WEBHOOK_TOKEN;
+    const expectedToken = process.env.VIETQR_WEBHOOK_TOKEN;
+
+    if (!expectedToken) {
+      console.error("Missing VIETQR_WEBHOOK_TOKEN");
+      return json(
+        {
+          success: false,
+          message: "Webhook chưa được cấu hình.",
+        },
+        500
+      );
+    }
 
     const receivedToken =
       request.headers.get("secure-token") ||
       request.headers.get("x-webhook-token") ||
       "";
 
-    if (
-      !webhookToken ||
-      receivedToken !== webhookToken
-    ) {
-      return NextResponse.json(
+    if (receivedToken !== expectedToken) {
+      console.warn("Invalid VietQR webhook token");
+
+      return json(
         {
           success: false,
           message: "Unauthorized",
         },
-        { status: 401 }
+        401
       );
     }
 
-    // =================================================
-    // ĐỌC WEBHOOK
-    // =================================================
+    /* =========================================================
+       2. ĐỌC BODY
+    ========================================================= */
 
     const body = await request.json();
 
-    const data = Array.isArray(body?.data)
-      ? body.data
-      : [];
+    /*
+      VietQR thường gửi:
 
-    if (data.length === 0) {
-      return NextResponse.json({
+      {
+        code: "00",
+        desc: "Success",
+        data: [
+          {
+            orderCode,
+            amount,
+            description,
+            reference,
+            transactionDatetime,
+            ...
+          }
+        ]
+      }
+    */
+
+    const rawData = body?.data;
+
+    if (!rawData) {
+      return json({
         success: true,
-        message: "No transaction.",
+        message: "No payment data",
       });
     }
 
-    // =================================================
-    // XỬ LÝ TỪNG GIAO DỊCH
-    // =================================================
+    const payments = Array.isArray(rawData)
+      ? rawData
+      : [rawData];
 
-    for (const transaction of data) {
-      const amount = Number(
-        transaction?.amount || 0
-      );
+    /* =========================================================
+       3. XỬ LÝ TỪNG GIAO DỊCH
+    ========================================================= */
 
-      const description =
-        normalizeText(
-          transaction?.description
+    const results = [];
+
+    for (const payment of payments) {
+      try {
+        const amount = Number(payment?.amount);
+
+        const description = String(
+          payment?.description || ""
+        ).trim();
+
+        const reference = String(
+          payment?.reference || ""
+        ).trim();
+
+        /*
+          Chỉ nhận nội dung:
+
+          XENOVA 123
+          XENOVA 456
+          ...
+
+          Không nhận:
+          XENOVA
+          XENOVA ABC
+          ABC XENOVA 123
+        */
+
+        const match = description.match(
+          /^XENOVA\s+(\d+)$/i
         );
 
-      const reference = String(
-        transaction?.reference || ""
-      ).trim();
+        if (!match) {
+          results.push({
+            success: false,
+            ignored: true,
+            reason: "Invalid XENOVA transfer content",
+            description,
+          });
 
-      if (!amount || !description) {
-        continue;
-      }
-
-      // Chỉ nhận nội dung XENOVA <ID>
-      if (!description.startsWith("XENOVA ")) {
-        continue;
-      }
-
-      // =================================================
-      // LẤY MÃ ĐƠN
-      // =================================================
-
-      const transferContent =
-        description;
-
-      // =================================================
-      // TÌM ĐƠN
-      // =================================================
-
-      const {
-        data: deposit,
-        error: depositError,
-      } = await supabaseAdmin
-        .from("deposit_requests")
-        .select(
-          "id, user_id, amount, status, transfer_content"
-        )
-        .eq(
-          "transfer_content",
-          transferContent
-        )
-        .maybeSingle();
-
-      if (depositError) {
-        console.error(
-          "WEBHOOK DEPOSIT ERROR:",
-          depositError
-        );
-        continue;
-      }
-
-      if (!deposit) {
-        continue;
-      }
-
-      // =================================================
-      // ĐƠN ĐÃ XỬ LÝ
-      // =================================================
-
-      if (deposit.status !== "pending") {
-        continue;
-      }
-
-      // =================================================
-      // KIỂM TRA ĐÚNG SỐ TIỀN
-      // =================================================
-
-      if (
-        Number(deposit.amount) !==
-        amount
-      ) {
-        console.warn(
-          "AMOUNT MISMATCH:",
-          {
-            depositId: deposit.id,
-            expected: deposit.amount,
-            received: amount,
-          }
-        );
-
-        continue;
-      }
-
-      // =================================================
-      // LẤY VÍ
-      // =================================================
-
-      let wallet = null;
-
-      const {
-        data: existingWallet,
-        error: walletError,
-      } = await supabaseAdmin
-        .from("wallets")
-        .select(
-          "id, user_id, balance"
-        )
-        .eq(
-          "user_id",
-          deposit.user_id
-        )
-        .maybeSingle();
-
-      if (walletError) {
-        console.error(
-          "WALLET CHECK ERROR:",
-          walletError
-        );
-        continue;
-      }
-
-      wallet = existingWallet;
-
-      // =================================================
-      // TẠO VÍ NẾU CHƯA CÓ
-      // =================================================
-
-      if (!wallet) {
-        const {
-          data: newWallet,
-          error: createWalletError,
-        } = await supabaseAdmin
-          .from("wallets")
-          .insert({
-            user_id: deposit.user_id,
-            balance: 0,
-          })
-          .select(
-            "id, user_id, balance"
-          )
-          .single();
-
-        if (createWalletError) {
-          console.error(
-            "CREATE WALLET ERROR:",
-            createWalletError
-          );
           continue;
         }
 
-        wallet = newWallet;
-      }
+        const depositId = Number(match[1]);
 
-      // =================================================
-      // ĐẢM BẢO ĐƠN VẪN ĐANG PENDING
-      // =================================================
+        if (!Number.isInteger(depositId) || depositId <= 0) {
+          results.push({
+            success: false,
+            ignored: true,
+            reason: "Invalid deposit ID",
+          });
 
-      const {
-        data: claimedDeposit,
-        error: claimError,
-      } = await supabaseAdmin
-        .from("deposit_requests")
-        .update({
-          status: "processing",
-          updated_at:
-            new Date().toISOString(),
-        })
-        .eq("id", deposit.id)
-        .eq("status", "pending")
-        .select(
-          "id, user_id, amount, status"
-        )
-        .maybeSingle();
-
-      if (claimError) {
-        console.error(
-          "CLAIM DEPOSIT ERROR:",
-          claimError
-        );
-        continue;
-      }
-
-      // Request khác đã xử lý trước
-      if (!claimedDeposit) {
-        continue;
-      }
-
-      // =================================================
-      // CỘNG TIỀN
-      // =================================================
-
-      const oldBalance =
-        Number(wallet.balance || 0);
-
-      const newBalance =
-        oldBalance +
-        Number(deposit.amount);
-
-      const {
-        error: updateWalletError,
-      } = await supabaseAdmin
-        .from("wallets")
-        .update({
-          balance: newBalance,
-          updated_at:
-            new Date().toISOString(),
-        })
-        .eq("id", wallet.id);
-
-      // =================================================
-      // NẾU CỘNG TIỀN LỖI
-      // =================================================
-
-      if (updateWalletError) {
-        console.error(
-          "UPDATE WALLET ERROR:",
-          updateWalletError
-        );
-
-        await supabaseAdmin
-          .from("deposit_requests")
-          .update({
-            status: "pending",
-            updated_at:
-              new Date().toISOString(),
-          })
-          .eq("id", deposit.id)
-          .eq("status", "processing");
-
-        continue;
-      }
-
-      // =================================================
-      // HOÀN TẤT ĐƠN
-      // =================================================
-
-      const {
-        data: completedDeposit,
-        error: completeError,
-      } = await supabaseAdmin
-        .from("deposit_requests")
-        .update({
-          status: "completed",
-          updated_at:
-            new Date().toISOString(),
-        })
-        .eq("id", deposit.id)
-        .eq("status", "processing")
-        .select(
-          "id, user_id, amount, status, transfer_content"
-        )
-        .maybeSingle();
-
-      // =================================================
-      // NẾU HOÀN TẤT LỖI
-      // =================================================
-
-      if (completeError || !completedDeposit) {
-        console.error(
-          "COMPLETE DEPOSIT ERROR:",
-          completeError
-        );
-
-        // Đưa lại pending để không mất đơn.
-        await supabaseAdmin
-          .from("deposit_requests")
-          .update({
-            status: "pending",
-            updated_at:
-              new Date().toISOString(),
-          })
-          .eq("id", deposit.id)
-          .eq("status", "processing");
-
-        // Hoàn số dư.
-        await supabaseAdmin
-          .from("wallets")
-          .update({
-            balance: oldBalance,
-            updated_at:
-              new Date().toISOString(),
-          })
-          .eq("id", wallet.id);
-
-        continue;
-      }
-
-      console.log(
-        "AUTO DEPOSIT COMPLETED:",
-        {
-          depositId: completedDeposit.id,
-          userId: completedDeposit.user_id,
-          amount: completedDeposit.amount,
-          reference,
+          continue;
         }
-      );
+
+        if (!Number.isFinite(amount) || amount <= 0) {
+          results.push({
+            success: false,
+            ignored: true,
+            reason: "Invalid amount",
+            depositId,
+          });
+
+          continue;
+        }
+
+        /* =====================================================
+           4. GỌI TRANSACTION DATABASE
+
+           Toàn bộ:
+           - khóa đơn
+           - kiểm tra trạng thái
+           - cộng ví
+           - hoàn tất đơn
+
+           được thực hiện ATOMIC.
+        ===================================================== */
+
+        const { data, error } = await supabaseAdmin.rpc(
+          "process_vietqr_deposit",
+          {
+            p_deposit_id: depositId,
+            p_amount: Math.round(amount),
+            p_transfer_content: description,
+            p_reference: reference || null,
+          }
+        );
+
+        if (error) {
+          console.error(
+            "process_vietqr_deposit RPC error:",
+            error
+          );
+
+          results.push({
+            success: false,
+            depositId,
+            reason: error.message,
+          });
+
+          continue;
+        }
+
+        const result = Array.isArray(data)
+          ? data[0]
+          : data;
+
+        results.push({
+          success: result?.success === true,
+          depositId,
+          status: result?.status || null,
+          message: result?.message || null,
+        });
+      } catch (paymentError) {
+        console.error(
+          "VietQR payment processing error:",
+          paymentError
+        );
+
+        results.push({
+          success: false,
+          reason:
+            paymentError?.message ||
+            "Payment processing error",
+        });
+      }
     }
 
-    // =================================================
-    // TRẢ 2XX CHO VIETQR
-    // =================================================
+    /* =========================================================
+       5. LUÔN TRẢ 2XX CHO WEBHOOK SAU KHI ĐÃ XỬ LÝ
+    ========================================================= */
 
-    return NextResponse.json({
+    return json({
       success: true,
-      message: "Webhook processed.",
+      results,
     });
   } catch (error) {
     console.error(
-      "VIETQR WEBHOOK ERROR:",
+      "VietQR webhook fatal error:",
       error
     );
 
-    return NextResponse.json(
+    /*
+      Lỗi hệ thống thật sự -> 500 để VietQR có thể retry.
+    */
+
+    return json(
       {
         success: false,
-        message: "Webhook error.",
+        message: "Internal server error",
       },
-      { status: 500 }
+      500
     );
   }
 }
