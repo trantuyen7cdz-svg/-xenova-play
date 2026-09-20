@@ -54,14 +54,18 @@ function parseXenovaOrder(description) {
   const text = normalizeText(description);
 
   /*
-   * Chỉ chấp nhận:
+   * PayOS/ngân hàng có thể thêm mã ở phía trước.
    *
-   * XENOVA 123
-   * XENOVA 456
+   * Ví dụ:
+   *
+   * XENOVA 47
+   * CSN3JT92OR4 XENOVA 47
+   *
+   * Chỉ cần lấy XENOVA <ID> ở cuối nội dung.
    */
 
   const match =
-    text.match(/^XENOVA\s+(\d+)$/i);
+    text.match(/(?:^|\s)XENOVA\s+(\d+)$/i);
 
   if (!match) {
     return null;
@@ -84,18 +88,6 @@ function parseXenovaOrder(description) {
 // =====================================================
 
 async function processPayment(webhookData) {
-  /*
-   * PayOS webhook sau khi verify sẽ có:
-   *
-   * {
-   *   orderCode,
-   *   amount,
-   *   description,
-   *   reference,
-   *   ...
-   * }
-   */
-
   const orderCode = Number(
     webhookData?.orderCode
   );
@@ -145,7 +137,7 @@ async function processPayment(webhookData) {
   }
 
   // ===================================================
-  // KIỂM TRA NỘI DUNG XENOVA
+  // LẤY ID ĐƠN XENOVA
   // ===================================================
 
   const depositId =
@@ -157,12 +149,13 @@ async function processPayment(webhookData) {
       status: "ignored",
       reason: "invalid_description",
       orderCode,
+      description,
     };
   }
 
-  /*
-   * orderCode của PayOS phải trùng ID đơn XENOVA.
-   */
+  // ===================================================
+  // ORDER CODE PHẢI TRÙNG ID ĐƠN
+  // ===================================================
 
   if (depositId !== orderCode) {
     return {
@@ -223,7 +216,8 @@ async function processPayment(webhookData) {
         depositAmount:
           Number(deposit.amount),
 
-        webhookAmount: amount,
+        webhookAmount:
+          amount,
 
         depositId,
       }
@@ -235,19 +229,40 @@ async function processPayment(webhookData) {
   }
 
   // ===================================================
-  // KIỂM TRA NỘI DUNG
+  // KIỂM TRA MÃ ĐƠN TRONG DATABASE
   // ===================================================
 
-  if (
+  /*
+   * Database có thể lưu:
+   *
+   * XENOVA 47
+   *
+   * Nhưng PayOS thực tế có thể gửi:
+   *
+   * CSN3JT92OR4 XENOVA 47
+   *
+   * Vì vậy không so sánh toàn bộ chuỗi nữa.
+   * Chỉ kiểm tra ID XENOVA có đúng với đơn hay không.
+   */
+
+  const databaseTransferContent =
     normalizeText(
       deposit.transfer_content
-    ) !== description
+    );
+
+  const databaseDepositId =
+    parseXenovaOrder(
+      databaseTransferContent
+    );
+
+  if (
+    databaseDepositId !== depositId
   ) {
     console.error(
-      "[PAYOS WEBHOOK] DESCRIPTION MISMATCH",
+      "[PAYOS WEBHOOK] DEPOSIT CONTENT MISMATCH",
       {
         database:
-          deposit.transfer_content,
+          databaseTransferContent,
 
         webhook:
           description,
@@ -257,7 +272,7 @@ async function processPayment(webhookData) {
     );
 
     throw new Error(
-      "Nội dung chuyển khoản không khớp."
+      "Mã đơn nạp không khớp."
     );
   }
 
@@ -286,17 +301,6 @@ async function processPayment(webhookData) {
   // ===================================================
   // GỌI DATABASE TRANSACTION
   // ===================================================
-
-  /*
-   * Dùng lại RPC hiện tại của XENOVA.
-   *
-   * RPC này chịu trách nhiệm:
-   *
-   * - kiểm tra đơn
-   * - cộng tiền vào ví
-   * - cập nhật trạng thái
-   * - chống cộng tiền 2 lần
-   */
 
   const {
     data,
@@ -417,12 +421,6 @@ export async function POST(request) {
     // 4. KIỂM TRA PAYOS CODE
     // =================================================
 
-    /*
-     * PayOS webhook có code:
-     *
-     * 00 = giao dịch thành công
-     */
-
     if (
       body?.code !== undefined &&
       String(body.code) !== "00"
@@ -459,11 +457,6 @@ export async function POST(request) {
       error
     );
 
-    /*
-     * Trả 500 để PayOS có thể retry
-     * nếu server/database gặp lỗi.
-     */
-
     return NextResponse.json(
       {
         ok: false,
@@ -477,10 +470,16 @@ export async function POST(request) {
     );
   }
 }
+
+// =====================================================
+// GET
+// =====================================================
+
 export async function GET() {
   return NextResponse.json({
     ok: true,
-    service: "XENOVA PAYOS WEBHOOK",
+    service:
+      "XENOVA PAYOS WEBHOOK",
     status: "ready",
   });
 }
