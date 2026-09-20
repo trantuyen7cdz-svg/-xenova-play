@@ -9,230 +9,471 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+// =====================================================
+// PAYOS
+// =====================================================
+
+function getPayOS() {
+  if (
+    !process.env.PAYOS_CLIENT_ID ||
+    !process.env.PAYOS_API_KEY ||
+    !process.env.PAYOS_CHECKSUM_KEY
+  ) {
+    throw new Error(
+      "PayOS chưa được cấu hình đầy đủ."
+    );
+  }
+
+  return new PayOS({
+    clientId:
+      process.env.PAYOS_CLIENT_ID,
+
+    apiKey:
+      process.env.PAYOS_API_KEY,
+
+    checksumKey:
+      process.env.PAYOS_CHECKSUM_KEY,
+  });
+}
+
+// =====================================================
+// NORMALIZE TEXT
+// =====================================================
+
+function normalizeText(value) {
+  return String(value ?? "")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+// =====================================================
+// PARSE XENOVA ORDER
+// =====================================================
+
+function parseXenovaOrder(description) {
+  const text = normalizeText(description);
+
+  /*
+   * Chỉ chấp nhận:
+   *
+   * XENOVA 123
+   * XENOVA 456
+   */
+
+  const match =
+    text.match(/^XENOVA\s+(\d+)$/i);
+
+  if (!match) {
+    return null;
+  }
+
+  const id = Number(match[1]);
+
+  if (
+    !Number.isSafeInteger(id) ||
+    id <= 0
+  ) {
+    return null;
+  }
+
+  return id;
+}
+
+// =====================================================
+// PROCESS PAYMENT
+// =====================================================
+
+async function processPayment(webhookData) {
+  /*
+   * PayOS webhook sau khi verify sẽ có:
+   *
+   * {
+   *   orderCode,
+   *   amount,
+   *   description,
+   *   reference,
+   *   ...
+   * }
+   */
+
+  const orderCode = Number(
+    webhookData?.orderCode
+  );
+
+  const amount = Number(
+    webhookData?.amount
+  );
+
+  const description = normalizeText(
+    webhookData?.description
+  );
+
+  const reference =
+    normalizeText(
+      webhookData?.reference
+    ) || null;
+
+  // ===================================================
+  // KIỂM TRA ORDER CODE
+  // ===================================================
+
+  if (
+    !Number.isSafeInteger(orderCode) ||
+    orderCode <= 0
+  ) {
+    return {
+      ok: true,
+      status: "ignored",
+      reason: "invalid_order_code",
+    };
+  }
+
+  // ===================================================
+  // KIỂM TRA AMOUNT
+  // ===================================================
+
+  if (
+    !Number.isSafeInteger(amount) ||
+    amount <= 0
+  ) {
+    return {
+      ok: true,
+      status: "ignored",
+      reason: "invalid_amount",
+      orderCode,
+    };
+  }
+
+  // ===================================================
+  // KIỂM TRA NỘI DUNG XENOVA
+  // ===================================================
+
+  const depositId =
+    parseXenovaOrder(description);
+
+  if (!depositId) {
+    return {
+      ok: true,
+      status: "ignored",
+      reason: "invalid_description",
+      orderCode,
+    };
+  }
+
+  /*
+   * orderCode của PayOS phải trùng ID đơn XENOVA.
+   */
+
+  if (depositId !== orderCode) {
+    return {
+      ok: true,
+      status: "ignored",
+      reason: "order_code_mismatch",
+      orderCode,
+      depositId,
+    };
+  }
+
+  // ===================================================
+  // KIỂM TRA ĐƠN TRONG DATABASE
+  // ===================================================
+
+  const {
+    data: deposit,
+    error: depositError,
+  } = await supabaseAdmin
+    .from("deposit_requests")
+    .select(
+      "id, user_id, amount, status, transfer_content"
+    )
+    .eq("id", depositId)
+    .maybeSingle();
+
+  if (depositError) {
+    console.error(
+      "[PAYOS WEBHOOK] LOAD DEPOSIT ERROR:",
+      depositError
+    );
+
+    throw new Error(
+      "Không thể kiểm tra đơn nạp."
+    );
+  }
+
+  if (!deposit) {
+    return {
+      ok: true,
+      status: "ignored",
+      reason: "deposit_not_found",
+      orderCode,
+      depositId,
+    };
+  }
+
+  // ===================================================
+  // KIỂM TRA SỐ TIỀN
+  // ===================================================
+
+  if (
+    Number(deposit.amount) !== amount
+  ) {
+    console.error(
+      "[PAYOS WEBHOOK] AMOUNT MISMATCH",
+      {
+        depositAmount:
+          Number(deposit.amount),
+
+        webhookAmount: amount,
+
+        depositId,
+      }
+    );
+
+    throw new Error(
+      "Số tiền giao dịch không khớp."
+    );
+  }
+
+  // ===================================================
+  // KIỂM TRA NỘI DUNG
+  // ===================================================
+
+  if (
+    normalizeText(
+      deposit.transfer_content
+    ) !== description
+  ) {
+    console.error(
+      "[PAYOS WEBHOOK] DESCRIPTION MISMATCH",
+      {
+        database:
+          deposit.transfer_content,
+
+        webhook:
+          description,
+
+        depositId,
+      }
+    );
+
+    throw new Error(
+      "Nội dung chuyển khoản không khớp."
+    );
+  }
+
+  // ===================================================
+  // NẾU ĐÃ XỬ LÝ THÌ KHÔNG XỬ LÝ LẠI
+  // ===================================================
+
+  const currentStatus =
+    String(
+      deposit.status || ""
+    ).toLowerCase();
+
+  if (
+    currentStatus === "approved" ||
+    currentStatus === "success" ||
+    currentStatus === "completed"
+  ) {
+    return {
+      ok: true,
+      status: "already_processed",
+      depositId,
+      orderCode,
+    };
+  }
+
+  // ===================================================
+  // GỌI DATABASE TRANSACTION
+  // ===================================================
+
+  /*
+   * Dùng lại RPC hiện tại của XENOVA.
+   *
+   * RPC này chịu trách nhiệm:
+   *
+   * - kiểm tra đơn
+   * - cộng tiền vào ví
+   * - cập nhật trạng thái
+   * - chống cộng tiền 2 lần
+   */
+
+  const {
+    data,
+    error,
+  } = await supabaseAdmin.rpc(
+    "process_vietqr_deposit",
+    {
+      p_deposit_id:
+        depositId,
+
+      p_amount:
+        amount,
+
+      p_reference:
+        reference,
+
+      p_description:
+        description,
+    }
+  );
+
+  if (error) {
+    console.error(
+      "[PAYOS WEBHOOK] RPC ERROR:",
+      error
+    );
+
+    throw new Error(
+      "Không thể xử lý giao dịch."
+    );
+  }
+
+  console.log(
+    "[PAYOS WEBHOOK] PROCESSED:",
+    JSON.stringify({
+      orderCode,
+      depositId,
+      amount,
+      reference,
+      result: data,
+    })
+  );
+
+  return {
+    ok: true,
+    status: "processed",
+    orderCode,
+    depositId,
+    amount,
+    reference,
+    result: data,
+  };
+}
+
+// =====================================================
+// POST
+// =====================================================
+
 export async function POST(request) {
   try {
+    // =================================================
+    // 1. KIỂM TRA PAYOS ENV
+    // =================================================
+
     if (
       !process.env.PAYOS_CLIENT_ID ||
       !process.env.PAYOS_API_KEY ||
       !process.env.PAYOS_CHECKSUM_KEY
     ) {
+      console.error(
+        "[PAYOS WEBHOOK] ENV MISSING"
+      );
+
       return NextResponse.json(
         {
-          success: false,
-          message:
+          ok: false,
+          error:
             "PayOS chưa được cấu hình.",
         },
-        { status: 500 }
+        {
+          status: 500,
+        }
       );
     }
 
-    const body = await request.json();
+    // =================================================
+    // 2. ĐỌC BODY
+    // =================================================
 
-    const payOS = new PayOS({
-      clientId:
-        process.env.PAYOS_CLIENT_ID,
+    const body =
+      await request.json();
 
-      apiKey:
-        process.env.PAYOS_API_KEY,
+    console.log(
+      "[PAYOS WEBHOOK] RECEIVED:",
+      JSON.stringify(body)
+    );
 
-      checksumKey:
-        process.env.PAYOS_CHECKSUM_KEY,
-    });
+    // =================================================
+    // 3. VERIFY WEBHOOK
+    // =================================================
 
-    // XÁC MINH CHỮ KÝ PAYOS
+    const payOS =
+      getPayOS();
+
     const webhookData =
-      payOS.webhooks.verify(body);
-
-    const orderCode =
-      Number(webhookData.orderCode);
-
-    const amount =
-      Number(webhookData.amount);
-
-    const description =
-      String(
-        webhookData.description || ""
-      ).trim();
-
-    if (
-      !Number.isSafeInteger(orderCode) ||
-      orderCode <= 0
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "orderCode không hợp lệ.",
-        },
-        { status: 400 }
+      await payOS.webhooks.verify(
+        body
       );
-    }
 
-    if (
-      !Number.isSafeInteger(amount) ||
-      amount <= 0
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "amount không hợp lệ.",
-        },
-        { status: 400 }
-      );
-    }
-
-    // Chỉ nhận đơn XENOVA
-    if (
-      !/^XENOVA\s+\d+$/i.test(
-        description
+    console.log(
+      "[PAYOS WEBHOOK] VERIFIED:",
+      JSON.stringify(
+        webhookData
       )
+    );
+
+    // =================================================
+    // 4. KIỂM TRA PAYOS CODE
+    // =================================================
+
+    /*
+     * PayOS webhook có code:
+     *
+     * 00 = giao dịch thành công
+     */
+
+    if (
+      body?.code !== undefined &&
+      String(body.code) !== "00"
     ) {
       return NextResponse.json({
-        success: true,
+        ok: true,
         status: "ignored",
-        reason:
-          "invalid_description",
+        reason: "payment_not_success",
+        code: body.code,
+        desc: body.desc || null,
       });
     }
 
-    // ==========================================
-    // TÌM ĐƠN
-    // ==========================================
+    // =================================================
+    // 5. XỬ LÝ THANH TOÁN
+    // =================================================
 
-    const {
-      data: deposit,
-      error: depositError,
-    } = await supabaseAdmin
-      .from("deposit_requests")
-      .select(
-        "id, user_id, amount, status, transfer_content"
-      )
-      .eq("id", orderCode)
-      .maybeSingle();
-
-    if (depositError) {
-      throw depositError;
-    }
-
-    if (!deposit) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Không tìm thấy đơn nạp.",
-        },
-        { status: 404 }
-      );
-    }
-
-    // ==========================================
-    // KIỂM TRA SỐ TIỀN
-    // ==========================================
-
-    if (
-      Number(deposit.amount) !== amount
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Số tiền không khớp.",
-        },
-        { status: 400 }
-      );
-    }
-
-    // ==========================================
-    // KIỂM TRA NỘI DUNG
-    // ==========================================
-
-    if (
-      String(
-        deposit.transfer_content
-      ).trim() !== description
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Nội dung chuyển khoản không khớp.",
-        },
-        { status: 400 }
-      );
-    }
-
-    // ==========================================
-    // TRANSACTION HIỆN TẠI CỦA XENOVA
-    // ==========================================
-    //
-    // RPC này đã được hệ thống XENOVA dùng
-    // cho webhook VietQR hiện tại.
-    //
-    // Quan trọng:
-    // pending -> completed
-    // + cộng ví
-    // phải nằm trong transaction.
-    //
-
-    const {
-      data,
-      error,
-    } = await supabaseAdmin.rpc(
-      "process_vietqr_deposit",
-      {
-        p_deposit_id:
-          orderCode,
-
-        p_amount:
-          amount,
-
-        p_reference:
-          webhookData.reference ||
-          null,
-
-        p_description:
-          description,
-      }
-    );
-
-    if (error) {
-      console.error(
-        "[PAYOS WEBHOOK] RPC ERROR:",
-        error
+    const result =
+      await processPayment(
+        webhookData
       );
 
-      throw error;
-    }
-
-    console.log(
-      "[PAYOS WEBHOOK] PROCESSED:",
-      {
-        orderCode,
-        amount,
-        result: data,
-      }
-    );
+    // =================================================
+    // 6. TRẢ 200
+    // =================================================
 
     return NextResponse.json({
-      success: true,
-      status: "processed",
-      orderCode,
-      result: data,
+      ok: true,
+      result,
     });
   } catch (error) {
     console.error(
-      "[PAYOS WEBHOOK] ERROR:",
+      "[PAYOS WEBHOOK] FATAL ERROR:",
       error
     );
 
+    /*
+     * Trả 500 để PayOS có thể retry
+     * nếu server/database gặp lỗi.
+     */
+
     return NextResponse.json(
       {
-        success: false,
-        message:
+        ok: false,
+        error:
+          error?.message ||
           "Webhook processing failed.",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }
