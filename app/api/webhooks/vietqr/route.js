@@ -1,250 +1,246 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { supabaseAdmin } from "@/lib/supabase";
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
+export const dynamic = "force-dynamic";
+
+function getWebhookToken(request) {
+  return (
+    request.headers.get("secure-token") ||
+    request.headers.get("x-webhook-token") ||
+    ""
+  );
+}
+
+function normalizeText(value) {
+  return String(value ?? "")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function parseXenovaOrder(description) {
+  const text = normalizeText(description);
+
+  /*
+   * Chỉ chấp nhận:
+   *
+   * XENOVA 123
+   * XENOVA 456
+   *
+   * Không chấp nhận nội dung linh tinh.
+   */
+  const match = text.match(/^XENOVA\s+(\d+)$/i);
+
+  if (!match) {
+    return null;
   }
-);
 
-function json(data, status = 200) {
-  return NextResponse.json(data, { status });
+  const id = Number(match[1]);
+
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    return null;
+  }
+
+  return id;
+}
+
+async function processPayment(payment) {
+  const description = normalizeText(payment?.description);
+
+  const depositId = parseXenovaOrder(description);
+
+  /*
+   * Không phải giao dịch của XENOVA.
+   */
+  if (!depositId) {
+    return {
+      ok: true,
+      status: "ignored",
+      reason: "invalid_description",
+    };
+  }
+
+  const amount = Number(payment?.amount);
+
+  if (!Number.isSafeInteger(amount) || amount <= 0) {
+    return {
+      ok: true,
+      status: "ignored",
+      reason: "invalid_amount",
+      depositId,
+    };
+  }
+
+  /*
+   * Chỉ xử lý giao dịch thành công.
+   */
+  if (
+    payment?.code !== undefined &&
+    String(payment.code) !== "00"
+  ) {
+    return {
+      ok: true,
+      status: "ignored",
+      reason: "payment_not_success",
+      depositId,
+    };
+  }
+
+  const reference =
+    normalizeText(payment?.reference) || null;
+
+  /*
+   * Gọi PostgreSQL transaction.
+   *
+   * Đây là nơi chống cộng tiền 2 lần.
+   */
+  const { data, error } =
+    await supabaseAdmin.rpc(
+      "process_vietqr_deposit",
+      {
+        p_deposit_id: depositId,
+        p_amount: amount,
+        p_reference: reference,
+        p_description: description,
+      }
+    );
+
+  if (error) {
+    console.error(
+      "[VIETQR WEBHOOK] RPC ERROR:",
+      error
+    );
+
+    throw new Error(
+      "Không thể xử lý giao dịch"
+    );
+  }
+
+  console.log(
+    "[VIETQR WEBHOOK]",
+    JSON.stringify(data)
+  );
+
+  return data;
 }
 
 export async function POST(request) {
   try {
-    /* =========================================================
-       1. KIỂM TRA WEBHOOK TOKEN
-    ========================================================= */
+    /*
+     * ==========================================
+     * 1. KIỂM TRA WEBHOOK TOKEN
+     * ==========================================
+     */
 
-    const expectedToken = process.env.VIETQR_WEBHOOK_TOKEN;
-
-    if (!expectedToken) {
-      console.error("Missing VIETQR_WEBHOOK_TOKEN");
-      return json(
-        {
-          success: false,
-          message: "Webhook chưa được cấu hình.",
-        },
-        500
-      );
-    }
+    const expectedToken =
+      process.env.VIETQR_WEBHOOK_TOKEN || "";
 
     const receivedToken =
-      request.headers.get("secure-token") ||
-      request.headers.get("x-webhook-token") ||
-      "";
+      getWebhookToken(request);
 
-    if (receivedToken !== expectedToken) {
-      console.warn("Invalid VietQR webhook token");
+    if (
+      !expectedToken ||
+      !receivedToken ||
+      receivedToken !== expectedToken
+    ) {
+      console.warn(
+        "[VIETQR WEBHOOK] Unauthorized request"
+      );
 
-      return json(
+      return NextResponse.json(
         {
-          success: false,
-          message: "Unauthorized",
+          ok: false,
+          error: "Unauthorized",
         },
-        401
+        {
+          status: 401,
+        }
       );
     }
 
-    /* =========================================================
-       2. ĐỌC BODY
-    ========================================================= */
+
+    /*
+     * ==========================================
+     * 2. ĐỌC BODY
+     * ==========================================
+     */
 
     const body = await request.json();
 
-    /*
-      VietQR thường gửi:
+    let payments = body?.data;
 
-      {
-        code: "00",
-        desc: "Success",
-        data: [
-          {
-            orderCode,
-            amount,
-            description,
-            reference,
-            transactionDatetime,
-            ...
-          }
-        ]
-      }
-    */
-
-    const rawData = body?.data;
-
-    if (!rawData) {
-      return json({
-        success: true,
-        message: "No payment data",
+    if (!payments) {
+      return NextResponse.json({
+        ok: true,
+        status: "ignored",
+        reason: "no_data",
       });
     }
 
-    const payments = Array.isArray(rawData)
-      ? rawData
-      : [rawData];
+    /*
+     * VietQR trả data dạng array.
+     * Nhưng vẫn hỗ trợ object để tránh lỗi.
+     */
+    if (!Array.isArray(payments)) {
+      payments = [payments];
+    }
 
-    /* =========================================================
-       3. XỬ LÝ TỪNG GIAO DỊCH
-    ========================================================= */
+
+    /*
+     * ==========================================
+     * 3. XỬ LÝ TỪNG GIAO DỊCH
+     * ==========================================
+     */
 
     const results = [];
 
     for (const payment of payments) {
       try {
-        const amount = Number(payment?.amount);
+        const result =
+          await processPayment(payment);
 
-        const description = String(
-          payment?.description || ""
-        ).trim();
-
-        const reference = String(
-          payment?.reference || ""
-        ).trim();
+        results.push(result);
+      } catch (error) {
+        console.error(
+          "[VIETQR WEBHOOK] PAYMENT ERROR:",
+          error
+        );
 
         /*
-          Chỉ nhận nội dung:
-
-          XENOVA 123
-          XENOVA 456
-          ...
-
-          Không nhận:
-          XENOVA
-          XENOVA ABC
-          ABC XENOVA 123
-        */
-
-        const match = description.match(
-          /^XENOVA\s+(\d+)$/i
-        );
-
-        if (!match) {
-          results.push({
-            success: false,
-            ignored: true,
-            reason: "Invalid XENOVA transfer content",
-            description,
-          });
-
-          continue;
-        }
-
-        const depositId = Number(match[1]);
-
-        if (!Number.isInteger(depositId) || depositId <= 0) {
-          results.push({
-            success: false,
-            ignored: true,
-            reason: "Invalid deposit ID",
-          });
-
-          continue;
-        }
-
-        if (!Number.isFinite(amount) || amount <= 0) {
-          results.push({
-            success: false,
-            ignored: true,
-            reason: "Invalid amount",
-            depositId,
-          });
-
-          continue;
-        }
-
-        /* =====================================================
-           4. GỌI TRANSACTION DATABASE
-
-           Toàn bộ:
-           - khóa đơn
-           - kiểm tra trạng thái
-           - cộng ví
-           - hoàn tất đơn
-
-           được thực hiện ATOMIC.
-        ===================================================== */
-
-        const { data, error } = await supabaseAdmin.rpc(
-          "process_vietqr_deposit",
-          {
-            p_deposit_id: depositId,
-            p_amount: Math.round(amount),
-            p_transfer_content: description,
-            p_reference: reference || null,
-          }
-        );
-
-        if (error) {
-          console.error(
-            "process_vietqr_deposit RPC error:",
-            error
-          );
-
-          results.push({
-            success: false,
-            depositId,
-            reason: error.message,
-          });
-
-          continue;
-        }
-
-        const result = Array.isArray(data)
-          ? data[0]
-          : data;
-
-        results.push({
-          success: result?.success === true,
-          depositId,
-          status: result?.status || null,
-          message: result?.message || null,
-        });
-      } catch (paymentError) {
-        console.error(
-          "VietQR payment processing error:",
-          paymentError
-        );
-
-        results.push({
-          success: false,
-          reason:
-            paymentError?.message ||
-            "Payment processing error",
-        });
+         * Throw ra ngoài để VietQR có thể gửi lại webhook.
+         *
+         * Vì transaction trong PostgreSQL đã chống
+         * cộng tiền trùng nên webhook retry vẫn an toàn.
+         */
+        throw error;
       }
     }
 
-    /* =========================================================
-       5. LUÔN TRẢ 2XX CHO WEBHOOK SAU KHI ĐÃ XỬ LÝ
-    ========================================================= */
 
-    return json({
-      success: true,
+    /*
+     * ==========================================
+     * 4. TRẢ 200
+     * ==========================================
+     */
+
+    return NextResponse.json({
+      ok: true,
       results,
     });
+
   } catch (error) {
     console.error(
-      "VietQR webhook fatal error:",
+      "[VIETQR WEBHOOK] FATAL ERROR:",
       error
     );
 
-    /*
-      Lỗi hệ thống thật sự -> 500 để VietQR có thể retry.
-    */
-
-    return json(
+    return NextResponse.json(
       {
-        success: false,
-        message: "Internal server error",
+        ok: false,
+        error: "Webhook processing failed",
       },
-      500
+      {
+        status: 500,
+      }
     );
   }
 }
