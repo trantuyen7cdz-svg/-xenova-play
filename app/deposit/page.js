@@ -244,8 +244,10 @@ export default function DepositPage() {
         // PayOS
         checkoutUrl:
           result.checkoutUrl || "",
+
         qrCode:
           result.qrCode || "",
+
         paymentLinkId:
           result.paymentLinkId || "",
       });
@@ -302,7 +304,25 @@ export default function DepositPage() {
       return "";
     }
 
-    return String(depositInfo.qrCode);
+    const qr = String(
+      depositInfo.qrCode
+    ).trim();
+
+    if (!qr) {
+      return "";
+    }
+
+    /*
+     * PayOS trả qrCode là dữ liệu QR,
+     * không phải URL ảnh.
+     *
+     * Dùng API tạo ảnh QR từ nội dung
+     * để hiển thị trên website.
+     */
+
+    return `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(
+      qr
+    )}`;
   }
 
   // ===================================================
@@ -410,10 +430,6 @@ export default function DepositPage() {
         ✿　❀　✿　❀　✿
       </div>
 
-      {/* =================================================
-          HEADER
-      ================================================= */}
-
       <header className="header">
 
         <div className="header-inner">
@@ -476,13 +492,7 @@ export default function DepositPage() {
 
       </header>
 
-      {/* =================================================
-          CONTENT
-      ================================================= */}
-
       <section className="content">
-
-        {/* BREADCRUMB */}
 
         <div className="breadcrumb">
 
@@ -500,8 +510,6 @@ export default function DepositPage() {
           <strong>Nạp tiền</strong>
 
         </div>
-
-        {/* TITLE */}
 
         <div className="title-area">
 
@@ -522,15 +530,7 @@ export default function DepositPage() {
 
         </div>
 
-        {/* =================================================
-            MAIN GRID
-        ================================================= */}
-
         <div className="grid">
-
-          {/* =================================================
-              CREATE DEPOSIT
-          ================================================= */}
 
           <section className="card deposit-card">
 
@@ -638,10 +638,6 @@ export default function DepositPage() {
             )}
 
           </section>
-
-          {/* =================================================
-              GUIDE
-          ================================================= */}
 
           <aside className="card guide-card">
 
@@ -757,10 +753,6 @@ export default function DepositPage() {
 
         </div>
 
-        {/* =================================================
-            PAYMENT INFORMATION
-        ================================================= */}
-
         {depositInfo && (
 
           <section className="card payment-card">
@@ -789,8 +781,6 @@ export default function DepositPage() {
               </div>
 
             </div>
-
-            {/* PAYOS */}
 
             {depositInfo.checkoutUrl && (
 
@@ -827,8 +817,6 @@ export default function DepositPage() {
 
             <div className="payment-layout">
 
-              {/* QR */}
-
               <div className="qr-area">
 
                 <div className="qr-box">
@@ -860,8 +848,6 @@ export default function DepositPage() {
                 </div>
 
               </div>
-
-              {/* BANK INFO */}
 
               <div className="bank-info">
 
@@ -913,8 +899,6 @@ export default function DepositPage() {
                   }
                 />
 
-                {/* ORDER CODE */}
-
                 {depositInfo.orderCode && (
 
                   <InfoRow
@@ -933,8 +917,6 @@ export default function DepositPage() {
                   />
 
                 )}
-
-                {/* NỘI DUNG */}
 
                 <div className="transfer-row">
 
@@ -970,8 +952,6 @@ export default function DepositPage() {
 
             </div>
 
-            {/* NOTE */}
-
             <div className="payment-note">
 
               <span>⚡</span>
@@ -995,10 +975,6 @@ export default function DepositPage() {
           </section>
 
         )}
-
-        {/* =================================================
-            HISTORY
-        ================================================= */}
 
         <section className="card history-card">
 
@@ -1142,10 +1118,6 @@ export default function DepositPage() {
 
       </section>
 
-      {/* =================================================
-          FLOATING ZALO
-      ================================================= */}
-
       <a
         className="floating-chat"
         href="https://zalo.me/84365717262"
@@ -1158,10 +1130,6 @@ export default function DepositPage() {
           Chat Admin
         </strong>
       </a>
-
-      {/* =================================================
-          MOBILE MENU
-      ================================================= */}
 
       <nav className="mobile-nav">
 
@@ -1193,10 +1161,6 @@ export default function DepositPage() {
         )}
 
       </nav>
-
-      {/* =================================================
-          CSS
-      ================================================= */}
 
       <style jsx global>{`
 
@@ -1685,10 +1649,6 @@ export default function DepositPage() {
           white-space: nowrap;
         }
 
-        /* ===============================================
-           PAYOS BOX
-        =============================================== */
-
         .payos-box {
           display: flex;
           align-items: center;
@@ -1778,6 +1738,7 @@ export default function DepositPage() {
                 0,
                 0.05
               );
+          overflow: hidden;
         }
 
         .qr-box img {
@@ -1842,10 +1803,6 @@ export default function DepositPage() {
           font-weight: 900;
           white-space: nowrap;
         }
-
-        /* ===============================================
-           PAYMENT NOTE
-        =============================================== */
 
         .payment-note {
           display: flex;
