@@ -1,14 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase } from "../../lib/supabase";
+import { supabase } from "@/lib/supabase";
 
 export default function WebsitesAdminPage() {
   const [websites, setWebsites] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
 
   const [form, setForm] = useState({
     name: "",
@@ -24,43 +23,44 @@ export default function WebsitesAdminPage() {
     description: "",
   });
 
-  async function getAccessToken() {
+  async function getToken() {
     const {
       data: { session },
     } = await supabase.auth.getSession();
 
-    return session?.access_token || "";
+    return session?.access_token || null;
   }
 
   async function loadWebsites() {
     try {
       setLoading(true);
-      setError("");
+      setMessage("");
 
-      const token = await getAccessToken();
+      const token = await getToken();
 
       if (!token) {
-        setError("Bạn chưa đăng nhập.");
+        setMessage("Bạn chưa đăng nhập.");
         return;
       }
 
-      const response = await fetch("/api/admin/websites", {
+      const res = await fetch("/api/admin/websites", {
+        method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
         },
+        cache: "no-store",
       });
 
-      const result = await response.json();
+      const data = await res.json();
 
-      if (!response.ok) {
-        throw new Error(
-          result.error || "Không thể tải danh sách website."
-        );
+      if (!res.ok) {
+        throw new Error(data?.error || "Không thể tải danh sách website");
       }
 
-      setWebsites(result.websites || []);
-    } catch (err) {
-      setError(err.message || "Có lỗi xảy ra.");
+      setWebsites(data.websites || []);
+    } catch (error) {
+      console.error(error);
+      setMessage(error.message || "Có lỗi xảy ra");
     } finally {
       setLoading(false);
     }
@@ -71,96 +71,103 @@ export default function WebsitesAdminPage() {
   }, []);
 
   function updateForm(field, value) {
-    setForm((current) => ({
-      ...current,
+    setForm((prev) => ({
+      ...prev,
       [field]: value,
     }));
   }
 
-  async function createWebsite(event) {
-    event.preventDefault();
+  function resetForm() {
+    setForm({
+      name: "",
+      slug: "",
+      domain: "",
+      logo_url: "",
+      banner_url: "",
+      theme: "pink",
+      bank_name: "",
+      bank_account_number: "",
+      bank_account_name: "",
+      payment_qr_url: "",
+      description: "",
+    });
+  }
 
-    setMessage("");
-    setError("");
+  async function createWebsite(e) {
+    e.preventDefault();
 
     if (!form.name.trim()) {
-      setError("Vui lòng nhập tên website.");
+      setMessage("Vui lòng nhập tên website.");
       return;
     }
 
     if (!form.slug.trim()) {
-      setError("Vui lòng nhập slug website.");
+      setMessage("Vui lòng nhập slug website.");
       return;
     }
 
     try {
-      setCreating(true);
+      setSaving(true);
+      setMessage("");
 
-      const token = await getAccessToken();
+      const token = await getToken();
 
       if (!token) {
-        throw new Error("Phiên đăng nhập đã hết hạn.");
+        setMessage("Bạn chưa đăng nhập.");
+        return;
       }
 
-      const response = await fetch("/api/admin/websites", {
+      const res = await fetch("/api/admin/websites", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          name: form.name.trim(),
+          slug: form.slug.trim().toLowerCase(),
+          domain: form.domain.trim(),
+          logo_url: form.logo_url.trim(),
+          banner_url: form.banner_url.trim(),
+          theme: form.theme,
+          bank_name: form.bank_name.trim(),
+          bank_account_number: form.bank_account_number.trim(),
+          bank_account_name: form.bank_account_name.trim(),
+          payment_qr_url: form.payment_qr_url.trim(),
+          description: form.description.trim(),
+        }),
       });
 
-      const result = await response.json();
+      const data = await res.json();
 
-      if (!response.ok) {
-        throw new Error(
-          result.error || "Không thể tạo website."
-        );
+      if (!res.ok) {
+        throw new Error(data?.error || "Không thể tạo website");
       }
 
-      setMessage("🎉 Tạo website thành công.");
-
-      setForm({
-        name: "",
-        slug: "",
-        domain: "",
-        logo_url: "",
-        banner_url: "",
-        theme: "pink",
-        bank_name: "",
-        bank_account_number: "",
-        bank_account_name: "",
-        payment_qr_url: "",
-        description: "",
-      });
-
+      setMessage("Tạo website thành công.");
+      resetForm();
       await loadWebsites();
-    } catch (err) {
-      setError(err.message || "Có lỗi xảy ra.");
+    } catch (error) {
+      console.error(error);
+      setMessage(error.message || "Có lỗi xảy ra khi tạo website");
     } finally {
-      setCreating(false);
+      setSaving(false);
     }
   }
 
   async function toggleWebsite(website) {
     try {
-      setError("");
       setMessage("");
 
-      const token = await getAccessToken();
+      const token = await getToken();
 
       if (!token) {
-        throw new Error("Phiên đăng nhập đã hết hạn.");
+        setMessage("Bạn chưa đăng nhập.");
+        return;
       }
 
-      const newStatus =
-        website.status === "active"
-          ? "inactive"
-          : "active";
-
-      const response = await fetch(
-        `/api/admin/websites?id=${website.id}`,
+      const res = await fetch(
+        `/api/admin/websites?id=${encodeURIComponent(website.id)}`,
         {
           method: "PATCH",
           headers: {
@@ -168,46 +175,43 @@ export default function WebsitesAdminPage() {
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            status: newStatus,
+            status: website.status === "active" ? "inactive" : "active",
           }),
         }
       );
 
-      const result = await response.json();
+      const data = await res.json();
 
-      if (!response.ok) {
-        throw new Error(
-          result.error || "Không thể cập nhật website."
-        );
+      if (!res.ok) {
+        throw new Error(data?.error || "Không thể cập nhật website");
       }
 
       await loadWebsites();
-    } catch (err) {
-      setError(err.message || "Có lỗi xảy ra.");
+    } catch (error) {
+      console.error(error);
+      setMessage(error.message || "Có lỗi xảy ra");
     }
   }
 
   async function deleteWebsite(website) {
     const confirmed = window.confirm(
-      `Bạn có chắc muốn xóa website "${website.name}"?`
+      `Bạn có chắc muốn xóa website "${website.name}" không?`
     );
 
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
 
     try {
-      setError("");
       setMessage("");
 
-      const token = await getAccessToken();
+      const token = await getToken();
 
       if (!token) {
-        throw new Error("Phiên đăng nhập đã hết hạn.");
+        setMessage("Bạn chưa đăng nhập.");
+        return;
       }
 
-      const response = await fetch(
-        `/api/admin/websites?id=${website.id}`,
+      const res = await fetch(
+        `/api/admin/websites?id=${encodeURIComponent(website.id)}`,
         {
           method: "DELETE",
           headers: {
@@ -216,18 +220,17 @@ export default function WebsitesAdminPage() {
         }
       );
 
-      const result = await response.json();
+      const data = await res.json();
 
-      if (!response.ok) {
-        throw new Error(
-          result.error || "Không thể xóa website."
-        );
+      if (!res.ok) {
+        throw new Error(data?.error || "Không thể xóa website");
       }
 
       setMessage("Đã xóa website.");
       await loadWebsites();
-    } catch (err) {
-      setError(err.message || "Có lỗi xảy ra.");
+    } catch (error) {
+      console.error(error);
+      setMessage(error.message || "Có lỗi xảy ra khi xóa website");
     }
   }
 
@@ -235,17 +238,18 @@ export default function WebsitesAdminPage() {
     <main
       style={{
         minHeight: "100vh",
+        background: "#f8fafc",
         padding: "24px",
-        background: "#fff5f9",
-        color: "#222",
+        color: "#111827",
       }}
     >
       <div
         style={{
-          maxWidth: "1100px",
+          maxWidth: "1200px",
           margin: "0 auto",
         }}
       >
+        {/* HEADER */}
         <div
           style={{
             marginBottom: "24px",
@@ -258,65 +262,55 @@ export default function WebsitesAdminPage() {
               fontWeight: 800,
             }}
           >
-            🌐 Quản lý Website
+            Quản lý Website
           </h1>
 
           <p
             style={{
               marginTop: "8px",
-              color: "#666",
+              marginBottom: 0,
+              color: "#6b7280",
             }}
           >
-            Tạo và quản lý nhiều website riêng từ XENOVA.
+            Tạo và quản lý các website riêng từ hệ thống XENOVA.
           </p>
         </div>
 
+        {/* MESSAGE */}
         {message && (
           <div
             style={{
+              marginBottom: "20px",
               padding: "12px 14px",
-              marginBottom: "16px",
-              borderRadius: "12px",
-              background: "#e9fff1",
-              border: "1px solid #b9f0cc",
+              borderRadius: "10px",
+              background: "#fff",
+              border: "1px solid #e5e7eb",
+              fontSize: "14px",
             }}
           >
             {message}
           </div>
         )}
 
-        {error && (
-          <div
-            style={{
-              padding: "12px 14px",
-              marginBottom: "16px",
-              borderRadius: "12px",
-              background: "#fff0f0",
-              border: "1px solid #ffcaca",
-              color: "#c00",
-            }}
-          >
-            {error}
-          </div>
-        )}
-
+        {/* CREATE WEBSITE */}
         <section
           style={{
             background: "#fff",
-            borderRadius: "18px",
+            border: "1px solid #e5e7eb",
+            borderRadius: "16px",
             padding: "20px",
             marginBottom: "24px",
-            boxShadow: "0 5px 25px rgba(0,0,0,.06)",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.04)",
           }}
         >
           <h2
             style={{
-              marginTop: 0,
-              marginBottom: "18px",
+              margin: "0 0 18px",
               fontSize: "20px",
+              fontWeight: 800,
             }}
           >
-            ➕ Tạo Website mới
+            Tạo Website Mới
           </h2>
 
           <form onSubmit={createWebsite}>
@@ -329,140 +323,100 @@ export default function WebsitesAdminPage() {
               }}
             >
               <Field
-                label="Tên website *"
+                label="Tên Website *"
                 value={form.name}
-                onChange={(value) =>
-                  updateForm("name", value)
-                }
-                placeholder="NOBITA SHOP"
+                onChange={(value) => updateForm("name", value)}
+                placeholder="Ví dụ: NOBITA SHOP"
               />
 
               <Field
                 label="Slug *"
                 value={form.slug}
-                onChange={(value) =>
-                  updateForm("slug", value)
-                }
-                placeholder="nobita"
+                onChange={(value) => updateForm("slug", value)}
+                placeholder="nobita-shop"
               />
 
               <Field
-                label="Tên miền"
+                label="Domain"
                 value={form.domain}
-                onChange={(value) =>
-                  updateForm("domain", value)
-                }
-                placeholder="nobitashop.com"
+                onChange={(value) => updateForm("domain", value)}
+                placeholder="shopnobita.com"
               />
 
               <Field
                 label="Logo URL"
                 value={form.logo_url}
-                onChange={(value) =>
-                  updateForm("logo_url", value)
-                }
+                onChange={(value) => updateForm("logo_url", value)}
                 placeholder="https://..."
               />
 
               <Field
                 label="Banner URL"
                 value={form.banner_url}
-                onChange={(value) =>
-                  updateForm("banner_url", value)
-                }
+                onChange={(value) => updateForm("banner_url", value)}
                 placeholder="https://..."
               />
 
               <div>
-                <label style={labelStyle}>
-                  Giao diện
-                </label>
+                <label style={labelStyle}>Theme</label>
 
                 <select
                   value={form.theme}
-                  onChange={(event) =>
-                    updateForm(
-                      "theme",
-                      event.target.value
-                    )
-                  }
+                  onChange={(e) => updateForm("theme", e.target.value)}
                   style={inputStyle}
                 >
-                  <option value="pink">
-                    Hồng
-                  </option>
-                  <option value="blue">
-                    Xanh
-                  </option>
-                  <option value="dark">
-                    Tối
-                  </option>
-                  <option value="purple">
-                    Tím
-                  </option>
+                  <option value="pink">Pink</option>
+                  <option value="blue">Blue</option>
+                  <option value="purple">Purple</option>
+                  <option value="green">Green</option>
+                  <option value="dark">Dark</option>
                 </select>
               </div>
 
               <Field
                 label="Ngân hàng"
                 value={form.bank_name}
-                onChange={(value) =>
-                  updateForm("bank_name", value)
-                }
-                placeholder="BIDV"
+                onChange={(value) => updateForm("bank_name", value)}
+                placeholder="Vietcombank"
               />
 
               <Field
                 label="Số tài khoản"
                 value={form.bank_account_number}
                 onChange={(value) =>
-                  updateForm(
-                    "bank_account_number",
-                    value
-                  )
+                  updateForm("bank_account_number", value)
                 }
                 placeholder="0123456789"
               />
 
               <Field
-                label="Tên chủ tài khoản"
+                label="Tên tài khoản"
                 value={form.bank_account_name}
                 onChange={(value) =>
-                  updateForm(
-                    "bank_account_name",
-                    value
-                  )
+                  updateForm("bank_account_name", value)
                 }
-                placeholder="NOBITA SHOP"
+                placeholder="NGUYEN VAN A"
               />
 
               <Field
                 label="QR thanh toán URL"
                 value={form.payment_qr_url}
                 onChange={(value) =>
-                  updateForm(
-                    "payment_qr_url",
-                    value
-                  )
+                  updateForm("payment_qr_url", value)
                 }
                 placeholder="https://..."
               />
             </div>
 
             <div style={{ marginTop: "14px" }}>
-              <label style={labelStyle}>
-                Mô tả website
-              </label>
+              <label style={labelStyle}>Mô tả</label>
 
               <textarea
                 value={form.description}
-                onChange={(event) =>
-                  updateForm(
-                    "description",
-                    event.target.value
-                  )
+                onChange={(e) =>
+                  updateForm("description", e.target.value)
                 }
-                placeholder="Mô tả shop..."
+                placeholder="Mô tả website..."
                 rows={4}
                 style={{
                   ...inputStyle,
@@ -473,47 +427,77 @@ export default function WebsitesAdminPage() {
 
             <button
               type="submit"
-              disabled={creating}
+              disabled={saving}
               style={{
                 marginTop: "18px",
                 width: "100%",
                 border: 0,
-                borderRadius: "12px",
-                padding: "14px 18px",
-                background: creating
-                  ? "#aaa"
-                  : "#ff4f9a",
+                borderRadius: "10px",
+                padding: "13px 18px",
+                background: saving ? "#9ca3af" : "#ec4899",
                 color: "#fff",
-                fontSize: "16px",
+                fontSize: "15px",
                 fontWeight: 800,
-                cursor: creating
-                  ? "not-allowed"
-                  : "pointer",
+                cursor: saving ? "not-allowed" : "pointer",
               }}
             >
-              {creating
-                ? "⏳ Đang tạo..."
-                : "🚀 TẠO WEBSITE"}
+              {saving ? "Đang tạo..." : "＋ Tạo Website Mới"}
             </button>
           </form>
         </section>
 
-        <section>
-          <h2
+        {/* WEBSITE LIST */}
+        <section
+          style={{
+            background: "#fff",
+            border: "1px solid #e5e7eb",
+            borderRadius: "16px",
+            padding: "20px",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.04)",
+          }}
+        >
+          <div
             style={{
-              marginBottom: "14px",
-              fontSize: "20px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: "12px",
+              marginBottom: "18px",
+              flexWrap: "wrap",
             }}
           >
-            🌐 Website đã tạo
-          </h2>
+            <h2
+              style={{
+                margin: 0,
+                fontSize: "20px",
+                fontWeight: 800,
+              }}
+            >
+              Danh sách Website
+            </h2>
+
+            <button
+              type="button"
+              onClick={loadWebsites}
+              style={{
+                border: "1px solid #e5e7eb",
+                background: "#fff",
+                borderRadius: "9px",
+                padding: "9px 14px",
+                cursor: "pointer",
+                fontWeight: 700,
+              }}
+            >
+              Làm mới
+            </button>
+          </div>
 
           {loading ? (
             <div
               style={{
-                background: "#fff",
-                padding: "24px",
-                borderRadius: "16px",
+                padding: "30px 0",
+                textAlign: "center",
+                color: "#6b7280",
               }}
             >
               Đang tải...
@@ -521,10 +505,9 @@ export default function WebsitesAdminPage() {
           ) : websites.length === 0 ? (
             <div
               style={{
-                background: "#fff",
-                padding: "24px",
-                borderRadius: "16px",
-                color: "#777",
+                padding: "30px 0",
+                textAlign: "center",
+                color: "#6b7280",
               }}
             >
               Chưa có website nào.
@@ -540,122 +523,139 @@ export default function WebsitesAdminPage() {
                 <div
                   key={website.id}
                   style={{
-                    background: "#fff",
-                    borderRadius: "16px",
-                    padding: "18px",
-                    boxShadow:
-                      "0 5px 25px rgba(0,0,0,.05)",
+                    border: "1px solid #e5e7eb",
+                    borderRadius: "14px",
+                    padding: "16px",
                   }}
                 >
                   <div
                     style={{
                       display: "flex",
-                      justifyContent:
-                        "space-between",
+                      justifyContent: "space-between",
                       alignItems: "flex-start",
                       gap: "15px",
                       flexWrap: "wrap",
                     }}
                   >
-                    <div>
+                    <div style={{ minWidth: 0 }}>
                       <div
                         style={{
-                          fontSize: "19px",
-                          fontWeight: 800,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                          flexWrap: "wrap",
                         }}
                       >
-                        {website.name}
+                        <h3
+                          style={{
+                            margin: 0,
+                            fontSize: "18px",
+                            fontWeight: 800,
+                          }}
+                        >
+                          {website.name}
+                        </h3>
+
+                        <span
+                          style={{
+                            display: "inline-block",
+                            padding: "4px 9px",
+                            borderRadius: "999px",
+                            fontSize: "12px",
+                            fontWeight: 800,
+                            background:
+                              website.status === "active"
+                                ? "#dcfce7"
+                                : "#fee2e2",
+                            color:
+                              website.status === "active"
+                                ? "#166534"
+                                : "#991b1b",
+                          }}
+                        >
+                          {website.status === "active"
+                            ? "Đang hoạt động"
+                            : "Đang tắt"}
+                        </span>
                       </div>
 
                       <div
                         style={{
-                          marginTop: "5px",
-                          color: "#777",
+                          marginTop: "8px",
+                          color: "#6b7280",
+                          fontSize: "14px",
+                          wordBreak: "break-word",
                         }}
                       >
-                        /{website.slug}
+                        Slug: {website.slug}
                       </div>
 
                       {website.domain && (
                         <div
                           style={{
-                            marginTop: "5px",
+                            marginTop: "4px",
+                            color: "#6b7280",
+                            fontSize: "14px",
+                            wordBreak: "break-word",
                           }}
                         >
-                          🌐 {website.domain}
+                          Domain: {website.domain}
                         </div>
                       )}
 
-                      <div
-                        style={{
-                          marginTop: "8px",
-                          fontSize: "14px",
-                        }}
-                      >
-                        💳{" "}
-                        {website.bank_name ||
-                          "Chưa cấu hình thanh toán"}
-                      </div>
+                      {website.description && (
+                        <div
+                          style={{
+                            marginTop: "8px",
+                            color: "#374151",
+                            fontSize: "14px",
+                          }}
+                        >
+                          {website.description}
+                        </div>
+                      )}
                     </div>
 
                     <div
                       style={{
-                        padding: "6px 10px",
-                        borderRadius: "999px",
-                        background:
-                          website.status ===
-                          "active"
-                            ? "#e8fff0"
-                            : "#eee",
-                        color:
-                          website.status ===
-                          "active"
-                            ? "#159447"
-                            : "#777",
-                        fontWeight: 700,
+                        display: "flex",
+                        gap: "8px",
+                        flexWrap: "wrap",
                       }}
                     >
-                      {website.status ===
-                      "active"
-                        ? "🟢 Hoạt động"
-                        : "⚪ Tắt"}
+                      <button
+                        type="button"
+                        onClick={() => toggleWebsite(website)}
+                        style={{
+                          border: "1px solid #e5e7eb",
+                          background: "#fff",
+                          borderRadius: "9px",
+                          padding: "9px 12px",
+                          cursor: "pointer",
+                          fontWeight: 700,
+                        }}
+                      >
+                        {website.status === "active"
+                          ? "Tắt Website"
+                          : "Bật Website"}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => deleteWebsite(website)}
+                        style={{
+                          border: 0,
+                          background: "#ef4444",
+                          color: "#fff",
+                          borderRadius: "9px",
+                          padding: "9px 12px",
+                          cursor: "pointer",
+                          fontWeight: 700,
+                        }}
+                      >
+                        Xóa
+                      </button>
                     </div>
-                  </div>
-
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: "8px",
-                      marginTop: "16px",
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() =>
-                        toggleWebsite(website)
-                      }
-                      style={smallButtonStyle}
-                    >
-                      {website.status ===
-                      "active"
-                        ? "Tắt website"
-                        : "Bật website"}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        deleteWebsite(website)
-                      }
-                      style={{
-                        ...smallButtonStyle,
-                        background: "#fff0f0",
-                        color: "#d22",
-                      }}
-                    >
-                      Xóa
-                    </button>
                   </div>
                 </div>
               ))}
@@ -667,23 +667,15 @@ export default function WebsitesAdminPage() {
   );
 }
 
-function Field({
-  label,
-  value,
-  onChange,
-  placeholder,
-}) {
+function Field({ label, value, onChange, placeholder }) {
   return (
     <div>
-      <label style={labelStyle}>
-        {label}
-      </label>
+      <label style={labelStyle}>{label}</label>
 
       <input
+        type="text"
         value={value}
-        onChange={(event) =>
-          onChange(event.target.value)
-        }
+        onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         style={inputStyle}
       />
@@ -694,27 +686,19 @@ function Field({
 const labelStyle = {
   display: "block",
   marginBottom: "7px",
-  fontSize: "14px",
+  fontSize: "13px",
   fontWeight: 700,
+  color: "#374151",
 };
 
 const inputStyle = {
   width: "100%",
   boxSizing: "border-box",
-  border: "1px solid #ddd",
-  borderRadius: "10px",
-  padding: "12px",
-  fontSize: "15px",
-  outline: "none",
+  border: "1px solid #d1d5db",
+  borderRadius: "9px",
+  padding: "11px 12px",
   background: "#fff",
-};
-
-const smallButtonStyle = {
-  border: 0,
-  borderRadius: "10px",
-  padding: "10px 14px",
-  background: "#ffe5f0",
-  color: "#e52f7e",
-  fontWeight: 700,
-  cursor: "pointer",
+  color: "#111827",
+  outline: "none",
+  fontSize: "14px",
 };
