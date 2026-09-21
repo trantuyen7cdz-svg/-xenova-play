@@ -79,8 +79,12 @@ export default function ShopPage({ website = null }) {
     useState(null);
 
   const [buying, setBuying] = useState(false);
-const websiteSlug = website?.slug || null;
-const isWebsiteShop = Boolean(websiteSlug);
+
+  const [bannerIndex, setBannerIndex] = useState(0);
+
+  const websiteSlug = website?.slug || null;
+  const isWebsiteShop = Boolean(websiteSlug);
+
   /* =========================
      USER
   ========================= */
@@ -121,6 +125,43 @@ const isWebsiteShop = Boolean(websiteSlug);
 
   async function loadSettings() {
     try {
+      if (isWebsiteShop) {
+        const siteSettings =
+          website?.settings || {};
+
+        setSettings({
+          ...DEFAULT_SETTINGS,
+          ...siteSettings,
+
+          logo_url:
+            website?.logo_url ||
+            siteSettings.logo_url ||
+            "",
+
+          banners: [
+            ...(website?.banner_url
+              ? [
+                  {
+                    id: "main",
+                    image_url:
+                      website.banner_url,
+                    enabled: true,
+                    order: 0,
+                  },
+                ]
+              : []),
+
+            ...(Array.isArray(
+              siteSettings.banners
+            )
+              ? siteSettings.banners
+              : []),
+          ],
+        });
+
+        return;
+      }
+
       const response = await fetch(
         "/api/shop/settings",
         {
@@ -156,7 +197,7 @@ const isWebsiteShop = Boolean(websiteSlug);
 
   useEffect(() => {
     loadSettings();
-  }, []);
+  }, [isWebsiteShop, website]);
 
   /* =========================
      BANNER
@@ -238,9 +279,14 @@ const isWebsiteShop = Boolean(websiteSlug);
         catalogResponse,
         stockResponse,
       ] = await Promise.all([
-        fetch("/api/shop/catalog", {
-          cache: "no-store",
-        }),
+        fetch(
+          isWebsiteShop
+            ? `/api/sites/${websiteSlug}/catalog`
+            : "/api/shop/catalog",
+          {
+            cache: "no-store",
+          }
+        ),
 
         fetch("/api/shop/stock", {
           cache: "no-store",
@@ -297,7 +343,7 @@ const isWebsiteShop = Boolean(websiteSlug);
 
   useEffect(() => {
     loadShop();
-  }, []);
+  }, [websiteSlug]);
 
   /* =========================
      WALLET
@@ -1565,9 +1611,6 @@ const isWebsiteShop = Boolean(websiteSlug);
         </div>
       )}
 
-      {/* KHÔNG CÒN BOTTOM-TOOLBAR Ở FILE NÀY.
-          Thanh dưới được quản lý bởi Menu.js */}
-
       <style jsx>{styles}</style>
     </main>
   );
@@ -1631,10 +1674,6 @@ const styles = `
   padding-bottom: 90px;
 }
 
-/* =========================
-   HOA HỒNG
-========================= */
-
 .petals {
   position: fixed;
   inset: 0;
@@ -1686,10 +1725,6 @@ const styles = `
     opacity: 0;
   }
 }
-
-/* =========================
-   TOPBAR
-========================= */
 
 .topbar {
   height: 64px;
@@ -1794,10 +1829,6 @@ const styles = `
   color: white;
   background: #222;
 }
-
-/* =========================
-   BANNER
-========================= */
 
 .banner-section {
   padding:
@@ -1910,10 +1941,6 @@ const styles = `
   background: white;
 }
 
-/* =========================
-   CONTENT
-========================= */
-
 .container {
   max-width: 1220px;
   margin: auto;
@@ -1951,12 +1978,6 @@ const styles = `
   margin-bottom: 18px;
 }
 
-.eyebrow {
-  color: #e83d94;
-  font-size: 10px;
-  font-weight: 900;
-}
-
 .heading h2,
 .products-heading h2 {
   margin: 6px 0 0;
@@ -1989,10 +2010,6 @@ const styles = `
   font-size: 11px;
   font-weight: 900;
 }
-
-/* =========================
-   CATEGORY
-========================= */
 
 .category-grid {
   display: grid;
@@ -2115,10 +2132,6 @@ const styles = `
   font-size: 10px;
   font-weight: 900;
 }
-
-/* =========================
-   PRODUCTS
-========================= */
 
 .tools {
   display: flex;
@@ -2273,10 +2286,6 @@ const styles = `
   cursor: not-allowed;
 }
 
-/* =========================
-   EMPTY / MESSAGE
-========================= */
-
 .empty {
   min-height: 300px;
   display: flex;
@@ -2332,10 +2341,6 @@ const styles = `
   cursor: pointer;
 }
 
-/* =========================
-   ZALO
-========================= */
-
 .zalo {
   position: fixed;
   right: 18px;
@@ -2355,10 +2360,6 @@ const styles = `
     0 8px 25px
     rgba(232,61,148,.3);
 }
-
-/* =========================
-   MODAL
-========================= */
 
 .overlay {
   position: fixed;
@@ -2509,10 +2510,6 @@ const styles = `
   cursor: pointer;
 }
 
-/* =========================
-   LOADING
-========================= */
-
 .loading {
   min-height: 100vh;
   display: grid;
@@ -2540,10 +2537,6 @@ const styles = `
     transform: rotate(360deg);
   }
 }
-
-/* =========================
-   RESPONSIVE
-========================= */
 
 @media (max-width: 1050px) {
   .product-grid {
