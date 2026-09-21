@@ -8,17 +8,20 @@ import { supabase } from "@/lib/supabase";
 export default function CategoriesAdminPage() {
   const params = useParams();
   const router = useRouter();
-
   const slug = params?.slug;
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const [categories, setCategories] = useState([]);
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [parentId, setParentId] = useState("");
+
+  const [imageUrl, setImageUrl] = useState("");
+  const [imagePreview, setImagePreview] = useState("");
 
   const [editingId, setEditingId] = useState(null);
 
@@ -37,6 +40,7 @@ export default function CategoriesAdminPage() {
       router.replace(
         `/sites/${slug}/admin/login`
       );
+
       return null;
     }
 
@@ -89,25 +93,128 @@ export default function CategoriesAdminPage() {
     setName("");
     setDescription("");
     setParentId("");
+    setImageUrl("");
+    setImagePreview("");
     setEditingId(null);
   }
 
   function startEdit(category) {
     setEditingId(category.id);
+
     setName(category.name || "");
+
     setDescription(
       category.description || ""
     );
+
     setParentId(
       category.parent_id
         ? String(category.parent_id)
         : ""
     );
 
+    setImageUrl(
+      category.image_url || ""
+    );
+
+    setImagePreview(
+      category.image_url || ""
+    );
+
     window.scrollTo({
       top: 0,
       behavior: "smooth",
     });
+  }
+
+  async function uploadImage(file) {
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      alert(
+        "Vui lòng chọn file hình ảnh."
+      );
+
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      alert(
+        "Ảnh không được vượt quá 10MB."
+      );
+
+      return;
+    }
+
+    try {
+      setUploading(true);
+
+      const extension =
+        file.name
+          .split(".")
+          .pop()
+          ?.toLowerCase() || "jpg";
+
+      const safeName =
+        file.name
+          .replace(
+            /[^a-zA-Z0-9._-]/g,
+            "-"
+          )
+          .replace(
+            /\.[^/.]+$/,
+            ""
+          )
+          .slice(0, 80);
+
+      const path =
+        `categories/${crypto.randomUUID()}-${safeName}.${extension}`;
+
+      const { error } =
+        await supabase.storage
+          .from("website-assets")
+          .upload(path, file, {
+            cacheControl: "3600",
+            upsert: false,
+            contentType: file.type,
+          });
+
+      if (error) {
+        throw error;
+      }
+
+      const {
+        data: publicData,
+      } = supabase.storage
+        .from("website-assets")
+        .getPublicUrl(path);
+
+      const url =
+        publicData?.publicUrl;
+
+      if (!url) {
+        throw new Error(
+          "Không lấy được URL ảnh."
+        );
+      }
+
+      setImageUrl(url);
+      setImagePreview(url);
+    } catch (error) {
+      console.error(error);
+
+      alert(
+        error.message ||
+          "Upload ảnh thất bại."
+      );
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function removeImage() {
+    setImageUrl("");
+    setImagePreview("");
   }
 
   async function saveCategory(event) {
@@ -117,6 +224,7 @@ export default function CategoriesAdminPage() {
       alert(
         "Vui lòng nhập tên danh mục."
       );
+
       return;
     }
 
@@ -129,8 +237,13 @@ export default function CategoriesAdminPage() {
 
       const payload = {
         name: name.trim(),
+
         description:
           description.trim(),
+
+        image_url:
+          imageUrl || null,
+
         parent_id:
           parentId === ""
             ? null
@@ -144,11 +257,15 @@ export default function CategoriesAdminPage() {
           `/api/sites/${slug}/admin/categories`,
           {
             method: "PATCH",
+
             headers: {
-              Authorization: `Bearer ${token}`,
+              Authorization:
+                `Bearer ${token}`,
+
               "Content-Type":
                 "application/json",
             },
+
             body: JSON.stringify({
               id: editingId,
               ...payload,
@@ -160,11 +277,15 @@ export default function CategoriesAdminPage() {
           `/api/sites/${slug}/admin/categories`,
           {
             method: "POST",
+
             headers: {
-              Authorization: `Bearer ${token}`,
+              Authorization:
+                `Bearer ${token}`,
+
               "Content-Type":
                 "application/json",
             },
+
             body: JSON.stringify(payload),
           }
         );
@@ -205,11 +326,15 @@ export default function CategoriesAdminPage() {
         `/api/sites/${slug}/admin/categories`,
         {
           method: "PATCH",
+
           headers: {
-            Authorization: `Bearer ${token}`,
+            Authorization:
+              `Bearer ${token}`,
+
             "Content-Type":
               "application/json",
           },
+
           body: JSON.stringify({
             id: category.id,
             active: !category.active,
@@ -248,12 +373,14 @@ export default function CategoriesAdminPage() {
       alert(
         "Danh mục này đang có danh mục con. Hãy xóa hoặc chuyển danh mục con trước."
       );
+
       return;
     }
 
-    const confirmed = window.confirm(
-      `Bạn có chắc muốn xóa "${category.name}"?`
-    );
+    const confirmed =
+      window.confirm(
+        `Bạn có chắc muốn xóa "${category.name}"?`
+      );
 
     if (!confirmed) return;
 
@@ -266,8 +393,10 @@ export default function CategoriesAdminPage() {
         `/api/sites/${slug}/admin/categories?id=${category.id}`,
         {
           method: "DELETE",
+
           headers: {
-            Authorization: `Bearer ${token}`,
+            Authorization:
+              `Bearer ${token}`,
           },
         }
       );
@@ -282,7 +411,10 @@ export default function CategoriesAdminPage() {
         );
       }
 
-      if (editingId === category.id) {
+      if (
+        editingId ===
+        category.id
+      ) {
         resetForm();
       }
 
@@ -298,7 +430,8 @@ export default function CategoriesAdminPage() {
   function getChildren(parentId) {
     return categories.filter(
       (item) =>
-        item.parent_id === parentId
+        item.parent_id ===
+        parentId
     );
   }
 
@@ -321,16 +454,34 @@ export default function CategoriesAdminPage() {
               level * 20,
           }}
         >
-          <div style={styles.categoryInfo}>
-            <div
-              style={styles.categoryIcon}
-            >
-              {level === 0
-                ? "📁"
-                : "└"}
-            </div>
+          <div
+            style={styles.categoryInfo}
+          >
+            {category.image_url ? (
+              <img
+                src={category.image_url}
+                alt={category.name}
+                style={
+                  styles.categoryImage
+                }
+              />
+            ) : (
+              <div
+                style={
+                  styles.categoryIcon
+                }
+              >
+                {level === 0
+                  ? "📁"
+                  : "└"}
+              </div>
+            )}
 
-            <div>
+            <div
+              style={{
+                minWidth: 0,
+              }}
+            >
               <div
                 style={
                   styles.categoryName
@@ -370,6 +521,7 @@ export default function CategoriesAdminPage() {
               }
               style={{
                 ...styles.smallButton,
+
                 background:
                   category.active
                     ? "#241b12"
@@ -385,7 +537,9 @@ export default function CategoriesAdminPage() {
               onClick={() =>
                 startEdit(category)
               }
-              style={styles.smallButton}
+              style={
+                styles.smallButton
+              }
             >
               Sửa
             </button>
@@ -398,6 +552,7 @@ export default function CategoriesAdminPage() {
               }
               style={{
                 ...styles.smallButton,
+
                 color: "#ff7b91",
               }}
             >
@@ -406,13 +561,15 @@ export default function CategoriesAdminPage() {
           </div>
         </div>
 
-        {children.map((child) => (
-          <CategoryItem
-            key={child.id}
-            category={child}
-            level={level + 1}
-          />
-        ))}
+        {children.map(
+          (child) => (
+            <CategoryItem
+              key={child.id}
+              category={child}
+              level={level + 1}
+            />
+          )
+        )}
       </div>
     );
   }
@@ -429,22 +586,34 @@ export default function CategoriesAdminPage() {
               ← Admin
             </Link>
 
-            <h1 style={styles.title}>
+            <h1
+              style={styles.title}
+            >
               Danh mục
             </h1>
 
-            <p style={styles.subtitle}>
-              Quản lý danh mục riêng của
-              website này
+            <p
+              style={styles.subtitle}
+            >
+              Quản lý danh mục riêng
+              của website này
             </p>
           </div>
         </header>
 
-        <section style={styles.formCard}>
-          <div style={styles.formHeader}>
+        <section
+          style={styles.formCard}
+        >
+          <div
+            style={
+              styles.formHeader
+            }
+          >
             <div>
               <h2
-                style={styles.sectionTitle}
+                style={
+                  styles.sectionTitle
+                }
               >
                 {editingId
                   ? "Chỉnh sửa danh mục"
@@ -452,17 +621,21 @@ export default function CategoriesAdminPage() {
               </h2>
 
               <p
-                style={styles.sectionText}
+                style={
+                  styles.sectionText
+                }
               >
-                Có thể tạo danh mục cha
-                và danh mục con.
+                Có thể tạo danh mục
+                cha và danh mục con.
               </p>
             </div>
 
             {editingId && (
               <button
                 onClick={resetForm}
-                style={styles.cancelButton}
+                style={
+                  styles.cancelButton
+                }
               >
                 Hủy sửa
               </button>
@@ -470,23 +643,136 @@ export default function CategoriesAdminPage() {
           </div>
 
           <form
-            onSubmit={saveCategory}
+            onSubmit={
+              saveCategory
+            }
           >
-            <label style={styles.label}>
+            <label
+              style={styles.label}
+            >
+              ẢNH DANH MỤC
+            </label>
+
+            <div
+              style={
+                styles.uploadBox
+              }
+            >
+              {imagePreview ? (
+                <div
+                  style={
+                    styles.previewWrap
+                  }
+                >
+                  <img
+                    src={imagePreview}
+                    alt="Preview"
+                    style={
+                      styles.previewImage
+                    }
+                  />
+
+                  <button
+                    type="button"
+                    onClick={
+                      removeImage
+                    }
+                    style={
+                      styles.removeImage
+                    }
+                  >
+                    ×
+                  </button>
+                </div>
+              ) : (
+                <div
+                  style={
+                    styles.noImage
+                  }
+                >
+                  <div
+                    style={
+                      styles.camera
+                    }
+                  >
+                    📷
+                  </div>
+
+                  <div>
+                    Chưa có ảnh
+                  </div>
+                </div>
+              )}
+
+              <label
+                style={
+                  styles.uploadButton
+                }
+              >
+                {uploading
+                  ? "ĐANG UPLOAD..."
+                  : imagePreview
+                  ? "ĐỔI ẢNH"
+                  : "CHỌN ẢNH"}
+
+                <input
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  disabled={
+                    uploading ||
+                    saving
+                  }
+                  onChange={(e) => {
+                    const file =
+                      e.target.files?.[0];
+
+                    if (file) {
+                      uploadImage(
+                        file
+                      );
+                    }
+
+                    e.target.value =
+                      "";
+                  }}
+                />
+              </label>
+
+              <div
+                style={
+                  styles.uploadHint
+                }
+              >
+                JPG, PNG, WEBP • tối đa
+                10MB
+              </div>
+            </div>
+
+            <label
+              style={styles.label}
+            >
               TÊN DANH MỤC
             </label>
 
             <input
               value={name}
               onChange={(e) =>
-                setName(e.target.value)
+                setName(
+                  e.target.value
+                )
               }
               placeholder="Ví dụ: Android"
               style={styles.input}
-              disabled={saving}
+              disabled={
+                saving ||
+                uploading
+              }
             />
 
-            <label style={styles.label}>
+            <label
+              style={styles.label}
+            >
               DANH MỤC CHA
             </label>
 
@@ -498,7 +784,10 @@ export default function CategoriesAdminPage() {
                 )
               }
               style={styles.input}
-              disabled={saving}
+              disabled={
+                saving ||
+                uploading
+              }
             >
               <option value="">
                 Không có — Danh mục cha
@@ -509,19 +798,30 @@ export default function CategoriesAdminPage() {
                   (item) =>
                     item.id !==
                       editingId &&
-                    item.parent_id === null
+                    item.parent_id ===
+                      null
                 )
-                .map((category) => (
-                  <option
-                    key={category.id}
-                    value={category.id}
-                  >
-                    {category.name}
-                  </option>
-                ))}
+                .map(
+                  (category) => (
+                    <option
+                      key={
+                        category.id
+                      }
+                      value={
+                        category.id
+                      }
+                    >
+                      {
+                        category.name
+                      }
+                    </option>
+                  )
+                )}
             </select>
 
-            <label style={styles.label}>
+            <label
+              style={styles.label}
+            >
               MÔ TẢ
             </label>
 
@@ -533,18 +833,29 @@ export default function CategoriesAdminPage() {
                 )
               }
               placeholder="Mô tả danh mục..."
-              style={styles.textarea}
-              disabled={saving}
+              style={
+                styles.textarea
+              }
+              disabled={
+                saving ||
+                uploading
+              }
             />
 
             <button
               type="submit"
-              disabled={saving}
+              disabled={
+                saving ||
+                uploading
+              }
               style={{
                 ...styles.saveButton,
-                opacity: saving
-                  ? 0.6
-                  : 1,
+
+                opacity:
+                  saving ||
+                  uploading
+                    ? 0.6
+                    : 1,
               }}
             >
               {saving
@@ -556,37 +867,55 @@ export default function CategoriesAdminPage() {
           </form>
         </section>
 
-        <section style={styles.listCard}>
-          <div style={styles.listHeader}>
+        <section
+          style={styles.listCard}
+        >
+          <div
+            style={styles.listHeader}
+          >
             <div>
               <h2
-                style={styles.sectionTitle}
+                style={
+                  styles.sectionTitle
+                }
               >
                 Danh sách danh mục
               </h2>
 
               <p
-                style={styles.sectionText}
+                style={
+                  styles.sectionText
+                }
               >
-                Tổng: {categories.length}
-                {" "}danh mục
+                Tổng:{" "}
+                {categories.length}{" "}
+                danh mục
               </p>
             </div>
 
             <button
-              onClick={loadCategories}
-              style={styles.refresh}
+              onClick={
+                loadCategories
+              }
+              style={
+                styles.refresh
+              }
             >
               ↻ Làm mới
             </button>
           </div>
 
           {loading ? (
-            <div style={styles.empty}>
+            <div
+              style={styles.empty}
+            >
               Đang tải...
             </div>
-          ) : categories.length === 0 ? (
-            <div style={styles.empty}>
+          ) : categories.length ===
+            0 ? (
+            <div
+              style={styles.empty}
+            >
               Chưa có danh mục nào.
             </div>
           ) : (
@@ -594,8 +923,12 @@ export default function CategoriesAdminPage() {
               {rootCategories.map(
                 (category) => (
                   <CategoryItem
-                    key={category.id}
-                    category={category}
+                    key={
+                      category.id
+                    }
+                    category={
+                      category
+                    }
                   />
                 )
               )}
@@ -680,6 +1013,77 @@ const styles = {
     fontSize: "9px",
     fontWeight: "900",
     letterSpacing: "1px",
+  },
+
+  uploadBox: {
+    padding: "14px",
+    borderRadius: "12px",
+    border: "1px dashed #39313f",
+    background: "#09090d",
+    textAlign: "center",
+  },
+
+  previewWrap: {
+    position: "relative",
+    width: "120px",
+    height: "120px",
+    margin: "0 auto 12px",
+  },
+
+  previewImage: {
+    width: "120px",
+    height: "120px",
+    objectFit: "cover",
+    borderRadius: "14px",
+    border: "1px solid #3a3040",
+  },
+
+  removeImage: {
+    position: "absolute",
+    top: "-7px",
+    right: "-7px",
+    width: "25px",
+    height: "25px",
+    border: "none",
+    borderRadius: "50%",
+    background: "#ff456b",
+    color: "#fff",
+    fontSize: "17px",
+    lineHeight: "25px",
+    cursor: "pointer",
+  },
+
+  noImage: {
+    height: "120px",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "#686270",
+    fontSize: "11px",
+  },
+
+  camera: {
+    fontSize: "30px",
+    marginBottom: "7px",
+  },
+
+  uploadButton: {
+    display: "inline-block",
+    padding: "9px 15px",
+    borderRadius: "8px",
+    background: "#211522",
+    border: "1px solid #54334d",
+    color: "#ff75c4",
+    fontSize: "10px",
+    fontWeight: "900",
+    cursor: "pointer",
+  },
+
+  uploadHint: {
+    marginTop: "8px",
+    color: "#5e5865",
+    fontSize: "9px",
   },
 
   input: {
@@ -777,10 +1181,19 @@ const styles = {
     minWidth: 0,
   },
 
+  categoryImage: {
+    width: "48px",
+    height: "48px",
+    objectFit: "cover",
+    borderRadius: "11px",
+    border: "1px solid #332b38",
+    flexShrink: 0,
+  },
+
   categoryIcon: {
-    width: "38px",
-    height: "38px",
-    borderRadius: "10px",
+    width: "48px",
+    height: "48px",
+    borderRadius: "11px",
     display: "grid",
     placeItems: "center",
     background: "#201521",
