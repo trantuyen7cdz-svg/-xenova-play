@@ -45,7 +45,7 @@ function getCategoryImage(category) {
   );
 }
 
-export default function ShopPage() {
+export default function ShopPage({ website = null }) {
   const router = useRouter();
 
   const [user, setUser] = useState(null);
@@ -79,8 +79,8 @@ export default function ShopPage() {
     useState(null);
 
   const [buying, setBuying] = useState(false);
-  const [bannerIndex, setBannerIndex] = useState(0);
-
+const websiteSlug = website?.slug || null;
+const isWebsiteShop = Boolean(websiteSlug);
   /* =========================
      USER
   ========================= */
