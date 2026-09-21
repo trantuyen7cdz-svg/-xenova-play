@@ -11,9 +11,10 @@ function getAdminClient() {
 }
 
 async function checkAdmin(request, slug) {
-  const auth = request.headers.get("authorization") || "";
+  const authorization =
+    request.headers.get("authorization") || "";
 
-  if (!auth.startsWith("Bearer ")) {
+  if (!authorization.startsWith("Bearer ")) {
     return {
       ok: false,
       response: NextResponse.json(
@@ -23,7 +24,7 @@ async function checkAdmin(request, slug) {
     };
   }
 
-  const token = auth.slice(7);
+  const token = authorization.slice(7);
   const supabase = getAdminClient();
 
   const {
@@ -41,14 +42,13 @@ async function checkAdmin(request, slug) {
     };
   }
 
-  const { data: website, error: websiteError } =
-    await supabase
-      .from("websites")
-      .select("id,name,slug,status")
-      .eq("slug", slug)
-      .maybeSingle();
+  const { data: website } = await supabase
+    .from("websites")
+    .select("id,name,slug,status")
+    .eq("slug", slug)
+    .maybeSingle();
 
-  if (websiteError || !website) {
+  if (!website) {
     return {
       ok: false,
       response: NextResponse.json(
@@ -58,20 +58,19 @@ async function checkAdmin(request, slug) {
     };
   }
 
-  const { data: admin, error: adminError } =
-    await supabase
-      .from("website_admins")
-      .select("id,role,active")
-      .eq("website_id", website.id)
-      .eq("user_id", user.id)
-      .eq("active", true)
-      .maybeSingle();
+  const { data: admin } = await supabase
+    .from("website_admins")
+    .select("id,role,active")
+    .eq("website_id", website.id)
+    .eq("user_id", user.id)
+    .eq("active", true)
+    .maybeSingle();
 
-  if (adminError || !admin) {
+  if (!admin) {
     return {
       ok: false,
       response: NextResponse.json(
-        { error: "You are not an admin of this website" },
+        { error: "Forbidden" },
         { status: 403 }
       ),
     };
@@ -81,8 +80,6 @@ async function checkAdmin(request, slug) {
     ok: true,
     supabase,
     website,
-    user,
-    admin,
   };
 }
 
@@ -126,9 +123,14 @@ export async function POST(request, { params }) {
   const body = await request.json();
 
   const name = String(body.name || "").trim();
+
   const description = String(
     body.description || ""
   ).trim();
+
+  const imageUrl = body.image_url
+    ? String(body.image_url).trim()
+    : null;
 
   const parentId =
     body.parent_id === null ||
@@ -139,22 +141,29 @@ export async function POST(request, { params }) {
 
   if (!name) {
     return NextResponse.json(
-      { error: "Tên danh mục không được để trống" },
+      {
+        error:
+          "Tên danh mục không được để trống",
+      },
       { status: 400 }
     );
   }
 
   if (parentId !== null) {
-    const { data: parent } = await supabase
-      .from("website_categories")
-      .select("id")
-      .eq("id", parentId)
-      .eq("website_id", website.id)
-      .maybeSingle();
+    const { data: parent } =
+      await supabase
+        .from("website_categories")
+        .select("id")
+        .eq("id", parentId)
+        .eq("website_id", website.id)
+        .maybeSingle();
 
     if (!parent) {
       return NextResponse.json(
-        { error: "Danh mục cha không hợp lệ" },
+        {
+          error:
+            "Danh mục cha không hợp lệ",
+        },
         { status: 400 }
       );
     }
@@ -166,6 +175,7 @@ export async function POST(request, { params }) {
       website_id: website.id,
       name,
       description,
+      image_url: imageUrl,
       parent_id: parentId,
       active: true,
     })
@@ -217,6 +227,11 @@ export async function PATCH(request, { params }) {
     ).trim();
   }
 
+  if (body.image_url !== undefined) {
+    update.image_url =
+      body.image_url || null;
+  }
+
   if (body.active !== undefined) {
     update.active = Boolean(body.active);
   }
@@ -263,7 +278,9 @@ export async function DELETE(request, { params }) {
     request.url
   );
 
-  const id = Number(searchParams.get("id"));
+  const id = Number(
+    searchParams.get("id")
+  );
 
   if (!id) {
     return NextResponse.json(
