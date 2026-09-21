@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
-import WebsiteShopPage from "./WebsiteShopPage";
+import ShopPage from "../../shop/page";
 
 export const dynamic = "force-dynamic";
 
@@ -34,5 +34,5 @@ export default async function WebsitePage({ params }) {
     notFound();
   }
 
-  return <WebsiteShopPage website={website} />;
+  return <ShopPage website={website} />;
 }
