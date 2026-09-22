@@ -7,13 +7,18 @@ const supabaseAdmin = createClient(
 );
 
 async function getUser(request) {
-  const authHeader = request.headers.get("authorization");
+  const authHeader =
+    request.headers.get("authorization");
 
-  if (!authHeader?.startsWith("Bearer ")) {
+  if (
+    !authHeader ||
+    !authHeader.startsWith("Bearer ")
+  ) {
     return null;
   }
 
-  const token = authHeader.substring(7).trim();
+  const token =
+    authHeader.substring(7).trim();
 
   if (!token) {
     return null;
@@ -22,7 +27,10 @@ async function getUser(request) {
   const {
     data: { user },
     error,
-  } = await supabaseAdmin.auth.getUser(token);
+  } =
+    await supabaseAdmin.auth.getUser(
+      token
+    );
 
   if (error || !user) {
     return null;
@@ -33,28 +41,60 @@ async function getUser(request) {
 
 export async function GET(request) {
   try {
-    const user = await getUser(request);
+    const user =
+      await getUser(request);
 
     if (!user) {
       return NextResponse.json(
         {
           success: false,
-          message: "Bạn chưa đăng nhập.",
+          message:
+            "Bạn chưa đăng nhập.",
         },
-        { status: 401 }
+        {
+          status: 401,
+        }
       );
     }
 
-    // CHỈ lấy ví XENOVA cũ.
-    // website_id = NULL
-    const { data: wallet, error } =
+    /*
+      =====================================
+      VÍ SHOP XENOVA CŨ
+      =====================================
+
+      Chỉ lấy ví:
+
+      user_id = tài khoản hiện tại
+      website_id = NULL
+
+      Tuyệt đối không lấy ví
+      của các website mới.
+    */
+
+    const {
+      data: wallet,
+      error,
+    } =
       await supabaseAdmin
         .from("wallets")
         .select(
-          "id, user_id, balance, website_id, created_at, updated_at"
+          `
+          id,
+          user_id,
+          balance,
+          website_id,
+          created_at,
+          updated_at
+          `
         )
-        .eq("user_id", user.id)
-        .is("website_id", null)
+        .eq(
+          "user_id",
+          user.id
+        )
+        .is(
+          "website_id",
+          null
+        )
         .maybeSingle();
 
     if (error) {
@@ -66,11 +106,23 @@ export async function GET(request) {
       return NextResponse.json(
         {
           success: false,
-          message: "Không thể đọc số dư ví.",
+          message:
+            "Không thể đọc số dư ví.",
         },
-        { status: 500 }
+        {
+          status: 500,
+        }
       );
     }
+
+    /*
+      Nếu chưa có ví cũ,
+      trả về 0.
+
+      Không tạo ví mới ở đây
+      để tránh ảnh hưởng hệ thống
+      ví/nạp tiền cũ.
+    */
 
     return NextResponse.json({
       success: true,
@@ -92,9 +144,12 @@ export async function GET(request) {
     return NextResponse.json(
       {
         success: false,
-        message: "Lỗi server.",
+        message:
+          "Lỗi server.",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }
