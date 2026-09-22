@@ -75,6 +75,7 @@ export default function ShopPage({ website = null }) {
   const [sort, setSort] = useState("default");
 
   const [buyModal, setBuyModal] = useState(null);
+
   const [successModal, setSuccessModal] =
     useState(null);
 
@@ -497,6 +498,21 @@ export default function ShopPage({ website = null }) {
   ========================= */
 
   function getStock(productId) {
+    /*
+      SHOP CŨ:
+      vẫn dùng stockMap cũ.
+
+      WEBSITE MỚI:
+      sản phẩm website không dùng
+      kho KEY cũ của XENOVA nên
+      không lấy stockMap cũ để khóa
+      nút MUA.
+    */
+
+    if (isWebsiteShop) {
+      return 1;
+    }
+
     const value =
       stockMap?.[productId] ??
       stockMap?.[String(productId)] ??
@@ -711,6 +727,114 @@ export default function ShopPage({ website = null }) {
       router.push("/login");
       return;
     }
+
+    /*
+      =========================================
+      WEBSITE SHOP MỚI
+      =========================================
+
+      Không dùng:
+      - /api/buy-key
+      - wallet XENOVA
+      - kho KEY cũ
+
+      Chỉ tạo website_order.
+    */
+
+    if (isWebsiteShop) {
+      try {
+        setBuying(true);
+        setMessage("");
+
+        const {
+          data: {
+            session,
+          },
+        } =
+          await supabase.auth.getSession();
+
+        if (!session?.access_token) {
+          router.push("/login");
+          return;
+        }
+
+        const response =
+          await fetch(
+            `/api/sites/${websiteSlug}/orders`,
+            {
+              method: "POST",
+
+              headers: {
+                "Content-Type":
+                  "application/json",
+
+                Authorization:
+                  `Bearer ${session.access_token}`,
+              },
+
+              body: JSON.stringify({
+                product_id:
+                  buyModal.id,
+
+                quantity: 1,
+              }),
+            }
+          );
+
+        const data =
+          await response.json();
+
+        if (
+          !response.ok ||
+          !data?.success
+        ) {
+          throw new Error(
+            data?.error ||
+              data?.message ||
+              "Không thể tạo đơn hàng."
+          );
+        }
+
+        const orderId =
+          data?.order?.id;
+
+        if (!orderId) {
+          throw new Error(
+            "Không nhận được mã đơn hàng."
+          );
+        }
+
+        setBuyModal(null);
+
+        router.push(
+          `/sites/${websiteSlug}/checkout/${orderId}`
+        );
+
+        return;
+      } catch (err) {
+        console.error(
+          "WEBSITE ORDER ERROR:",
+          err
+        );
+
+        setMessage(
+          err.message ||
+            "Không thể tạo đơn hàng."
+        );
+      } finally {
+        setBuying(false);
+      }
+
+      return;
+    }
+
+    /*
+      =========================================
+      SHOP XENOVA CŨ
+      =========================================
+
+      GIỮ NGUYÊN LUỒNG CŨ
+    */
 
     const stock =
       getStock(buyModal.id);
@@ -1505,26 +1629,37 @@ export default function ShopPage({ website = null }) {
               )}
             />
 
-            <InfoRow
-              label="Số dư"
-              value={formatPrice(
-                wallet
-              )}
-            />
+            {!isWebsiteShop && (
+              <>
+                <InfoRow
+                  label="Số dư"
+                  value={formatPrice(
+                    wallet
+                  )}
+                />
 
-            <InfoRow
-              label="Sau khi mua"
-              value={formatPrice(
-                Math.max(
-                  0,
-                  wallet -
-                    Number(
-                      buyModal.price ||
-                        0
+                <InfoRow
+                  label="Sau khi mua"
+                  value={formatPrice(
+                    Math.max(
+                      0,
+                      wallet -
+                        Number(
+                          buyModal.price ||
+                            0
+                        )
                     )
-                )
-              )}
-            />
+                  )}
+                />
+              </>
+            )}
+
+            {isWebsiteShop && (
+              <InfoRow
+                label="Thanh toán"
+                value="Chuyển khoản"
+              />
+            )}
 
             <div className="modal-actions">
               <button
