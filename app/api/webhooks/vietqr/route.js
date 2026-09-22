@@ -18,16 +18,9 @@ function normalizeText(value) {
 }
 
 function parseXenovaOrder(description) {
-  const text = normalizeText(description);
+  const text =
+    normalizeText(description);
 
-  /*
-   * Chỉ chấp nhận:
-   *
-   * XENOVA 123
-   * XENOVA 456
-   *
-   * Không chấp nhận nội dung linh tinh.
-   */
   const match = text.match(
     /^XENOVA\s+(\d+)$/i
   );
@@ -49,74 +42,79 @@ function parseXenovaOrder(description) {
 }
 
 async function processPayment(payment) {
-  const description = normalizeText(
-    payment?.description
-  );
+  const description =
+    normalizeText(
+      payment?.description
+    );
 
   const depositId =
-    parseXenovaOrder(description);
+    parseXenovaOrder(
+      description
+    );
 
-  /*
-   * Không phải giao dịch của XENOVA.
-   */
   if (!depositId) {
     return {
       ok: true,
       status: "ignored",
-      reason: "invalid_description",
+      reason:
+        "invalid_description",
     };
   }
 
-  const amount = Number(payment?.amount);
+  const amount =
+    Number(payment?.amount);
 
   if (
-    !Number.isSafeInteger(amount) ||
+    !Number.isSafeInteger(
+      amount
+    ) ||
     amount <= 0
   ) {
     return {
       ok: true,
       status: "ignored",
-      reason: "invalid_amount",
+      reason:
+        "invalid_amount",
       depositId,
     };
   }
 
-  /*
-   * Chỉ xử lý giao dịch thành công.
-   */
   if (
-    payment?.code !== undefined &&
-    String(payment.code) !== "00"
+    payment?.code !==
+      undefined &&
+    String(payment.code) !==
+      "00"
   ) {
     return {
       ok: true,
       status: "ignored",
-      reason: "payment_not_success",
+      reason:
+        "payment_not_success",
       depositId,
     };
   }
 
   const reference =
-    normalizeText(payment?.reference) ||
-    null;
+    normalizeText(
+      payment?.reference
+    ) || null;
 
-  /*
-   * Gọi PostgreSQL transaction.
-   *
-   * Database function sẽ chống cộng tiền 2 lần.
-   */
   const {
     data,
     error,
-  } = await supabaseAdmin.rpc(
-    "process_vietqr_deposit",
-    {
-      p_deposit_id: depositId,
-      p_amount: amount,
-      p_reference: reference,
-      p_description: description,
-    }
-  );
+  } =
+    await supabaseAdmin.rpc(
+      "process_vietqr_deposit",
+      {
+        p_deposit_id:
+          depositId,
+        p_amount: amount,
+        p_reference:
+          reference,
+        p_description:
+          description,
+      }
+    );
 
   if (error) {
     console.error(
@@ -137,24 +135,25 @@ async function processPayment(payment) {
   return data;
 }
 
-export async function POST(request) {
+export async function POST(
+  request
+) {
   try {
-    /*
-     * ==========================================
-     * 1. KIỂM TRA WEBHOOK TOKEN
-     * ==========================================
-     */
-
     const expectedToken =
-      process.env.VIETQR_WEBHOOK_TOKEN || "";
+      process.env
+        .VIETQR_WEBHOOK_TOKEN ||
+      "";
 
     const receivedToken =
-      getWebhookToken(request);
+      getWebhookToken(
+        request
+      );
 
     if (
       !expectedToken ||
       !receivedToken ||
-      receivedToken !== expectedToken
+      receivedToken !==
+        expectedToken
     ) {
       console.warn(
         "[VIETQR WEBHOOK] Unauthorized request"
@@ -163,7 +162,8 @@ export async function POST(request) {
       return NextResponse.json(
         {
           ok: false,
-          error: "Unauthorized",
+          error:
+            "Unauthorized",
         },
         {
           status: 401,
@@ -171,15 +171,11 @@ export async function POST(request) {
       );
     }
 
-    /*
-     * ==========================================
-     * 2. ĐỌC BODY
-     * ==========================================
-     */
+    const body =
+      await request.json();
 
-    const body = await request.json();
-
-    let payments = body?.data;
+    let payments =
+      body?.data;
 
     if (!payments) {
       return NextResponse.json({
@@ -189,50 +185,37 @@ export async function POST(request) {
       });
     }
 
-    /*
-     * VietQR trả data dạng array.
-     * Nhưng vẫn hỗ trợ object.
-     */
-    if (!Array.isArray(payments)) {
+    if (
+      !Array.isArray(
+        payments
+      )
+    ) {
       payments = [payments];
     }
 
-    /*
-     * ==========================================
-     * 3. XỬ LÝ TỪNG GIAO DỊCH
-     * ==========================================
-     */
-
     const results = [];
 
-    for (const payment of payments) {
+    for (
+      const payment of payments
+    ) {
       try {
         const result =
-          await processPayment(payment);
+          await processPayment(
+            payment
+          );
 
-        results.push(result);
+        results.push(
+          result
+        );
       } catch (error) {
         console.error(
           "[VIETQR WEBHOOK] PAYMENT ERROR:",
           error
         );
 
-        /*
-         * Throw ra ngoài để VietQR có thể
-         * gửi lại webhook.
-         *
-         * PostgreSQL transaction đã chống
-         * cộng tiền trùng.
-         */
         throw error;
       }
     }
-
-    /*
-     * ==========================================
-     * 4. TRẢ 200
-     * ==========================================
-     */
 
     return NextResponse.json({
       ok: true,
@@ -247,7 +230,8 @@ export async function POST(request) {
     return NextResponse.json(
       {
         ok: false,
-        error: "Webhook processing failed",
+        error:
+          "Webhook processing failed",
       },
       {
         status: 500,
