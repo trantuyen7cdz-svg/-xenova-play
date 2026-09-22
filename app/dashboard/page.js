@@ -24,64 +24,178 @@ export default function DashboardPage() {
       } = await supabase.auth.getUser();
 
       if (userError || !currentUser) {
-        setMessage("Vui lòng đăng nhập để xem tài khoản.");
+        setMessage(
+          "Vui lòng đăng nhập để xem tài khoản."
+        );
+
         setLoading(false);
         return;
       }
 
       setUser(currentUser);
 
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        setMessage(
+          "Phiên đăng nhập không hợp lệ."
+        );
+
+        setLoading(false);
+        return;
+      }
+
+      /*
+        ==========================================
+        VÍ XENOVA CŨ
+        ==========================================
+
+        Không đọc trực tiếp:
+
+        .from("wallets")
+        .eq("user_id", ...)
+
+        vì hiện tại user có thể có nhiều ví.
+
+        Shop XENOVA cũ luôn dùng:
+
+        website_id = NULL
+
+        API /api/wallet/current đã xử lý
+        đúng ví này bằng Service Role.
+      */
+
+      const walletResponse = await fetch(
+        "/api/wallet/current",
+        {
+          method: "GET",
+
+          headers: {
+            Authorization:
+              `Bearer ${session.access_token}`,
+          },
+
+          cache: "no-store",
+        }
+      );
+
+      const walletData =
+        await walletResponse.json();
+
       const [
-        walletResult,
         keysResult,
         ordersResult,
         depositsResult,
       ] = await Promise.all([
         supabase
-          .from("wallets")
-          .select("id, user_id, balance, created_at, updated_at")
-          .eq("user_id", currentUser.id)
-          .maybeSingle(),
-
-        supabase
           .from("keys")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", currentUser.id),
+          .select("id", {
+            count: "exact",
+            head: true,
+          })
+          .eq(
+            "user_id",
+            currentUser.id
+          ),
 
         supabase
           .from("orders")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", currentUser.id),
+          .select("id", {
+            count: "exact",
+            head: true,
+          })
+          .eq(
+            "user_id",
+            currentUser.id
+          ),
 
         supabase
           .from("deposit_requests")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", currentUser.id),
+          .select("id", {
+            count: "exact",
+            head: true,
+          })
+          .eq(
+            "user_id",
+            currentUser.id
+          ),
       ]);
 
-      if (walletResult.error) {
-        console.error("WALLET ERROR:", walletResult.error);
+      /*
+        ==========================================
+        KIỂM TRA VÍ
+        ==========================================
+      */
+
+      if (
+        !walletResponse.ok ||
+        !walletData?.success
+      ) {
+        console.error(
+          "WALLET API ERROR:",
+          walletData
+        );
       }
 
+      /*
+        ==========================================
+        KIỂM TRA CÁC THỐNG KÊ
+        ==========================================
+      */
+
       if (keysResult.error) {
-        console.error("KEY COUNT ERROR:", keysResult.error);
+        console.error(
+          "KEY COUNT ERROR:",
+          keysResult.error
+        );
       }
 
       if (ordersResult.error) {
-        console.error("ORDER COUNT ERROR:", ordersResult.error);
+        console.error(
+          "ORDER COUNT ERROR:",
+          ordersResult.error
+        );
       }
 
       if (depositsResult.error) {
-        console.error("DEPOSIT COUNT ERROR:", depositsResult.error);
+        console.error(
+          "DEPOSIT COUNT ERROR:",
+          depositsResult.error
+        );
       }
 
-      setWallet(walletResult.data || null);
-      setKeyCount(keysResult.count || 0);
-      setOrderCount(ordersResult.count || 0);
-      setDepositCount(depositsResult.count || 0);
+      /*
+        ==========================================
+        SET DATA
+        ==========================================
+      */
+
+      setWallet(
+        walletData?.wallet || null
+      );
+
+      setKeyCount(
+        keysResult.count || 0
+      );
+
+      setOrderCount(
+        ordersResult.count || 0
+      );
+
+      setDepositCount(
+        depositsResult.count || 0
+      );
     } catch (error) {
-      console.error("DASHBOARD ERROR:", error);
-      setMessage("Không thể tải dữ liệu tài khoản.");
+      console.error(
+        "DASHBOARD ERROR:",
+        error
+      );
+
+      setMessage(
+        "Không thể tải dữ liệu tài khoản."
+      );
     }
 
     setLoading(false);
@@ -92,15 +206,24 @@ export default function DashboardPage() {
   }, []);
 
   function formatMoney(value) {
-    return Number(value || 0).toLocaleString("vi-VN") + "đ";
+    return (
+      Number(value || 0).toLocaleString(
+        "vi-VN"
+      ) + "đ"
+    );
   }
 
   if (loading) {
     return (
       <main style={styles.page}>
         <div style={styles.loading}>
-          <div style={styles.loadingIcon}>X</div>
-          <div>Đang tải tài khoản...</div>
+          <div style={styles.loadingIcon}>
+            X
+          </div>
+
+          <div>
+            Đang tải tài khoản...
+          </div>
         </div>
       </main>
     );
@@ -110,7 +233,9 @@ export default function DashboardPage() {
     return (
       <main style={styles.page}>
         <div style={styles.errorPage}>
-          <div style={styles.errorIcon}>🔐</div>
+          <div style={styles.errorIcon}>
+            🔐
+          </div>
 
           <h2 style={styles.errorTitle}>
             Chưa đăng nhập
@@ -120,7 +245,10 @@ export default function DashboardPage() {
             {message}
           </p>
 
-          <Link href="/login" style={styles.primaryButton}>
+          <Link
+            href="/login"
+            style={styles.primaryButton}
+          >
             ĐĂNG NHẬP
           </Link>
         </div>
@@ -134,48 +262,87 @@ export default function DashboardPage() {
 
       <div style={styles.container}>
         <header style={styles.header}>
-          <Link href="/" style={styles.logo}>
-            <div style={styles.logoMark}>X</div>
+          <Link
+            href="/"
+            style={styles.logo}
+          >
+            <div style={styles.logoMark}>
+              X
+            </div>
 
             <div>
-              <div style={styles.logoText}>XENOVA</div>
-              <div style={styles.logoSub}>PLAY</div>
+              <div style={styles.logoText}>
+                XENOVA
+              </div>
+
+              <div style={styles.logoSub}>
+                PLAY
+              </div>
             </div>
           </Link>
 
           <nav style={styles.desktopNav}>
-            <Link href="/" style={styles.navLink}>
+            <Link
+              href="/"
+              style={styles.navLink}
+            >
               Trang chủ
             </Link>
 
-            <Link href="/shop" style={styles.navLink}>
+            <Link
+              href="/shop"
+              style={styles.navLink}
+            >
               Cửa hàng
             </Link>
 
-            <Link href="/deposit" style={styles.navLink}>
+            <Link
+              href="/deposit"
+              style={styles.navLink}
+            >
               Nạp tiền
             </Link>
 
-            <Link href="/keys" style={styles.navLink}>
+            <Link
+              href="/keys"
+              style={styles.navLink}
+            >
               KEY của tôi
             </Link>
 
-            <Link href="/orders" style={styles.navLink}>
+            <Link
+              href="/orders"
+              style={styles.navLink}
+            >
               Đơn hàng
             </Link>
 
-            <Link href="/dashboard" style={styles.navLinkActive}>
+            <Link
+              href="/dashboard"
+              style={styles.navLinkActive}
+            >
               Tài khoản
             </Link>
 
-            <Link href="/settings" style={styles.navLink}>
+            <Link
+              href="/settings"
+              style={styles.navLink}
+            >
               Cài đặt
             </Link>
           </nav>
 
-          <Link href="/deposit" style={styles.headerWallet}>
+          <Link
+            href="/deposit"
+            style={styles.headerWallet}
+          >
             <span>Ví</span>
-            <strong>{formatMoney(wallet?.balance)}</strong>
+
+            <strong>
+              {formatMoney(
+                wallet?.balance
+              )}
+            </strong>
           </Link>
         </header>
 
@@ -195,7 +362,9 @@ export default function DashboardPage() {
           </div>
 
           <div style={styles.accountIcon}>
-            {user?.email?.charAt(0).toUpperCase() || "U"}
+            {user?.email
+              ?.charAt(0)
+              .toUpperCase() || "U"}
           </div>
         </section>
 
@@ -209,7 +378,9 @@ export default function DashboardPage() {
               </div>
 
               <div style={styles.balance}>
-                {formatMoney(wallet?.balance)}
+                {formatMoney(
+                  wallet?.balance
+                )}
               </div>
 
               <div style={styles.walletHint}>
@@ -223,7 +394,9 @@ export default function DashboardPage() {
           </div>
 
           <div style={styles.walletBottom}>
-            <span>Dùng số dư để mua KEY</span>
+            <span>
+              Dùng số dư để mua KEY
+            </span>
 
             <Link
               href="/deposit"
@@ -327,36 +500,65 @@ export default function DashboardPage() {
         </section>
 
         <div style={styles.bottomLinks}>
-          <Link href="/">Trang chủ</Link>
-          <Link href="/shop">Cửa hàng</Link>
-          <Link href="/keys">KEY</Link>
-          <Link href="/orders">Đơn hàng</Link>
-          <Link href="/settings">Cài đặt</Link>
+          <Link href="/">
+            Trang chủ
+          </Link>
+
+          <Link href="/shop">
+            Cửa hàng
+          </Link>
+
+          <Link href="/keys">
+            KEY
+          </Link>
+
+          <Link href="/orders">
+            Đơn hàng
+          </Link>
+
+          <Link href="/settings">
+            Cài đặt
+          </Link>
         </div>
       </div>
 
       <div className="mobileBottom">
-        <Link href="/" className="mobileItem">
+        <Link
+          href="/"
+          className="mobileItem"
+        >
           <span>⌂</span>
           Trang chủ
         </Link>
 
-        <Link href="/shop" className="mobileItem">
+        <Link
+          href="/shop"
+          className="mobileItem"
+        >
           <span>🛒</span>
           Shop
         </Link>
 
-        <Link href="/deposit" className="mobileItem">
+        <Link
+          href="/deposit"
+          className="mobileItem"
+        >
           <span>＋</span>
           Nạp tiền
         </Link>
 
-        <Link href="/keys" className="mobileItem">
+        <Link
+          href="/keys"
+          className="mobileItem"
+        >
           <span>🔑</span>
           KEY
         </Link>
 
-        <Link href="/dashboard" className="mobileItemActive">
+        <Link
+          href="/dashboard"
+          className="mobileItemActive"
+        >
           <span>👤</span>
           Tài khoản
         </Link>
@@ -398,10 +600,22 @@ export default function DashboardPage() {
             bottom: 10px;
             height: 62px;
             z-index: 100;
-            background: rgba(255, 255, 255, 0.97);
+            background: rgba(
+              255,
+              255,
+              255,
+              0.97
+            );
             border: 1px solid #f0dfe7;
             border-radius: 18px;
-            box-shadow: 0 10px 35px rgba(60, 30, 45, 0.12);
+            box-shadow:
+              0 10px 35px
+              rgba(
+                60,
+                30,
+                45,
+                0.12
+              );
             backdrop-filter: blur(12px);
           }
 
@@ -435,9 +649,17 @@ export default function DashboardPage() {
   );
 }
 
-function StatCard({ icon, value, label, href }) {
+function StatCard({
+  icon,
+  value,
+  label,
+  href,
+}) {
   return (
-    <Link href={href} style={styles.statCard}>
+    <Link
+      href={href}
+      style={styles.statCard}
+    >
       <div style={styles.statIcon}>
         {icon}
       </div>
@@ -459,9 +681,17 @@ function StatCard({ icon, value, label, href }) {
   );
 }
 
-function ActionCard({ href, icon, title, text }) {
+function ActionCard({
+  href,
+  icon,
+  title,
+  text,
+}) {
   return (
-    <Link href={href} style={styles.actionCard}>
+    <Link
+      href={href}
+      style={styles.actionCard}
+    >
       <div style={styles.actionIcon}>
         {icon}
       </div>
@@ -499,7 +729,8 @@ const styles = {
     width: "420px",
     height: "420px",
     borderRadius: "50%",
-    background: "rgba(255, 126, 178, 0.12)",
+    background:
+      "rgba(255, 126, 178, 0.12)",
     filter: "blur(100px)",
     top: "-220px",
     left: "50%",
@@ -521,7 +752,8 @@ const styles = {
     display: "flex",
     alignItems: "center",
     gap: "20px",
-    borderBottom: "1px solid #f4e3eb",
+    borderBottom:
+      "1px solid #f4e3eb",
   },
 
   logo: {
@@ -544,7 +776,8 @@ const styles = {
     color: "#ffffff",
     fontSize: "18px",
     fontWeight: "950",
-    boxShadow: "0 7px 20px rgba(255, 104, 165, 0.25)",
+    boxShadow:
+      "0 7px 20px rgba(255, 104, 165, 0.25)",
   },
 
   logoText: {
@@ -632,7 +865,8 @@ const styles = {
 
   title: {
     margin: "11px 0 4px",
-    fontSize: "clamp(27px, 5vw, 38px)",
+    fontSize:
+      "clamp(27px, 5vw, 38px)",
     lineHeight: 1.1,
     fontWeight: "950",
     letterSpacing: "-1px",
@@ -658,7 +892,8 @@ const styles = {
     color: "#ef609d",
     fontSize: "20px",
     fontWeight: "950",
-    boxShadow: "0 10px 30px rgba(237, 91, 151, 0.12)",
+    boxShadow:
+      "0 10px 30px rgba(237, 91, 151, 0.12)",
   },
 
   walletCard: {
@@ -670,7 +905,8 @@ const styles = {
       "linear-gradient(135deg, #ff70aa 0%, #ff8bb9 55%, #ff9bc4 100%)",
     color: "#ffffff",
     border: "1px solid #ff9bc3",
-    boxShadow: "0 18px 45px rgba(239, 91, 151, 0.18)",
+    boxShadow:
+      "0 18px 45px rgba(239, 91, 151, 0.18)",
     marginBottom: "15px",
   },
 
@@ -679,7 +915,8 @@ const styles = {
     width: "180px",
     height: "180px",
     borderRadius: "50%",
-    background: "rgba(255,255,255,0.12)",
+    background:
+      "rgba(255,255,255,0.12)",
     right: "-65px",
     top: "-85px",
     pointerEvents: "none",
@@ -695,7 +932,8 @@ const styles = {
   },
 
   walletLabel: {
-    color: "rgba(255,255,255,0.78)",
+    color:
+      "rgba(255,255,255,0.78)",
     fontSize: "10px",
     fontWeight: "900",
     letterSpacing: "1.6px",
@@ -703,7 +941,8 @@ const styles = {
 
   balance: {
     marginTop: "7px",
-    fontSize: "clamp(28px, 6vw, 42px)",
+    fontSize:
+      "clamp(28px, 6vw, 42px)",
     lineHeight: 1,
     fontWeight: "950",
     letterSpacing: "-1px",
@@ -711,7 +950,8 @@ const styles = {
 
   walletHint: {
     marginTop: "8px",
-    color: "rgba(255,255,255,0.72)",
+    color:
+      "rgba(255,255,255,0.72)",
     fontSize: "10px",
   },
 
@@ -722,8 +962,10 @@ const styles = {
     placeItems: "center",
     flexShrink: 0,
     borderRadius: "16px",
-    background: "rgba(255,255,255,0.16)",
-    border: "1px solid rgba(255,255,255,0.2)",
+    background:
+      "rgba(255,255,255,0.16)",
+    border:
+      "1px solid rgba(255,255,255,0.2)",
     fontSize: "24px",
   },
 
@@ -737,8 +979,10 @@ const styles = {
     flexWrap: "wrap",
     marginTop: "20px",
     paddingTop: "15px",
-    borderTop: "1px solid rgba(255,255,255,0.22)",
-    color: "rgba(255,255,255,0.78)",
+    borderTop:
+      "1px solid rgba(255,255,255,0.22)",
+    color:
+      "rgba(255,255,255,0.78)",
     fontSize: "11px",
   },
 
@@ -750,7 +994,8 @@ const styles = {
     textDecoration: "none",
     fontSize: "10px",
     fontWeight: "950",
-    boxShadow: "0 6px 15px rgba(163, 48, 96, 0.12)",
+    boxShadow:
+      "0 6px 15px rgba(163, 48, 96, 0.12)",
   },
 
   stats: {
@@ -769,7 +1014,8 @@ const styles = {
     borderRadius: "15px",
     background: "#ffffff",
     border: "1px solid #f1e3e9",
-    boxShadow: "0 8px 25px rgba(54, 26, 42, 0.045)",
+    boxShadow:
+      "0 8px 25px rgba(54, 26, 42, 0.045)",
     textDecoration: "none",
     color: "#25202a",
   },
@@ -842,7 +1088,8 @@ const styles = {
     borderRadius: "14px",
     background: "#ffffff",
     border: "1px solid #f1e3e9",
-    boxShadow: "0 7px 22px rgba(54, 26, 42, 0.04)",
+    boxShadow:
+      "0 7px 22px rgba(54, 26, 42, 0.04)",
     color: "#2d252c",
     textDecoration: "none",
   },
@@ -920,7 +1167,8 @@ const styles = {
     gap: "20px",
     marginTop: "30px",
     paddingTop: "20px",
-    borderTop: "1px solid #f3e6eb",
+    borderTop:
+      "1px solid #f3e6eb",
   },
 
   loading: {
@@ -944,7 +1192,8 @@ const styles = {
     color: "#ffffff",
     fontWeight: "950",
     fontSize: "18px",
-    boxShadow: "0 10px 25px rgba(238, 92, 151, 0.2)",
+    boxShadow:
+      "0 10px 25px rgba(238, 92, 151, 0.2)",
   },
 
   errorPage: {
@@ -955,7 +1204,8 @@ const styles = {
     borderRadius: "20px",
     background: "#ffffff",
     border: "1px solid #f1e0e7",
-    boxShadow: "0 15px 45px rgba(54, 26, 42, 0.07)",
+    boxShadow:
+      "0 15px 45px rgba(54, 26, 42, 0.07)",
   },
 
   errorIcon: {
@@ -986,6 +1236,7 @@ const styles = {
     textDecoration: "none",
     fontWeight: "950",
     fontSize: "11px",
-    boxShadow: "0 8px 20px rgba(238, 92, 151, 0.2)",
+    boxShadow:
+      "0 8px 20px rgba(238, 92, 151, 0.2)",
   },
 };
