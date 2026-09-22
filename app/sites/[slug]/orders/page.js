@@ -24,23 +24,33 @@ export default function SiteOrdersPage() {
     setLoading(true);
 
     try {
-      const [websiteRes, userRes, ordersRes] =
-        await Promise.all([
-          fetch(`/api/sites/${slug}`, {
-            cache: "no-store",
-          }),
+      const [
+        websiteRes,
+        userRes,
+        ordersRes,
+      ] = await Promise.all([
+        fetch(`/api/sites/${slug}`, {
+          cache: "no-store",
+        }),
 
-          fetch(`/api/sites/${slug}/auth/me`, {
+        fetch(
+          `/api/sites/${slug}/auth/me`,
+          {
             cache: "no-store",
-          }),
+          }
+        ),
 
-          fetch(`/api/sites/${slug}/orders`, {
+        fetch(
+          `/api/sites/${slug}/orders`,
+          {
             cache: "no-store",
-          }),
-        ]);
+          }
+        ),
+      ]);
 
       if (websiteRes.ok) {
-        const data = await websiteRes.json();
+        const data =
+          await websiteRes.json();
 
         setWebsite(
           data.website || data
@@ -48,16 +58,24 @@ export default function SiteOrdersPage() {
       }
 
       if (userRes.ok) {
-        const data = await userRes.json();
+        const data =
+          await userRes.json();
 
-        setUser(data.user || null);
+        setUser(
+          data.user || null
+        );
       }
 
       if (ordersRes.ok) {
-        const data = await ordersRes.json();
+        const data =
+          await ordersRes.json();
 
-        setOrders(data.orders || []);
-      } else if (ordersRes.status === 401) {
+        setOrders(
+          data.orders || []
+        );
+      } else if (
+        ordersRes.status === 401
+      ) {
         setUser(null);
       }
     } catch (error) {
@@ -90,17 +108,23 @@ export default function SiteOrdersPage() {
   }
 
   function formatMoney(value) {
-    const number = Number(value || 0);
+    const number = Number(
+      value || 0
+    );
 
-    return number.toLocaleString("vi-VN") + "đ";
+    return (
+      number.toLocaleString(
+        "vi-VN"
+      ) + "đ"
+    );
   }
 
   function formatDate(value) {
     if (!value) return "—";
 
-    return new Date(value).toLocaleString(
-      "vi-VN"
-    );
+    return new Date(
+      value
+    ).toLocaleString("vi-VN");
   }
 
   function statusText(status) {
@@ -114,7 +138,11 @@ export default function SiteOrdersPage() {
       failed: "Thất bại",
     };
 
-    return map[status] || status || "Không rõ";
+    return (
+      map[status] ||
+      status ||
+      "Không rõ"
+    );
   }
 
   function statusClass(status) {
@@ -155,7 +183,9 @@ export default function SiteOrdersPage() {
             />
           ) : (
             <div className="logoFallback">
-              {shopName.charAt(0).toUpperCase()}
+              {shopName
+                .charAt(0)
+                .toUpperCase()}
             </div>
           )}
 
@@ -163,15 +193,23 @@ export default function SiteOrdersPage() {
         </button>
 
         <nav className="nav">
-          <button onClick={() => go("")}>
+          <button
+            onClick={() => go("")}
+          >
             Trang chủ
           </button>
 
-          <button onClick={() => go("/shop")}>
+          <button
+            onClick={() => go("")}
+          >
             Cửa hàng
           </button>
 
-          <button onClick={() => go("/keys")}>
+          <button
+            onClick={() =>
+              go("/keys")
+            }
+          >
             Kho KEY
           </button>
 
@@ -179,7 +217,11 @@ export default function SiteOrdersPage() {
             Đơn hàng
           </button>
 
-          <button onClick={() => go("/deposit")}>
+          <button
+            onClick={() =>
+              go("/deposit")
+            }
+          >
             Nạp tiền
           </button>
         </nav>
@@ -231,7 +273,7 @@ export default function SiteOrdersPage() {
 
           <button
             className="back"
-            onClick={() => go("/shop")}
+            onClick={() => go("")}
           >
             ← Cửa hàng
           </button>
@@ -243,10 +285,13 @@ export default function SiteOrdersPage() {
               🔐
             </div>
 
-            <h2>Bạn chưa đăng nhập</h2>
+            <h2>
+              Bạn chưa đăng nhập
+            </h2>
 
             <p>
-              Đăng nhập để xem đơn hàng.
+              Đăng nhập để xem đơn
+              hàng.
             </p>
 
             <button
@@ -261,6 +306,7 @@ export default function SiteOrdersPage() {
         ) : loading ? (
           <div className="empty">
             <div className="loader" />
+
             <p>
               Đang tải đơn hàng...
             </p>
@@ -271,18 +317,18 @@ export default function SiteOrdersPage() {
               📦
             </div>
 
-            <h2>Chưa có đơn hàng</h2>
+            <h2>
+              Chưa có đơn hàng
+            </h2>
 
             <p>
-              Bạn chưa mua sản phẩm nào
-              tại shop này.
+              Bạn chưa mua sản phẩm
+              nào tại shop này.
             </p>
 
             <button
               className="primary"
-              onClick={() =>
-                go("/shop")
-              }
+              onClick={() => go("")}
             >
               Đi đến cửa hàng
             </button>
@@ -331,7 +377,8 @@ export default function SiteOrdersPage() {
 
                     <span>
                       Số lượng:{" "}
-                      {order.quantity || 1}
+                      {order.quantity ||
+                        1}
                     </span>
                   </div>
 
@@ -373,12 +420,18 @@ export default function SiteOrdersPage() {
       </section>
 
       <div className="bottomNav">
-        <button onClick={() => go("")}>
+        <button
+          onClick={() => go("")}
+        >
           🏠
           <span>Trang chủ</span>
         </button>
 
-        <button onClick={() => go("/keys")}>
+        <button
+          onClick={() =>
+            go("/keys")
+          }
+        >
           🔑
           <span>Kho KEY</span>
         </button>
