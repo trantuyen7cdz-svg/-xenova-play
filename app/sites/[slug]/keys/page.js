@@ -3,948 +3,771 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
-function formatDate(value) {
-  if (!value) return "—";
-
-  try {
-    return new Date(value).toLocaleString("vi-VN");
-  } catch {
-    return "—";
-  }
-}
-
-function getStatusText(status) {
-  const value = String(status || "").toLowerCase();
-
-  if (value === "available") return "Chưa sử dụng";
-  if (value === "sold") return "Đã bán";
-  if (value === "used") return "Đã sử dụng";
-  if (value === "expired") return "Hết hạn";
-
-  return status || "Không rõ";
-}
-
-function getStatusClass(status) {
-  const value = String(status || "").toLowerCase();
-
-  if (value === "available") return "available";
-  if (value === "sold") return "sold";
-  if (value === "used") return "used";
-  if (value === "expired") return "expired";
-
-  return "";
-}
-
-export default function WebsiteKeysPage() {
-  const router = useRouter();
+export default function SiteKeysPage() {
   const params = useParams();
+  const router = useRouter();
 
   const slug = params?.slug;
 
   const [website, setWebsite] = useState(null);
   const [user, setUser] = useState(null);
   const [keys, setKeys] = useState([]);
-
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
-  async function loadPage() {
+  useEffect(() => {
+    if (!slug) return;
+
+    loadData();
+  }, [slug]);
+
+  async function loadData() {
+    setLoading(true);
+
     try {
-      setLoading(true);
-      setError("");
-
-      if (!slug) {
-        throw new Error("Không xác định được website.");
-      }
-
-      /*
-       * ================================
-       * WEBSITE
-       * ================================
-       */
-
-      const websiteResponse = await fetch(
-        `/api/sites/${slug}/catalog`,
-        {
+      const [websiteRes, userRes, keysRes] = await Promise.all([
+        fetch(`/api/sites/${slug}`, {
           cache: "no-store",
-        }
-      );
+        }),
 
-      /*
-       * ================================
-       * USER
-       * ================================
-       */
-
-      const userResponse = await fetch(
-        `/api/sites/${slug}/auth/me`,
-        {
+        fetch(`/api/sites/${slug}/auth/me`, {
           cache: "no-store",
-        }
-      );
+        }),
 
-      const userData =
-        await userResponse.json();
-
-      if (
-        !userResponse.ok ||
-        !userData?.success ||
-        !userData?.user
-      ) {
-        router.replace(
-          `/sites/${slug}/login`
-        );
-
-        return;
-      }
-
-      setUser(userData.user);
-
-      /*
-       * ================================
-       * LOAD WEBSITE KEYS
-       * ================================
-       */
-
-      const keysResponse = await fetch(
-        `/api/sites/${slug}/keys`,
-        {
+        fetch(`/api/sites/${slug}/keys`, {
           cache: "no-store",
-        }
-      );
+        }),
+      ]);
 
-      const keysData =
-        await keysResponse.json();
-
-      if (!keysResponse.ok) {
-        throw new Error(
-          keysData?.error ||
-            keysData?.message ||
-            "Không tải được kho KEY."
-        );
+      if (websiteRes.ok) {
+        const websiteData = await websiteRes.json();
+        setWebsite(websiteData.website || websiteData);
       }
 
-      setKeys(
-        Array.isArray(keysData?.keys)
-          ? keysData.keys
-          : []
-      );
-
-      /*
-       * catalog chỉ được gọi để đảm bảo
-       * website slug còn tồn tại.
-       */
-      if (!websiteResponse.ok) {
-        throw new Error(
-          "Website không tồn tại hoặc đã bị tắt."
-        );
+      if (userRes.ok) {
+        const userData = await userRes.json();
+        setUser(userData.user || null);
       }
 
-      setWebsite({
-        slug,
-      });
-    } catch (err) {
-      console.error(
-        "WEBSITE KEYS ERROR:",
-        err
-      );
-
-      setError(
-        err?.message ||
-          "Không thể tải kho KEY."
-      );
+      if (keysRes.ok) {
+        const keysData = await keysRes.json();
+        setKeys(keysData.keys || []);
+      }
+    } catch (error) {
+      console.error("LOAD SITE KEYS ERROR:", error);
     } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => {
-    loadPage();
-  }, [slug]);
+  function go(path) {
+    router.push(`/sites/${slug}${path}`);
+  }
 
   async function logout() {
     try {
-      await fetch(
-        `/api/sites/${slug}/auth/logout`,
-        {
-          method: "POST",
-        }
-      );
-    } catch (error) {
-      console.error(
-        "LOGOUT ERROR:",
-        error
-      );
-    }
+      await fetch(`/api/sites/${slug}/auth/logout`, {
+        method: "POST",
+      });
+    } catch {}
 
-    router.replace(
-      `/sites/${slug}/login`
-    );
+    router.push(`/sites/${slug}/login`);
   }
 
-  if (loading) {
-    return (
-      <>
-        <div className="loading">
-          <div className="spinner" />
-
-          <p>
-            Đang tải kho KEY...
-          </p>
-        </div>
-
-        <style jsx>{styles}</style>
-      </>
-    );
-  }
+  const shopName =
+    website?.name ||
+    "Shop";
 
   return (
     <main className="page">
-
-      <header className="topbar">
-        <div className="topbar-inner">
-
-          <button
-            className="brand"
-            onClick={() =>
-              router.push(
-                `/sites/${slug}`
-              )
-            }
-          >
-            <div className="brand-icon">
-              🔑
+      <header className="header">
+        <button
+          className="brand"
+          onClick={() => go("")}
+        >
+          {website?.logo_url ? (
+            <img
+              src={website.logo_url}
+              alt={shopName}
+              className="logo"
+            />
+          ) : (
+            <div className="logoFallback">
+              {shopName.charAt(0).toUpperCase()}
             </div>
+          )}
 
-            <div>
-              <strong>
-                KHO KEY
-              </strong>
+          <span>{shopName}</span>
+        </button>
 
-              <span>
-                {slug}
-              </span>
-            </div>
+        <nav className="nav">
+          <button onClick={() => go("")}>
+            Trang chủ
           </button>
 
-          <nav>
-            <button
-              onClick={() =>
-                router.push(
-                  `/sites/${slug}`
-                )
-              }
-            >
-              Trang chủ
-            </button>
+          <button onClick={() => go("/shop")}>
+            Cửa hàng
+          </button>
 
-            <button
-              className="active"
-            >
-              Kho KEY
-            </button>
+          <button className="active">
+            Kho KEY
+          </button>
 
-            <button
-              onClick={() =>
-                router.push(
-                  `/sites/${slug}/orders`
-                )
-              }
-            >
-              Đơn hàng
-            </button>
+          <button onClick={() => go("/orders")}>
+            Đơn hàng
+          </button>
 
-            <button
-              onClick={() =>
-                router.push(
-                  `/sites/${slug}/account`
-                )
-              }
-            >
-              Tài khoản
-            </button>
-          </nav>
+          <button onClick={() => go("/deposit")}>
+            Nạp tiền
+          </button>
+        </nav>
 
-          {user && (
+        <div className="account">
+          {user ? (
+            <>
+              <button
+                className="accountButton"
+                onClick={() => go("/account")}
+              >
+                👤 {user.username || user.email}
+              </button>
+
+              <button
+                className="logout"
+                onClick={logout}
+              >
+                Đăng xuất
+              </button>
+            </>
+          ) : (
             <button
-              className="logout"
-              onClick={logout}
+              className="login"
+              onClick={() => go("/login")}
             >
-              Đăng xuất
+              Đăng nhập
             </button>
           )}
         </div>
       </header>
 
-      <section className="container">
-
-        <div className="heading">
+      <section className="content">
+        <div className="title">
           <div>
-            <button
-              className="back"
-              onClick={() =>
-                router.push(
-                  `/sites/${slug}`
-                )
-              }
-            >
-              ← QUAY LẠI
-            </button>
-
-            <h1>
-              Kho KEY của tôi
-            </h1>
-
+            <h1>Kho KEY</h1>
             <p>
-              Các KEY thuộc tài khoản
-              của website này.
+              Các key bạn đã mua tại {shopName}
             </p>
           </div>
 
-          <div className="count">
-            {keys.length} KEY
-          </div>
+          <button
+            className="back"
+            onClick={() => go("/shop")}
+          >
+            ← Cửa hàng
+          </button>
         </div>
 
-        {error && (
-          <div className="error">
-            {error}
-          </div>
-        )}
-
-        {!error &&
-          keys.length === 0 && (
-            <div className="empty">
-              <div className="empty-icon">
-                🔑
-              </div>
-
-              <h2>
-                Chưa có KEY
-              </h2>
-
-              <p>
-                Bạn chưa có KEY nào
-                trong website này.
-              </p>
-
-              <button
-                onClick={() =>
-                  router.push(
-                    `/sites/${slug}`
-                  )
-                }
-              >
-                ĐẾN CỬA HÀNG
-              </button>
+        {!user && !loading ? (
+          <div className="empty">
+            <div className="emptyIcon">
+              🔐
             </div>
-          )}
 
-        {keys.length > 0 && (
-          <div className="key-list">
+            <h2>Bạn chưa đăng nhập</h2>
+
+            <p>
+              Đăng nhập để xem kho key của bạn.
+            </p>
+
+            <button
+              className="primary"
+              onClick={() => go("/login")}
+            >
+              Đăng nhập
+            </button>
+          </div>
+        ) : loading ? (
+          <div className="empty">
+            <div className="loader" />
+            <p>Đang tải kho key...</p>
+          </div>
+        ) : keys.length === 0 ? (
+          <div className="empty">
+            <div className="emptyIcon">
+              🔑
+            </div>
+
+            <h2>Chưa có KEY</h2>
+
+            <p>
+              Bạn chưa có key nào trong kho.
+            </p>
+
+            <button
+              className="primary"
+              onClick={() => go("/shop")}
+            >
+              Mua KEY
+            </button>
+          </div>
+        ) : (
+          <div className="keys">
             {keys.map((item) => (
               <div
+                className="keyCard"
                 key={item.id}
-                className="key-card"
               >
-                <div className="key-top">
+                <div className="keyTop">
+                  <div>
+                    <div className="productName">
+                      {item.product_name ||
+                        item.product?.name ||
+                        "KEY"}
+                    </div>
 
-                  <div className="key-icon">
-                    🔑
-                  </div>
-
-                  <div className="key-info">
-                    <span>
-                      KEY
-                    </span>
-
-                    <strong>
-                      {item.key_code ||
-                        item.key_value ||
-                        "—"}
-                    </strong>
+                    <div className="date">
+                      Mua ngày:{" "}
+                      {item.created_at
+                        ? new Date(
+                            item.created_at
+                          ).toLocaleString("vi-VN")
+                        : "—"}
+                    </div>
                   </div>
 
                   <span
-                    className={`status ${getStatusClass(
-                      item.status
-                    )}`}
+                    className={
+                      item.status === "active" ||
+                      item.status === "sold"
+                        ? "status activeStatus"
+                        : "status"
+                    }
                   >
-                    {getStatusText(
-                      item.status
-                    )}
+                    {item.status || "available"}
                   </span>
                 </div>
 
-                <div className="details">
-
-                  <div>
-                    <span>
-                      Sản phẩm
-                    </span>
-
-                    <strong>
-                      {item.product_name ||
-                        item.product?.name ||
-                        "—"}
-                    </strong>
-                  </div>
-
-                  <div>
-                    <span>
-                      Ngày mua
-                    </span>
-
-                    <strong>
-                      {formatDate(
-                        item.sold_at ||
-                          item.created_at
-                      )}
-                    </strong>
-                  </div>
-
-                  <div>
-                    <span>
-                      Hạn sử dụng
-                    </span>
-
-                    <strong>
-                      {formatDate(
-                        item.expires_at
-                      )}
-                    </strong>
-                  </div>
-
-                </div>
-
-                <div className="key-actions">
+                <div className="keyBox">
+                  <span>
+                    {item.key_code || "—"}
+                  </span>
 
                   <button
                     onClick={() => {
-                      const value =
-                        item.key_code ||
-                        item.key_value ||
-                        "";
+                      if (!item.key_code) return;
 
-                      if (!value) return;
-
-                      navigator.clipboard.writeText(
-                        value
-                      );
+                      navigator.clipboard
+                        ?.writeText(item.key_code)
+                        .catch(() => {});
                     }}
                   >
-                    📋 SAO CHÉP KEY
+                    Sao chép
                   </button>
+                </div>
 
-                  <button
-                    className="shop-button"
-                    onClick={() =>
-                      router.push(
-                        `/sites/${slug}`
-                      )
-                    }
-                  >
-                    🛒 CỬA HÀNG
-                  </button>
+                <div className="keyInfo">
+                  <div>
+                    <span>Hạn sử dụng</span>
+                    <strong>
+                      {item.expires_at
+                        ? new Date(
+                            item.expires_at
+                          ).toLocaleString("vi-VN")
+                        : "Không giới hạn"}
+                    </strong>
+                  </div>
 
+                  <div>
+                    <span>Ngày bán</span>
+                    <strong>
+                      {item.sold_at
+                        ? new Date(
+                            item.sold_at
+                          ).toLocaleString("vi-VN")
+                        : "—"}
+                    </strong>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         )}
-
       </section>
 
-      <style jsx>{styles}</style>
+      <div className="bottomNav">
+        <button onClick={() => go("")}>
+          🏠
+          <span>Trang chủ</span>
+        </button>
+
+        <button
+          className="bottomActive"
+          onClick={() => go("/keys")}
+        >
+          🔑
+          <span>Kho KEY</span>
+        </button>
+
+        <button onClick={() => go("/orders")}>
+          📦
+          <span>Đơn hàng</span>
+        </button>
+
+        <button onClick={() => go("/account")}>
+          👤
+          <span>Tài khoản</span>
+        </button>
+      </div>
+
+      <style jsx>{`
+        * {
+          box-sizing: border-box;
+        }
+
+        .page {
+          min-height: 100vh;
+          background:
+            radial-gradient(
+              circle at top left,
+              #fff0f7 0,
+              transparent 35%
+            ),
+            #fff;
+          color: #242424;
+          padding-bottom: 100px;
+        }
+
+        .header {
+          position: sticky;
+          top: 0;
+          z-index: 50;
+
+          display: flex;
+          align-items: center;
+          gap: 20px;
+
+          min-height: 70px;
+          padding: 10px 22px;
+
+          background: rgba(255, 255, 255, 0.94);
+          backdrop-filter: blur(15px);
+
+          border-bottom: 1px solid #f1dbe5;
+        }
+
+        .brand {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+
+          border: 0;
+          background: transparent;
+
+          font-size: 17px;
+          font-weight: 800;
+
+          cursor: pointer;
+
+          white-space: nowrap;
+        }
+
+        .logo {
+          width: 42px;
+          height: 42px;
+          object-fit: contain;
+          border-radius: 12px;
+        }
+
+        .logoFallback {
+          width: 42px;
+          height: 42px;
+
+          display: flex;
+          align-items: center;
+          justify-content: center;
+
+          border-radius: 12px;
+
+          background: linear-gradient(
+            135deg,
+            #ff4f9a,
+            #ff77b5
+          );
+
+          color: white;
+          font-size: 20px;
+          font-weight: 900;
+        }
+
+        .nav {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          flex: 1;
+        }
+
+        .nav button {
+          border: 0;
+          background: transparent;
+
+          padding: 10px 13px;
+
+          border-radius: 10px;
+
+          cursor: pointer;
+
+          color: #555;
+          font-weight: 600;
+        }
+
+        .nav button:hover,
+        .nav button.active {
+          color: #ff3d91;
+          background: #fff0f7;
+        }
+
+        .account {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+        }
+
+        .account button {
+          border: 0;
+          cursor: pointer;
+          border-radius: 10px;
+          padding: 9px 12px;
+          font-weight: 600;
+        }
+
+        .accountButton {
+          background: #fff0f7;
+          color: #e62e82;
+        }
+
+        .logout {
+          background: #f4f4f4;
+          color: #555;
+        }
+
+        .login {
+          background: #ff3d91;
+          color: white;
+        }
+
+        .content {
+          max-width: 1150px;
+          margin: auto;
+          padding: 35px 18px;
+        }
+
+        .title {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 15px;
+          margin-bottom: 25px;
+        }
+
+        h1 {
+          margin: 0 0 5px;
+          font-size: 30px;
+        }
+
+        .title p {
+          margin: 0;
+          color: #777;
+        }
+
+        .back {
+          border: 1px solid #ffd0e4;
+          background: white;
+          color: #e52e81;
+          padding: 10px 15px;
+          border-radius: 10px;
+          cursor: pointer;
+          font-weight: 700;
+        }
+
+        .empty {
+          min-height: 330px;
+
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-direction: column;
+
+          text-align: center;
+
+          border: 1px solid #f2dce6;
+          border-radius: 20px;
+
+          background: white;
+          box-shadow: 0 10px 35px rgba(255, 61, 145, 0.06);
+        }
+
+        .emptyIcon {
+          font-size: 45px;
+          margin-bottom: 10px;
+        }
+
+        .empty h2 {
+          margin: 5px 0;
+        }
+
+        .empty p {
+          color: #777;
+          margin: 5px 0 18px;
+        }
+
+        .primary {
+          border: 0;
+          border-radius: 11px;
+
+          background: #ff3d91;
+          color: white;
+
+          padding: 12px 20px;
+
+          font-weight: 800;
+          cursor: pointer;
+        }
+
+        .keys {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 16px;
+        }
+
+        .keyCard {
+          background: white;
+          border: 1px solid #f0dbe5;
+          border-radius: 18px;
+          padding: 18px;
+
+          box-shadow:
+            0 10px 30px
+              rgba(255, 61, 145, 0.06);
+        }
+
+        .keyTop {
+          display: flex;
+          justify-content: space-between;
+          gap: 15px;
+        }
+
+        .productName {
+          font-size: 17px;
+          font-weight: 800;
+        }
+
+        .date {
+          margin-top: 5px;
+          color: #888;
+          font-size: 13px;
+        }
+
+        .status {
+          height: fit-content;
+          padding: 6px 9px;
+          border-radius: 999px;
+          background: #f2f2f2;
+          color: #777;
+          font-size: 12px;
+          font-weight: 700;
+        }
+
+        .activeStatus {
+          background: #e9fff2;
+          color: #14964f;
+        }
+
+        .keyBox {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+
+          margin-top: 18px;
+          padding: 12px;
+
+          border-radius: 12px;
+
+          background: #faf7f9;
+          border: 1px dashed #e7cbd8;
+        }
+
+        .keyBox span {
+          flex: 1;
+          min-width: 0;
+
+          overflow-wrap: anywhere;
+
+          font-family: monospace;
+          font-weight: 700;
+        }
+
+        .keyBox button {
+          border: 0;
+          background: #ff3d91;
+          color: white;
+
+          border-radius: 8px;
+
+          padding: 8px 10px;
+
+          cursor: pointer;
+          font-weight: 700;
+        }
+
+        .keyInfo {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+
+          margin-top: 15px;
+        }
+
+        .keyInfo div {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .keyInfo span {
+          font-size: 12px;
+          color: #888;
+        }
+
+        .keyInfo strong {
+          font-size: 13px;
+        }
+
+        .loader {
+          width: 30px;
+          height: 30px;
+
+          border: 3px solid #ffd5e7;
+          border-top-color: #ff3d91;
+
+          border-radius: 50%;
+
+          animation: spin 0.8s linear infinite;
+
+          margin-bottom: 12px;
+        }
+
+        @keyframes spin {
+          to {
+            transform: rotate(360deg);
+          }
+        }
+
+        .bottomNav {
+          position: fixed;
+          left: 50%;
+          bottom: 14px;
+          transform: translateX(-50%);
+
+          z-index: 100;
+
+          display: flex;
+          align-items: center;
+          gap: 5px;
+
+          padding: 7px;
+
+          background: rgba(255, 255, 255, 0.95);
+          backdrop-filter: blur(15px);
+
+          border: 1px solid #f0dbe5;
+          border-radius: 18px;
+
+          box-shadow:
+            0 10px 35px
+              rgba(0, 0, 0, 0.1);
+        }
+
+        .bottomNav button {
+          min-width: 75px;
+
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 3px;
+
+          border: 0;
+          background: transparent;
+
+          padding: 8px 10px;
+
+          border-radius: 12px;
+
+          color: #777;
+
+          cursor: pointer;
+          font-size: 17px;
+        }
+
+        .bottomNav span {
+          font-size: 10px;
+          font-weight: 700;
+        }
+
+        .bottomNav button:hover,
+        .bottomNav .bottomActive {
+          color: #ff3d91;
+          background: #fff0f7;
+        }
+
+        @media (max-width: 850px) {
+          .header {
+            padding: 9px 12px;
+          }
+
+          .nav {
+            display: none;
+          }
+
+          .accountButton {
+            max-width: 120px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+
+          .keys {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 500px) {
+          .brand span {
+            display: none;
+          }
+
+          .accountButton {
+            display: none;
+          }
+
+          .title {
+            align-items: flex-start;
+            flex-direction: column;
+          }
+
+          .content {
+            padding: 25px 12px;
+          }
+
+          .bottomNav {
+            width: calc(100% - 20px);
+            justify-content: space-around;
+          }
+
+          .bottomNav button {
+            flex: 1;
+            min-width: 0;
+          }
+        }
+      `}</style>
     </main>
   );
 }
-
-const styles = `
-* {
-  box-sizing: border-box;
-}
-
-.page {
-  min-height: 100vh;
-  background:
-    radial-gradient(
-      circle at 10% 5%,
-      rgba(255,80,170,.12),
-      transparent 28%
-    ),
-    radial-gradient(
-      circle at 90% 10%,
-      rgba(130,80,255,.10),
-      transparent 28%
-    ),
-    #f7f8fc;
-  color: #222;
-  font-family:
-    Arial,
-    Helvetica,
-    sans-serif;
-  padding-bottom: 40px;
-}
-
-.topbar {
-  height: 64px;
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  background:
-    rgba(255,255,255,.96);
-  border-bottom:
-    1px solid #eee;
-  backdrop-filter:
-    blur(15px);
-}
-
-.topbar-inner {
-  max-width: 1220px;
-  height: 100%;
-  margin: auto;
-  padding: 0 18px;
-
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 15px;
-}
-
-.brand {
-  border: 0;
-  background: transparent;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  cursor: pointer;
-  text-align: left;
-}
-
-.brand-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 11px;
-
-  display: grid;
-  place-items: center;
-
-  background: #fff0f7;
-  font-size: 20px;
-}
-
-.brand strong {
-  display: block;
-  color: #222;
-  font-size: 14px;
-}
-
-.brand span {
-  display: block;
-  margin-top: 2px;
-  color: #aaa;
-  font-size: 9px;
-}
-
-nav {
-  display: flex;
-  gap: 4px;
-}
-
-nav button {
-  border: 0;
-  background: transparent;
-  padding: 10px 13px;
-  border-radius: 9px;
-
-  color: #666;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-nav button:hover,
-nav button.active {
-  color: #e83d94;
-  background: #fff0f7;
-}
-
-.logout {
-  border: 0;
-  border-radius: 9px;
-  padding: 9px 12px;
-
-  background: #222;
-  color: white;
-
-  cursor: pointer;
-  font-weight: 700;
-}
-
-.container {
-  max-width: 1000px;
-  margin: auto;
-  padding: 25px 18px;
-}
-
-.heading {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 15px;
-
-  margin-bottom: 20px;
-}
-
-.back {
-  border: 0;
-  background: transparent;
-  padding: 0;
-
-  color: #e83d94;
-  font-size: 11px;
-  font-weight: 900;
-
-  cursor: pointer;
-}
-
-h1 {
-  margin: 7px 0 4px;
-  font-size: 25px;
-}
-
-.heading p {
-  margin: 0;
-  color: #999;
-  font-size: 12px;
-}
-
-.count {
-  padding: 8px 13px;
-  border-radius: 999px;
-
-  background: white;
-  border: 1px solid #eee;
-
-  color: #e83d94;
-  font-size: 11px;
-  font-weight: 900;
-}
-
-.error {
-  padding: 13px;
-  margin-bottom: 15px;
-
-  border-radius: 10px;
-
-  background: #fff0f0;
-  color: #c33;
-
-  font-size: 12px;
-}
-
-.key-list {
-  display: grid;
-  gap: 13px;
-}
-
-.key-card {
-  padding: 17px;
-
-  background: white;
-  border: 1px solid #eee;
-  border-radius: 15px;
-
-  box-shadow:
-    0 8px 30px
-    rgba(30,20,50,.05);
-}
-
-.key-top {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.key-icon {
-  width: 45px;
-  height: 45px;
-
-  display: grid;
-  place-items: center;
-
-  border-radius: 12px;
-  background: #fff0f7;
-
-  font-size: 21px;
-}
-
-.key-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.key-info span {
-  display: block;
-
-  color: #aaa;
-  font-size: 9px;
-  font-weight: 900;
-}
-
-.key-info strong {
-  display: block;
-  margin-top: 3px;
-
-  color: #222;
-  font-size: 14px;
-
-  word-break: break-all;
-}
-
-.status {
-  padding: 6px 9px;
-  border-radius: 999px;
-
-  font-size: 9px;
-  font-weight: 900;
-  white-space: nowrap;
-}
-
-.status.available {
-  background: #eafff2;
-  color: #159653;
-}
-
-.status.sold {
-  background: #fff4df;
-  color: #a46a00;
-}
-
-.status.used {
-  background: #f1f1f1;
-  color: #777;
-}
-
-.status.expired {
-  background: #ffecec;
-  color: #c33;
-}
-
-.details {
-  display: grid;
-  grid-template-columns:
-    repeat(3,1fr);
-
-  gap: 10px;
-
-  margin-top: 15px;
-  padding-top: 14px;
-
-  border-top:
-    1px solid #eee;
-}
-
-.details div {
-  min-width: 0;
-}
-
-.details span {
-  display: block;
-  color: #aaa;
-  font-size: 9px;
-}
-
-.details strong {
-  display: block;
-  margin-top: 4px;
-
-  color: #555;
-  font-size: 11px;
-
-  word-break: break-word;
-}
-
-.key-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 15px;
-}
-
-.key-actions button {
-  flex: 1;
-
-  border: 0;
-  border-radius: 9px;
-
-  padding: 10px;
-
-  background: #f5f5f7;
-  color: #555;
-
-  cursor: pointer;
-  font-size: 10px;
-  font-weight: 900;
-}
-
-.key-actions button:hover {
-  background: #fff0f7;
-  color: #e83d94;
-}
-
-.key-actions .shop-button {
-  background: #e83d94;
-  color: white;
-}
-
-.empty {
-  min-height: 350px;
-
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-
-  padding: 30px;
-
-  border:
-    1px solid #eee;
-  border-radius: 18px;
-
-  background: white;
-  text-align: center;
-}
-
-.empty-icon {
-  width: 70px;
-  height: 70px;
-
-  display: grid;
-  place-items: center;
-
-  border-radius: 20px;
-  background: #fff0f7;
-
-  font-size: 32px;
-}
-
-.empty h2 {
-  margin: 15px 0 5px;
-  color: #444;
-}
-
-.empty p {
-  margin: 0;
-  color: #999;
-  font-size: 12px;
-}
-
-.empty button {
-  margin-top: 18px;
-
-  border: 0;
-  border-radius: 9px;
-
-  padding: 11px 16px;
-
-  background: #e83d94;
-  color: white;
-
-  cursor: pointer;
-  font-size: 10px;
-  font-weight: 900;
-}
-
-.loading {
-  min-height: 100vh;
-
-  display: grid;
-  place-items: center;
-  align-content: center;
-  gap: 12px;
-
-  background: #f7f8fc;
-  color: #888;
-}
-
-.spinner {
-  width: 40px;
-  height: 40px;
-
-  border:
-    4px solid #eee;
-
-  border-top-color:
-    #e83d94;
-
-  border-radius: 50%;
-
-  animation:
-    spin .8s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (max-width: 760px) {
-
-  .topbar {
-    height: 58px;
-  }
-
-  .topbar-inner {
-    padding: 0 11px;
-  }
-
-  nav {
-    display: none;
-  }
-
-  .logout {
-    padding: 8px 10px;
-    font-size: 10px;
-  }
-
-  .container {
-    padding: 18px 12px;
-  }
-
-  .heading {
-    align-items: flex-start;
-  }
-
-  h1 {
-    font-size: 21px;
-  }
-
-  .details {
-    grid-template-columns:
-      1fr;
-  }
-
-  .key-actions {
-    display: grid;
-    grid-template-columns:
-      1fr 1fr;
-  }
-}
-
-@media (max-width: 420px) {
-
-  .key-top {
-    align-items: flex-start;
-  }
-
-  .status {
-    font-size: 8px;
-  }
-
-  .key-actions {
-    grid-template-columns:
-      1fr;
-  }
-}
-`;
