@@ -11,8 +11,17 @@ export async function GET(request, { params }) {
   try {
     const { slug } = await params;
 
-    const website =
-      await getWebsiteBySlug(slug);
+    if (!slug) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Thiếu slug website.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const website = await getWebsiteBySlug(slug);
 
     if (!website) {
       return NextResponse.json(
@@ -25,15 +34,27 @@ export async function GET(request, { params }) {
       );
     }
 
-    const session =
-      await getWebsiteSession(website);
+    const session = await getWebsiteSession(website);
 
     if (!session) {
       return NextResponse.json(
         {
           success: false,
-          authenticated: false,
-          user: null,
+          message: "Bạn chưa đăng nhập.",
+        },
+        { status: 401 }
+      );
+    }
+
+    if (
+      session.websiteId !== website.id ||
+      session.userId !== session.user?.id
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Phiên đăng nhập không hợp lệ.",
         },
         { status: 401 }
       );
@@ -41,21 +62,31 @@ export async function GET(request, { params }) {
 
     return NextResponse.json({
       success: true,
-      authenticated: true,
-      user: session.user,
-      expires_at: session.expiresAt,
+      user: {
+        id: session.user.id,
+        website_id: session.user.website_id,
+        username: session.user.username,
+        email: session.user.email,
+        role: session.user.role,
+        active: session.user.active,
+      },
+      website: {
+        id: website.id,
+        name: website.name,
+        slug: website.slug,
+      },
     });
   } catch (error) {
     console.error(
-      "WEBSITE ME ERROR:",
+      "WEBSITE AUTH ME ERROR:",
       error
     );
 
     return NextResponse.json(
       {
         success: false,
-        authenticated: false,
-        user: null,
+        message:
+          error?.message || "Lỗi server.",
       },
       { status: 500 }
     );
