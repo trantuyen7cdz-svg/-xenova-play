@@ -105,7 +105,7 @@ async function canManageWebsite(userId, websiteId) {
 export async function POST(request, { params }) {
   try {
     // =========================
-    // AUTH
+    // 1. KIỂM TRA ĐĂNG NHẬP
     // =========================
 
     const user = await getUser(request);
@@ -121,7 +121,7 @@ export async function POST(request, { params }) {
     }
 
     // =========================
-    // SLUG
+    // 2. LẤY SLUG
     // =========================
 
     const { slug } = await params;
@@ -137,7 +137,7 @@ export async function POST(request, { params }) {
     }
 
     // =========================
-    // LẤY WEBSITE
+    // 3. LẤY WEBSITE
     // =========================
 
     const {
@@ -182,7 +182,7 @@ export async function POST(request, { params }) {
     }
 
     // =========================
-    // BODY
+    // 4. LẤY DEPOSIT ID
     // =========================
 
     let body = {};
@@ -206,7 +206,7 @@ export async function POST(request, { params }) {
     }
 
     // =========================
-    // KIỂM TRA QUYỀN
+    // 5. KIỂM TRA QUYỀN
     // =========================
 
     const allowed = await canManageWebsite(
@@ -225,7 +225,7 @@ export async function POST(request, { params }) {
     }
 
     // =========================
-    // LẤY DEPOSIT
+    // 6. LẤY ĐƠN NẠP
     // =========================
 
     const {
@@ -262,7 +262,7 @@ export async function POST(request, { params }) {
     }
 
     // =========================
-    // KIỂM TRA WEBSITE
+    // 7. KIỂM TRA WEBSITE
     // =========================
 
     if (!deposit.website_id) {
@@ -286,20 +286,18 @@ export async function POST(request, { params }) {
     }
 
     // =========================
-    // KIỂM TRA TRẠNG THÁI
+    // 8. KIỂM TRA TRẠNG THÁI
     // =========================
 
     if (deposit.status === "failed") {
-      return NextResponse.json(
-        {
-          success: true,
-          message: "Đơn này đã bị từ chối trước đó.",
-          alreadyRejected: true,
-          depositId: deposit.id,
-          websiteId: website.id,
-          status: deposit.status,
-        }
-      );
+      return NextResponse.json({
+        success: true,
+        message: "Đơn này đã bị từ chối trước đó.",
+        alreadyRejected: true,
+        depositId: deposit.id,
+        websiteId: website.id,
+        status: deposit.status,
+      });
     }
 
     if (deposit.status === "completed") {
@@ -325,7 +323,7 @@ export async function POST(request, { params }) {
     }
 
     // =========================
-    // TỪ CHỐI
+    // 9. TỪ CHỐI
     // pending -> failed
     // =========================
 
@@ -366,15 +364,14 @@ export async function POST(request, { params }) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Đơn không tồn tại hoặc đã được xử lý trước đó.",
+          message: "Đơn không tồn tại hoặc đã được xử lý trước đó.",
         },
         { status: 400 }
       );
     }
 
     // =========================
-    // THÀNH CÔNG
+    // 10. THÀNH CÔNG
     // =========================
 
     return NextResponse.json({
@@ -397,8 +394,7 @@ export async function POST(request, { params }) {
     return NextResponse.json(
       {
         success: false,
-        message: "Lỗi server.",
-        error: error?.message || "Unknown error",
+        message: error?.message || "Lỗi server.",
       },
       { status: 500 }
     );
