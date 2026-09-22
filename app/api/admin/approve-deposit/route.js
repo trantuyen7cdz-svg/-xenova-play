@@ -4,24 +4,22 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 export const dynamic = "force-dynamic";
 
 async function getUser(request) {
-  const authHeader =
-    request.headers.get("authorization");
+  const authHeader = request.headers.get("authorization");
 
-  if (
-    !authHeader ||
-    !authHeader.startsWith("Bearer ")
-  ) {
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return null;
   }
 
-  const token =
-    authHeader.substring(7).trim();
+  const token = authHeader.substring(7).trim();
+
+  if (!token) {
+    return null;
+  }
 
   const {
     data: { user },
     error,
-  } =
-    await supabaseAdmin.auth.getUser(token);
+  } = await supabaseAdmin.auth.getUser(token);
 
   if (error || !user) {
     return null;
@@ -30,127 +28,67 @@ async function getUser(request) {
   return user;
 }
 
-
-/*
-|--------------------------------------------------------------------------
-| KIỂM TRA QUYỀN WEBSITE
-|--------------------------------------------------------------------------
-|
-| Cho phép:
-| - Global admin
-| - Owner của website
-| - Website admin
-|
-*/
-
-async function canManageWebsite(
-  userId,
-  websiteId
-) {
-  /*
-  |--------------------------------------------------------------------------
-  | Global admin
-  |--------------------------------------------------------------------------
-  */
+async function canManageWebsite(userId, websiteId) {
+  if (!userId || !websiteId) {
+    return false;
+  }
 
   const {
     data: profile,
-  } =
-    await supabaseAdmin
-      .from("profiles")
-      .select("role")
-      .eq("id", userId)
-      .maybeSingle();
+    error: profileError,
+  } = await supabaseAdmin
+    .from("profiles")
+    .select("role")
+    .eq("id", userId)
+    .maybeSingle();
 
-  if (
-    profile?.role === "admin"
-  ) {
+  if (!profileError && profile?.role === "admin") {
     return true;
   }
-
-
-  /*
-  |--------------------------------------------------------------------------
-  | Owner website
-  |--------------------------------------------------------------------------
-  */
 
   const {
     data: website,
     error: websiteError,
-  } =
-    await supabaseAdmin
-      .from("websites")
-      .select("id, owner_id")
-      .eq("id", websiteId)
-      .maybeSingle();
+  } = await supabaseAdmin
+    .from("websites")
+    .select("id, owner_id")
+    .eq("id", websiteId)
+    .maybeSingle();
 
-  if (
-    websiteError ||
-    !website
-  ) {
+  if (websiteError || !website) {
     return false;
   }
 
-  if (
-    website.owner_id === userId
-  ) {
+  if (website.owner_id === userId) {
     return true;
   }
-
-
-  /*
-  |--------------------------------------------------------------------------
-  | Website admin
-  |--------------------------------------------------------------------------
-  */
 
   const {
     data: websiteAdmin,
     error: websiteAdminError,
-  } =
-    await supabaseAdmin
-      .from("website_admins")
-      .select("id")
-      .eq("website_id", websiteId)
-      .eq("user_id", userId)
-      .maybeSingle();
+  } = await supabaseAdmin
+    .from("website_admins")
+    .select("id")
+    .eq("website_id", websiteId)
+    .eq("user_id", userId)
+    .maybeSingle();
 
-  if (
-    websiteAdminError ||
-    !websiteAdmin
-  ) {
+  if (websiteAdminError || !websiteAdmin) {
     return false;
   }
 
   return true;
 }
 
-
-/*
-|--------------------------------------------------------------------------
-| POST
-|--------------------------------------------------------------------------
-*/
-
 export async function POST(request) {
   try {
-
-    /*
-    |--------------------------------------------------------------------------
-    | AUTH
-    |--------------------------------------------------------------------------
-    */
-
-    const user =
-      await getUser(request);
+    const user = await getUser(request);
 
     if (!user) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Bạn chưa đăng nhập.",
+          message: "Bạn chưa đăng nhập.",
         },
         {
           status: 401,
@@ -158,41 +96,24 @@ export async function POST(request) {
       );
     }
 
+    let body = {};
 
-    /*
-    |--------------------------------------------------------------------------
-    | BODY
-    |--------------------------------------------------------------------------
-    */
+    try {
+      body = await request.json();
+    } catch {
+      body = {};
+    }
 
-    const body =
-      await request.json();
-
-    const depositId =
-      Number(body.depositId);
-
-    const websiteId =
-      String(
-        body.websiteId || ""
-      ).trim();
+    const depositId = Number(body.depositId);
 
     const reference =
-      String(
-        body.reference || ""
-      ).trim() || null;
+      String(body.reference || "").trim() || null;
 
-
-    if (
-      !Number.isSafeInteger(
-        depositId
-      ) ||
-      depositId <= 0
-    ) {
+    if (!Number.isSafeInteger(depositId) || depositId <= 0) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Deposit ID không hợp lệ.",
+          message: "Deposit ID không hợp lệ.",
         },
         {
           status: 400,
@@ -200,13 +121,61 @@ export async function POST(request) {
       );
     }
 
+    const {
+      data: deposit,
+      error: depositError,
+    } = await supabaseAdmin
+      .from("deposit_requests")
+      .select(
+        `
+          id,
+          user_id,
+          website_id,
+          amount,
+          status,
+          transfer_content,
+          created_at,
+          updated_at
+        `
+      )
+      .eq("id", depositId)
+      .maybeSingle();
 
-    if (!websiteId) {
+    if (depositError) {
+      console.error(
+        "APPROVE DEPOSIT LOOKUP ERROR:",
+        depositError
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Không thể kiểm tra đơn nạp tiền.",
+        },
+        {
+          status: 500,
+        }
+      );
+    }
+
+    if (!deposit) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Không tìm thấy đơn nạp tiền.",
+        },
+        {
+          status: 404,
+        }
+      );
+    }
+
+    if (!deposit.website_id) {
       return NextResponse.json(
         {
           success: false,
           message:
-            "Thiếu websiteId.",
+            "Đây là đơn nạp tiền cũ không thuộc website riêng.",
         },
         {
           status: 400,
@@ -214,18 +183,12 @@ export async function POST(request) {
       );
     }
 
+    const websiteId = deposit.website_id;
 
-    /*
-    |--------------------------------------------------------------------------
-    | QUYỀN
-    |--------------------------------------------------------------------------
-    */
-
-    const allowed =
-      await canManageWebsite(
-        user.id,
-        websiteId
-      );
+    const allowed = await canManageWebsite(
+      user.id,
+      websiteId
+    );
 
     if (!allowed) {
       return NextResponse.json(
@@ -240,89 +203,17 @@ export async function POST(request) {
       );
     }
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | LẤY ĐƠN
-    |--------------------------------------------------------------------------
-    */
-
-    const {
-      data: deposit,
-      error: depositError,
-    } =
-      await supabaseAdmin
-        .from("deposit_requests")
-        .select(
-          `
-            id,
-            user_id,
-            website_id,
-            amount,
-            status,
-            transfer_content
-          `
-        )
-        .eq("id", depositId)
-        .eq("website_id", websiteId)
-        .maybeSingle();
-
-    if (depositError) {
-      console.error(
-        "APPROVE DEPOSIT LOOKUP ERROR:",
-        depositError
-      );
-
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Không thể kiểm tra đơn.",
-        },
-        {
-          status: 500,
-        }
-      );
-    }
-
-
-    if (!deposit) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Không tìm thấy đơn của website này.",
-        },
-        {
-          status: 404,
-        }
-      );
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | GỌI RPC ATOMIC
-    |--------------------------------------------------------------------------
-    */
-
     const {
       data,
       error,
-    } =
-      await supabaseAdmin.rpc(
-        "approve_vietqr_deposit_for_website",
-        {
-          p_deposit_id:
-            depositId,
-
-          p_website_id:
-            websiteId,
-
-          p_reference:
-            reference,
-        }
-      );
+    } = await supabaseAdmin.rpc(
+      "approve_vietqr_deposit_for_website",
+      {
+        p_deposit_id: depositId,
+        p_website_id: websiteId,
+        p_reference: reference,
+      }
+    );
 
     if (error) {
       console.error(
@@ -333,8 +224,8 @@ export async function POST(request) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Không thể duyệt đơn.",
+          message: "Không thể duyệt đơn nạp tiền.",
+          error: error.message,
         },
         {
           status: 500,
@@ -342,20 +233,32 @@ export async function POST(request) {
       );
     }
 
+    if (data && data.ok === false) {
+      let message = "Không thể duyệt đơn nạp tiền.";
 
-    /*
-    |--------------------------------------------------------------------------
-    | RPC RESULT
-    |--------------------------------------------------------------------------
-    */
+      if (data.status === "not_found") {
+        message = "Không tìm thấy đơn nạp tiền.";
+      }
 
-    if (
-      data &&
-      data.ok === false
-    ) {
+      if (data.status === "legacy_deposit") {
+        message =
+          "Đơn này là đơn nạp tiền cũ và không thuộc website.";
+      }
+
+      if (data.status === "website_mismatch") {
+        message =
+          "Website của đơn nạp tiền không khớp.";
+      }
+
+      if (data.status === "invalid_status") {
+        message =
+          "Trạng thái đơn không hợp lệ.";
+      }
+
       return NextResponse.json(
         {
           success: false,
+          message,
           ...data,
         },
         {
@@ -364,14 +267,26 @@ export async function POST(request) {
       );
     }
 
+    if (
+      data &&
+      data.ok === true &&
+      data.status === "already_completed"
+    ) {
+      return NextResponse.json({
+        success: true,
+        message:
+          "Đơn này đã được duyệt trước đó.",
+        ...data,
+      });
+    }
 
     return NextResponse.json({
       success: true,
+      message:
+        "Đã duyệt nạp tiền và cộng tiền vào đúng ví website.",
       ...data,
     });
-
   } catch (error) {
-
     console.error(
       "APPROVE DEPOSIT ERROR:",
       error
