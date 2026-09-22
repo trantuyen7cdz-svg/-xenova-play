@@ -13,6 +13,7 @@ export default function WebsiteAdminLoginPage() {
   const [website, setWebsite] = useState(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
   const [error, setError] = useState("");
@@ -28,25 +29,46 @@ export default function WebsiteAdminLoginPage() {
       setChecking(true);
       setError("");
 
-      const { data, error } = await supabase
-        .from("websites")
-        .select(
-          "id,name,slug,logo_url,status"
-        )
-        .eq("slug", slug)
-        .eq("status", "active")
-        .maybeSingle();
+      /*
+       * Tìm đúng website theo slug.
+       */
+      const { data, error: websiteError } =
+        await supabase
+          .from("websites")
+          .select(
+            "id,name,slug,logo_url,status"
+          )
+          .eq("slug", slug)
+          .eq("status", "active")
+          .maybeSingle();
 
-      if (error) throw error;
+      if (websiteError) {
+        console.error(
+          "WEBSITE LOAD ERROR:",
+          websiteError
+        );
+
+        setError(
+          "Không thể tải thông tin website."
+        );
+
+        return;
+      }
 
       if (!data) {
-        setError("Website không tồn tại hoặc đã bị khóa.");
+        setError(
+          "Website không tồn tại hoặc đã bị khóa."
+        );
+
         return;
       }
 
       setWebsite(data);
 
-      // Kiểm tra nếu đã đăng nhập
+      /*
+       * Nếu user đã đăng nhập thì kiểm tra
+       * user có phải Admin của ĐÚNG website này không.
+       */
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -62,10 +84,24 @@ export default function WebsiteAdminLoginPage() {
           router.replace(
             `/sites/${slug}/admin`
           );
+
+          return;
         }
+
+        /*
+         * Đã đăng nhập nhưng không phải Admin
+         * của website này.
+         *
+         * Không tự sign out ngay vì user có thể
+         * đang đăng nhập tài khoản khách hàng.
+         */
       }
     } catch (err) {
-      console.error(err);
+      console.error(
+        "LOAD ADMIN LOGIN ERROR:",
+        err
+      );
+
       setError(
         "Không thể tải thông tin website."
       );
@@ -74,27 +110,69 @@ export default function WebsiteAdminLoginPage() {
     }
   }
 
+  /*
+   * Kiểm tra quyền Admin theo:
+   *
+   * website_id
+   * +
+   * user_id
+   * +
+   * active = true
+   */
   async function checkWebsiteAdmin(
     websiteId,
     userId
   ) {
-    const { data, error } = await supabase
-      .from("website_admins")
-      .select("id,role,active")
-      .eq("website_id", websiteId)
-      .eq("user_id", userId)
-      .eq("active", true)
-      .maybeSingle();
+    if (!websiteId || !userId) {
+      return false;
+    }
+
+    const { data, error } =
+      await supabase
+        .from("website_admins")
+        .select(
+          "id,website_id,user_id,role,active"
+        )
+        .eq(
+          "website_id",
+          websiteId
+        )
+        .eq(
+          "user_id",
+          userId
+        )
+        .eq(
+          "active",
+          true
+        )
+        .maybeSingle();
 
     if (error) {
       console.error(
         "ADMIN CHECK ERROR:",
         error
       );
+
       return false;
     }
 
-    return !!data;
+    if (!data) {
+      return false;
+    }
+
+    /*
+     * Kiểm tra lần cuối để tránh trường hợp
+     * dữ liệu không đúng website.
+     */
+    if (
+      data.website_id !== websiteId ||
+      data.user_id !== userId ||
+      data.active !== true
+    ) {
+      return false;
+    }
+
+    return true;
   }
 
   async function handleLogin(event) {
@@ -104,29 +182,49 @@ export default function WebsiteAdminLoginPage() {
 
     setError("");
 
-    if (!email.trim() || !password) {
+    const cleanEmail = email.trim();
+
+    if (!cleanEmail || !password) {
       setError(
         "Vui lòng nhập email và mật khẩu."
       );
+
+      return;
+    }
+
+    if (!website) {
+      setError(
+        "Không tìm thấy website."
+      );
+
       return;
     }
 
     setLoading(true);
 
     try {
+      /*
+       * Đăng nhập Supabase Auth.
+       */
       const {
         data,
         error: loginError,
-      } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
+      } =
+        await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password,
+        });
 
       if (loginError) {
-        setError(
-          loginError.message ||
-            "Email hoặc mật khẩu không đúng."
+        console.error(
+          "LOGIN ERROR:",
+          loginError
         );
+
+        setError(
+          "Email hoặc mật khẩu không đúng."
+        );
+
         return;
       }
 
@@ -134,9 +232,14 @@ export default function WebsiteAdminLoginPage() {
         setError(
           "Không thể đăng nhập."
         );
+
         return;
       }
 
+      /*
+       * Sau khi đăng nhập bắt buộc kiểm tra
+       * tài khoản có thuộc website hiện tại không.
+       */
       const allowed =
         await checkWebsiteAdmin(
           website.id,
@@ -144,6 +247,10 @@ export default function WebsiteAdminLoginPage() {
         );
 
       if (!allowed) {
+        /*
+         * Đây là tài khoản hợp lệ của hệ thống
+         * nhưng không có quyền Admin website này.
+         */
         await supabase.auth.signOut();
 
         setError(
@@ -153,13 +260,24 @@ export default function WebsiteAdminLoginPage() {
         return;
       }
 
+      /*
+       * Đúng Admin → vào dashboard của
+       * CHÍNH website đang đăng nhập.
+       */
       router.replace(
         `/sites/${slug}/admin`
       );
 
       router.refresh();
     } catch (err) {
-      console.error(err);
+      console.error(
+        "ADMIN LOGIN ERROR:",
+        err
+      );
+
+      try {
+        await supabase.auth.signOut();
+      } catch {}
 
       setError(
         "Có lỗi xảy ra khi đăng nhập."
@@ -190,7 +308,7 @@ export default function WebsiteAdminLoginPage() {
         {website?.logo_url ? (
           <img
             src={website.logo_url}
-            alt={website.name}
+            alt={website.name || "Shop"}
             style={styles.logoImage}
           />
         ) : (
@@ -204,7 +322,7 @@ export default function WebsiteAdminLoginPage() {
         </div>
 
         <h1 style={styles.title}>
-          {website?.name}
+          {website?.name || "Website"}
         </h1>
 
         <p style={styles.subtitle}>
@@ -294,7 +412,8 @@ const styles = {
     width: "300px",
     height: "300px",
     borderRadius: "50%",
-    background: "rgba(255, 50, 160, .12)",
+    background:
+      "rgba(255, 50, 160, .12)",
     filter: "blur(90px)",
     top: "-120px",
     left: "-100px",
@@ -305,7 +424,8 @@ const styles = {
     width: "300px",
     height: "300px",
     borderRadius: "50%",
-    background: "rgba(120, 50, 255, .10)",
+    background:
+      "rgba(120, 50, 255, .10)",
     filter: "blur(90px)",
     bottom: "-120px",
     right: "-100px",
@@ -316,7 +436,8 @@ const styles = {
     maxWidth: "420px",
     padding: "32px 25px",
     borderRadius: "22px",
-    background: "rgba(13, 13, 20, .96)",
+    background:
+      "rgba(13, 13, 20, .96)",
     border: "1px solid #2b2435",
     boxShadow:
       "0 30px 100px rgba(0,0,0,.55)",
