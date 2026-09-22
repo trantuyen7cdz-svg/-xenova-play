@@ -905,7 +905,19 @@ export default function ShopPage({ website = null }) {
     }
 
     /*
-      WEBSITE SHOP
+      WEBSITE SHOP MỚI
+
+      Luồng:
+      1. Gọi /purchase
+      2. Server kiểm tra user
+      3. Server kiểm tra ví
+      4. Server trừ tiền
+      5. Server lấy KEY
+      6. Trả KEY ngay
+      7. Hiện modal thành công
+
+      Không tạo pending order.
+      Không chuyển sang /checkout.
     */
 
     if (isWebsiteShop) {
@@ -915,7 +927,7 @@ export default function ShopPage({ website = null }) {
 
         const response =
           await fetch(
-            `/api/sites/${websiteSlug}/orders`,
+            `/api/sites/${websiteSlug}/purchase`,
             {
               method: "POST",
 
@@ -926,7 +938,9 @@ export default function ShopPage({ website = null }) {
 
               body: JSON.stringify({
                 product_id:
-                  buyModal.id,
+                  Number(
+                    buyModal.id
+                  ),
 
                 quantity: 1,
               }),
@@ -937,48 +951,81 @@ export default function ShopPage({ website = null }) {
           await response.json();
 
         if (
-          !response.ok ||
-          !data?.success
+          response.status === 401
         ) {
-          if (
-            response.status === 401
-          ) {
-            goTo("/login");
-            return;
-          }
+          setBuyModal(null);
+          goTo("/login");
+          return;
+        }
 
+        if (
+          !response.ok ||
+          !data?.ok
+        ) {
           throw new Error(
             data?.error ||
               data?.message ||
-              "Không thể tạo đơn hàng."
+              "Không thể mua KEY."
           );
         }
 
-        const orderId =
-          data?.order?.id;
+        const purchasedKey =
+          data?.key_value ||
+          data?.keys?.[0]?.key_code ||
+          data?.keys?.[0]?.key ||
+          "";
 
-        if (!orderId) {
-          throw new Error(
-            "Không nhận được mã đơn hàng."
+        if (
+          data?.wallet &&
+          data.wallet.balance_after !==
+            undefined
+        ) {
+          setWallet(
+            Number(
+              data.wallet.balance_after
+            )
           );
         }
 
         setBuyModal(null);
 
-        goTo(
-          `/checkout/${orderId}`
-        );
+        setSuccessModal({
+          product: {
+            ...buyModal,
+
+            id:
+              data?.order?.product_id ||
+              buyModal.id,
+
+            name:
+              data?.order?.product_name ||
+              buyModal.name,
+          },
+
+          key: purchasedKey,
+
+          keys:
+            data?.keys || [],
+
+          order:
+            data?.order || null,
+
+          wallet:
+            data?.wallet || null,
+        });
+
+        await loadShop();
 
         return;
       } catch (err) {
         console.error(
-          "WEBSITE ORDER ERROR:",
+          "WEBSITE PURCHASE ERROR:",
           err
         );
 
         setMessage(
           err.message ||
-            "Không thể tạo đơn hàng."
+            "Không thể mua KEY."
         );
       } finally {
         setBuying(false);
@@ -1171,12 +1218,16 @@ export default function ShopPage({ website = null }) {
             style={{
               left:
                 `${(index * 37) % 100}%`,
+
               animationDuration:
                 `${7 + (index % 7)}s`,
+
               animationDelay:
                 `${-(index % 9)}s`,
+
               width:
                 `${7 + (index % 5)}px`,
+
               height:
                 `${10 + (index % 6)}px`,
             }}
@@ -1218,10 +1269,6 @@ export default function ShopPage({ website = null }) {
               </span>
             )}
 
-            {/* 
-              SHOP MỚI KHÔNG HIỆN
-              "XENOVA PLAY" CẠNH LOGO
-            */}
             {!isWebsiteShop && (
               <span className="logo-text">
                 XENOVA
@@ -1293,6 +1340,7 @@ export default function ShopPage({ website = null }) {
               </button>
             )}
           </div>
+
         </div>
       </header>
 
@@ -1366,6 +1414,7 @@ export default function ShopPage({ website = null }) {
                 </div>
               </>
             )}
+
           </div>
         </section>
       )}
@@ -1409,6 +1458,7 @@ export default function ShopPage({ website = null }) {
                 </strong>
               </>
             )}
+
           </div>
         )}
 
@@ -1466,6 +1516,7 @@ export default function ShopPage({ website = null }) {
                       />
 
                       <div className="category-body">
+
                         <div className="category-title">
                           <h3>
                             {
@@ -1496,6 +1547,7 @@ export default function ShopPage({ website = null }) {
                         <div className="view">
                           XEM TẤT CẢ →
                         </div>
+
                       </div>
                     </button>
                   )
@@ -1510,6 +1562,7 @@ export default function ShopPage({ website = null }) {
           selectedParent && (
             <>
               <div className="heading">
+
                 <div>
                   <button
                     className="back"
@@ -1535,6 +1588,7 @@ export default function ShopPage({ website = null }) {
                   }{" "}
                   thư mục con
                 </span>
+
               </div>
 
               <div className="category-grid">
@@ -1559,6 +1613,7 @@ export default function ShopPage({ website = null }) {
                     />
 
                     <div className="category-body">
+
                       <div className="category-title">
                         <h3>
                           {
@@ -1589,6 +1644,7 @@ export default function ShopPage({ website = null }) {
                       <div className="view">
                         XEM SẢN PHẨM →
                       </div>
+
                     </div>
                   </button>
                 ))}
@@ -1600,6 +1656,7 @@ export default function ShopPage({ website = null }) {
         {view === "products" && (
           <>
             <div className="products-heading">
+
               <div>
                 <button
                   className="back"
@@ -1626,6 +1683,7 @@ export default function ShopPage({ website = null }) {
               </div>
 
               <div className="tools">
+
                 <div className="search">
                   🔎
 
@@ -1664,7 +1722,9 @@ export default function ShopPage({ website = null }) {
                     Tên A → Z
                   </option>
                 </select>
+
               </div>
+
             </div>
 
             {filteredProducts.length ===
@@ -1690,6 +1750,7 @@ export default function ShopPage({ website = null }) {
                         }
                         className="product-card"
                       >
+
                         <div className="cover">
 
                           <ProductMedia
@@ -1783,6 +1844,7 @@ export default function ShopPage({ website = null }) {
             )}
           </>
         )}
+
       </div>
 
       {/* ZALO */}
@@ -1913,10 +1975,33 @@ export default function ShopPage({ website = null }) {
             )}
 
             {isWebsiteShop && (
-              <InfoRow
-                label="Thanh toán"
-                value="Chuyển khoản"
-              />
+              <>
+                <InfoRow
+                  label="Số dư hiện tại"
+                  value={formatPrice(
+                    wallet
+                  )}
+                />
+
+                <InfoRow
+                  label="Sau khi mua"
+                  value={formatPrice(
+                    Math.max(
+                      0,
+                      wallet -
+                        Number(
+                          buyModal.price ||
+                            0
+                        )
+                    )
+                  )}
+                />
+
+                <InfoRow
+                  label="Thanh toán"
+                  value="Số dư tài khoản"
+                />
+              </>
             )}
 
             <div className="modal-actions">
@@ -1968,6 +2053,30 @@ export default function ShopPage({ website = null }) {
               }
             </p>
 
+            {successModal.order
+              ?.total_amount !==
+              undefined && (
+              <InfoRow
+                label="Đã thanh toán"
+                value={formatPrice(
+                  successModal.order
+                    .total_amount
+                )}
+              />
+            )}
+
+            {successModal.wallet
+              ?.balance_after !==
+              undefined && (
+              <InfoRow
+                label="Số dư còn lại"
+                value={formatPrice(
+                  successModal.wallet
+                    .balance_after
+                )}
+              />
+            )}
+
             {successModal.key && (
               <div className="key-box">
 
@@ -1993,6 +2102,51 @@ export default function ShopPage({ website = null }) {
 
               </div>
             )}
+
+            {!successModal.key &&
+              successModal.keys?.length >
+                0 && (
+                <div className="key-box">
+
+                  <span>
+                    KEY CỦA BẠN
+                  </span>
+
+                  {successModal.keys.map(
+                    (item, index) => (
+                      <div
+                        key={
+                          item.id ||
+                          index
+                        }
+                        style={{
+                          marginBottom:
+                            "8px",
+                        }}
+                      >
+                        <strong>
+                          {item.key_code ||
+                            item.key ||
+                            "KEY"}
+                        </strong>
+
+                        <button
+                          onClick={() =>
+                            navigator.clipboard.writeText(
+                              item.key_code ||
+                                item.key ||
+                                ""
+                            )
+                          }
+                        >
+                          📋 Sao chép
+                        </button>
+                      </div>
+                    )
+                  )}
+
+                </div>
+              )}
 
             <button
               className="confirm full"
