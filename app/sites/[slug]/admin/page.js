@@ -41,18 +41,26 @@ export default function WebsiteAdminPage() {
       }
 
       /*
-       * Lấy website hiện tại.
+       * Lấy đúng website theo slug.
        */
-      const { data: site, error: siteError } = await supabase
-        .from("websites")
-        .select("*")
-        .eq("slug", slug)
-        .eq("status", "active")
-        .maybeSingle();
+      const { data: site, error: siteError } =
+        await supabase
+          .from("websites")
+          .select("*")
+          .eq("slug", slug)
+          .eq("status", "active")
+          .maybeSingle();
 
       if (siteError) {
-        console.error("WEBSITE LOAD ERROR:", siteError);
-        router.replace(`/sites/${slug}/admin/login`);
+        console.error(
+          "WEBSITE LOAD ERROR:",
+          siteError
+        );
+
+        router.replace(
+          `/sites/${slug}/admin/login`
+        );
+
         return;
       }
 
@@ -62,25 +70,25 @@ export default function WebsiteAdminPage() {
       }
 
       /*
-       * Kiểm tra quyền Admin của ĐÚNG website.
+       * Kiểm tra quyền Admin của đúng website.
        *
-       * Không chỉ kiểm tra user là admin chung.
-       * Phải có:
-       *
+       * Bắt buộc:
        * website_admins.website_id = site.id
-       * website_admins.user_id    = session.user.id
-       * website_admins.active     = true
+       * website_admins.user_id = session.user.id
+       * website_admins.active = true
        */
-      const { data: adminData, error: adminError } =
-        await supabase
-          .from("website_admins")
-          .select(
-            "id, website_id, user_id, email, role, active"
-          )
-          .eq("website_id", site.id)
-          .eq("user_id", session.user.id)
-          .eq("active", true)
-          .maybeSingle();
+      const {
+        data: adminData,
+        error: adminError,
+      } = await supabase
+        .from("website_admins")
+        .select(
+          "id, website_id, user_id, email, role, active"
+        )
+        .eq("website_id", site.id)
+        .eq("user_id", session.user.id)
+        .eq("active", true)
+        .maybeSingle();
 
       if (adminError) {
         console.error(
@@ -90,27 +98,36 @@ export default function WebsiteAdminPage() {
 
         await supabase.auth.signOut();
 
-        router.replace(`/sites/${slug}/admin/login`);
+        router.replace(
+          `/sites/${slug}/admin/login`
+        );
+
         return;
       }
 
       /*
-       * User không thuộc website này.
+       * Không có quyền Admin website này.
        */
       if (!adminData) {
         await supabase.auth.signOut();
 
-        router.replace(`/sites/${slug}/admin/login`);
+        router.replace(
+          `/sites/${slug}/admin/login`
+        );
+
         return;
       }
 
       /*
-       * Kiểm tra thêm website_id.
+       * Kiểm tra lại website_id lần cuối.
        */
       if (adminData.website_id !== site.id) {
         await supabase.auth.signOut();
 
-        router.replace(`/sites/${slug}/admin/login`);
+        router.replace(
+          `/sites/${slug}/admin/login`
+        );
+
         return;
       }
 
@@ -151,9 +168,14 @@ export default function WebsiteAdminPage() {
       ]);
 
       setStats({
-        categories: categoriesResult.count || 0,
-        products: productsResult.count || 0,
-        orders: ordersResult.count || 0,
+        categories:
+          categoriesResult.count || 0,
+
+        products:
+          productsResult.count || 0,
+
+        orders:
+          ordersResult.count || 0,
       });
     } catch (error) {
       console.error(
@@ -163,7 +185,9 @@ export default function WebsiteAdminPage() {
 
       await supabase.auth.signOut();
 
-      router.replace(`/sites/${slug}/admin/login`);
+      router.replace(
+        `/sites/${slug}/admin/login`
+      );
     } finally {
       setLoading(false);
     }
@@ -173,7 +197,9 @@ export default function WebsiteAdminPage() {
     try {
       await supabase.auth.signOut();
     } finally {
-      router.replace(`/sites/${slug}/admin/login`);
+      router.replace(
+        `/sites/${slug}/admin/login`
+      );
     }
   }
 
@@ -188,8 +214,8 @@ export default function WebsiteAdminPage() {
   }
 
   /*
-   * Không có website hoặc admin thì không render
-   * nội dung quản trị.
+   * Không có website hoặc admin
+   * thì không render nội dung quản trị.
    */
   if (!website || !admin) {
     return (
@@ -214,8 +240,9 @@ export default function WebsiteAdminPage() {
               />
             ) : (
               <div style={styles.logoFallback}>
-                {website?.name?.charAt(0)?.toUpperCase() ||
-                  "A"}
+                {website?.name
+                  ?.charAt(0)
+                  ?.toUpperCase() || "A"}
               </div>
             )}
 
@@ -290,6 +317,13 @@ export default function WebsiteAdminPage() {
             />
 
             <Menu
+              href={`/sites/${slug}/admin/deposits`}
+              icon="💰"
+              title="Nạp tiền"
+              text="Duyệt yêu cầu nạp tiền"
+            />
+
+            <Menu
               href={`/sites/${slug}/admin/settings`}
               icon="⚙️"
               title="Cài đặt"
@@ -324,7 +358,11 @@ export default function WebsiteAdminPage() {
   );
 }
 
-function Stat({ icon, label, value }) {
+function Stat({
+  icon,
+  label,
+  value,
+}) {
   return (
     <div style={styles.stat}>
       <div style={styles.statIcon}>
