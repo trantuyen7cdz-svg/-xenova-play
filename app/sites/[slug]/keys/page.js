@@ -24,30 +24,22 @@ export default function SiteKeysPage() {
     setLoading(true);
 
     try {
-      const [websiteRes, userRes, keysRes] =
+      const [userRes, keysRes] =
         await Promise.all([
-          fetch(`/api/sites/${slug}`, {
-            cache: "no-store",
-          }),
+          fetch(
+            `/api/sites/${slug}/auth/me`,
+            {
+              cache: "no-store",
+            }
+          ),
 
-          fetch(`/api/sites/${slug}/auth/me`, {
-            cache: "no-store",
-          }),
-
-          fetch(`/api/sites/${slug}/keys`, {
-            cache: "no-store",
-          }),
+          fetch(
+            `/api/sites/${slug}/keys`,
+            {
+              cache: "no-store",
+            }
+          ),
         ]);
-
-      if (websiteRes.ok) {
-        const websiteData =
-          await websiteRes.json();
-
-        setWebsite(
-          websiteData.website ||
-            websiteData
-        );
-      }
 
       if (userRes.ok) {
         const userData =
@@ -56,6 +48,12 @@ export default function SiteKeysPage() {
         setUser(
           userData.user || null
         );
+
+        setWebsite(
+          userData.website || null
+        );
+      } else {
+        setUser(null);
       }
 
       if (keysRes.ok) {
@@ -63,20 +61,39 @@ export default function SiteKeysPage() {
           await keysRes.json();
 
         setKeys(
-          keysData.keys || []
+          Array.isArray(keysData.keys)
+            ? keysData.keys
+            : []
         );
+
+        if (
+          !website &&
+          keysData.website
+        ) {
+          setWebsite(
+            keysData.website
+          );
+        }
+      } else if (
+        keysRes.status === 401
+      ) {
+        setKeys([]);
       }
     } catch (error) {
       console.error(
         "LOAD SITE KEYS ERROR:",
         error
       );
+
+      setKeys([]);
     } finally {
       setLoading(false);
     }
   }
 
   function go(path = "") {
+    if (!slug) return;
+
     router.push(
       `/sites/${slug}${path}`
     );
@@ -90,11 +107,91 @@ export default function SiteKeysPage() {
           method: "POST",
         }
       );
-    } catch {}
+    } catch (error) {
+      console.error(
+        "SITE LOGOUT ERROR:",
+        error
+      );
+    }
+
+    setUser(null);
+    setKeys([]);
 
     router.push(
       `/sites/${slug}/login`
     );
+
+    router.refresh();
+  }
+
+  function formatDate(value) {
+    if (!value) return "—";
+
+    const date = new Date(value);
+
+    if (
+      Number.isNaN(
+        date.getTime()
+      )
+    ) {
+      return "—";
+    }
+
+    return date.toLocaleString(
+      "vi-VN"
+    );
+  }
+
+  function statusText(status) {
+    const map = {
+      active: "Đang hoạt động",
+      sold: "Đã bán",
+      used: "Đã sử dụng",
+      expired: "Đã hết hạn",
+      available: "Có hiệu lực",
+      inactive: "Không hoạt động",
+    };
+
+    return (
+      map[status] ||
+      status ||
+      "Không rõ"
+    );
+  }
+
+  function statusClass(status) {
+    if (
+      status === "active" ||
+      status === "sold" ||
+      status === "available"
+    ) {
+      return "status activeStatus";
+    }
+
+    if (
+      status === "expired" ||
+      status === "used" ||
+      status === "inactive"
+    ) {
+      return "status dangerStatus";
+    }
+
+    return "status";
+  }
+
+  async function copyKey(value) {
+    if (!value) return;
+
+    try {
+      await navigator.clipboard.writeText(
+        value
+      );
+      alert("Đã sao chép KEY.");
+    } catch {
+      alert(
+        "Không thể sao chép tự động. Hãy giữ vào KEY để sao chép."
+      );
+    }
   }
 
   const shopName =
@@ -169,7 +266,8 @@ export default function SiteKeysPage() {
               >
                 👤{" "}
                 {user.username ||
-                  user.email}
+                  user.email ||
+                  "Tài khoản"}
               </button>
 
               <button
@@ -198,7 +296,7 @@ export default function SiteKeysPage() {
             <h1>Kho KEY</h1>
 
             <p>
-              Các key bạn đã mua tại{" "}
+              Các KEY bạn đã mua tại{" "}
               {shopName}
             </p>
           </div>
@@ -223,7 +321,7 @@ export default function SiteKeysPage() {
 
             <p>
               Đăng nhập để xem kho
-              key của bạn.
+              KEY của bạn.
             </p>
 
             <button
@@ -232,7 +330,7 @@ export default function SiteKeysPage() {
                 go("/login")
               }
             >
-              Đăng nhập
+              ĐĂNG NHẬP
             </button>
           </div>
         ) : loading ? (
@@ -240,7 +338,7 @@ export default function SiteKeysPage() {
             <div className="loader" />
 
             <p>
-              Đang tải kho key...
+              Đang tải kho KEY...
             </p>
           </div>
         ) : keys.length === 0 ? (
@@ -254,15 +352,15 @@ export default function SiteKeysPage() {
             </h2>
 
             <p>
-              Bạn chưa có key nào
-              trong kho.
+              Tài khoản này chưa có
+              KEY nào tại shop.
             </p>
 
             <button
               className="primary"
               onClick={() => go("")}
             >
-              Mua KEY
+              MUA KEY
             </button>
           </div>
         ) : (
@@ -282,56 +380,40 @@ export default function SiteKeysPage() {
 
                     <div className="date">
                       Mua ngày:{" "}
-                      {item.created_at
-                        ? new Date(
-                            item.created_at
-                          ).toLocaleString(
-                            "vi-VN"
-                          )
-                        : "—"}
+                      {formatDate(
+                        item.created_at
+                      )}
                     </div>
                   </div>
 
                   <span
-                    className={
-                      item.status ===
-                        "active" ||
-                      item.status ===
-                        "sold"
-                        ? "status activeStatus"
-                        : "status"
-                    }
+                    className={statusClass(
+                      item.status
+                    )}
                   >
-                    {item.status ||
-                      "available"}
+                    {statusText(
+                      item.status
+                    )}
                   </span>
                 </div>
 
                 <div className="keyBox">
                   <span>
                     {item.key_code ||
-                      "—"}
+                      "Không có KEY"}
                   </span>
 
-                  <button
-                    onClick={() => {
-                      if (
-                        !item.key_code
-                      ) {
-                        return;
-                      }
-
-                      navigator.clipboard
-                        ?.writeText(
+                  {item.key_code && (
+                    <button
+                      onClick={() =>
+                        copyKey(
                           item.key_code
                         )
-                        .catch(
-                          () => {}
-                        );
-                    }}
-                  >
-                    Sao chép
-                  </button>
+                      }
+                    >
+                      Sao chép
+                    </button>
+                  )}
                 </div>
 
                 <div className="keyInfo">
@@ -342,10 +424,8 @@ export default function SiteKeysPage() {
 
                     <strong>
                       {item.expires_at
-                        ? new Date(
+                        ? formatDate(
                             item.expires_at
-                          ).toLocaleString(
-                            "vi-VN"
                           )
                         : "Không giới hạn"}
                     </strong>
@@ -358,15 +438,31 @@ export default function SiteKeysPage() {
 
                     <strong>
                       {item.sold_at
-                        ? new Date(
+                        ? formatDate(
                             item.sold_at
-                          ).toLocaleString(
-                            "vi-VN"
                           )
                         : "—"}
                     </strong>
                   </div>
                 </div>
+
+                {item.order_id && (
+                  <div className="orderLink">
+                    <span>
+                      Mã đơn hàng
+                    </span>
+
+                    <button
+                      onClick={() =>
+                        go(
+                          `/checkout/${item.order_id}`
+                        )
+                      }
+                    >
+                      #{item.order_id}
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -424,6 +520,7 @@ export default function SiteKeysPage() {
               transparent 35%
             ),
             #fff;
+
           color: #242424;
           padding-bottom: 100px;
         }
@@ -472,7 +569,9 @@ export default function SiteKeysPage() {
         .logo {
           width: 42px;
           height: 42px;
+
           object-fit: contain;
+
           border-radius: 12px;
         }
 
@@ -493,6 +592,7 @@ export default function SiteKeysPage() {
           );
 
           color: white;
+
           font-size: 20px;
           font-weight: 900;
         }
@@ -501,6 +601,7 @@ export default function SiteKeysPage() {
           display: flex;
           align-items: center;
           gap: 5px;
+
           flex: 1;
         }
 
@@ -515,6 +616,7 @@ export default function SiteKeysPage() {
           cursor: pointer;
 
           color: #555;
+
           font-weight: 600;
         }
 
@@ -532,9 +634,13 @@ export default function SiteKeysPage() {
 
         .account button {
           border: 0;
+
           cursor: pointer;
+
           border-radius: 10px;
+
           padding: 9px 12px;
+
           font-weight: 600;
         }
 
@@ -555,7 +661,9 @@ export default function SiteKeysPage() {
 
         .content {
           max-width: 1150px;
+
           margin: auto;
+
           padding: 35px 18px;
         }
 
@@ -563,27 +671,37 @@ export default function SiteKeysPage() {
           display: flex;
           align-items: center;
           justify-content: space-between;
+
           gap: 15px;
+
           margin-bottom: 25px;
         }
 
         h1 {
           margin: 0 0 5px;
+
           font-size: 30px;
         }
 
         .title p {
           margin: 0;
+
           color: #777;
         }
 
         .back {
           border: 1px solid #ffd0e4;
+
           background: white;
+
           color: #e52e81;
+
           padding: 10px 15px;
+
           border-radius: 10px;
+
           cursor: pointer;
+
           font-weight: 700;
         }
 
@@ -593,14 +711,17 @@ export default function SiteKeysPage() {
           display: flex;
           align-items: center;
           justify-content: center;
+
           flex-direction: column;
 
           text-align: center;
 
           border: 1px solid #f2dce6;
+
           border-radius: 20px;
 
           background: white;
+
           box-shadow:
             0 10px 35px
               rgba(
@@ -613,6 +734,7 @@ export default function SiteKeysPage() {
 
         .emptyIcon {
           font-size: 45px;
+
           margin-bottom: 10px;
         }
 
@@ -622,35 +744,45 @@ export default function SiteKeysPage() {
 
         .empty p {
           color: #777;
+
           margin: 5px 0 18px;
         }
 
         .primary {
           border: 0;
+
           border-radius: 11px;
 
           background: #ff3d91;
+
           color: white;
 
           padding: 12px 20px;
 
           font-weight: 800;
+
           cursor: pointer;
         }
 
         .keys {
           display: grid;
-          grid-template-columns: repeat(
-            2,
-            minmax(0, 1fr)
-          );
+
+          grid-template-columns:
+            repeat(
+              2,
+              minmax(0, 1fr)
+            );
+
           gap: 16px;
         }
 
         .keyCard {
           background: white;
+
           border: 1px solid #f0dbe5;
+
           border-radius: 18px;
+
           padding: 18px;
 
           box-shadow:
@@ -665,63 +797,93 @@ export default function SiteKeysPage() {
 
         .keyTop {
           display: flex;
+
           justify-content: space-between;
+
           gap: 15px;
         }
 
         .productName {
           font-size: 17px;
+
           font-weight: 800;
         }
 
         .date {
           margin-top: 5px;
+
           color: #888;
+
           font-size: 13px;
         }
 
         .status {
           height: fit-content;
+
           padding: 6px 9px;
+
           border-radius: 999px;
+
           background: #f2f2f2;
+
           color: #777;
+
           font-size: 12px;
+
           font-weight: 700;
+
+          white-space: nowrap;
         }
 
         .activeStatus {
           background: #e9fff2;
+
           color: #14964f;
+        }
+
+        .dangerStatus {
+          background: #fff0f0;
+
+          color: #dc3a3a;
         }
 
         .keyBox {
           display: flex;
+
           align-items: center;
+
           gap: 10px;
 
           margin-top: 18px;
+
           padding: 12px;
 
           border-radius: 12px;
 
           background: #faf7f9;
+
           border: 1px dashed #e7cbd8;
         }
 
         .keyBox span {
           flex: 1;
+
           min-width: 0;
 
           overflow-wrap: anywhere;
 
           font-family: monospace;
+
           font-weight: 700;
         }
 
         .keyBox button {
+          flex-shrink: 0;
+
           border: 0;
+
           background: #ff3d91;
+
           color: white;
 
           border-radius: 8px;
@@ -729,12 +891,16 @@ export default function SiteKeysPage() {
           padding: 8px 10px;
 
           cursor: pointer;
+
           font-weight: 700;
         }
 
         .keyInfo {
           display: grid;
-          grid-template-columns: 1fr 1fr;
+
+          grid-template-columns:
+            1fr 1fr;
+
           gap: 10px;
 
           margin-top: 15px;
@@ -742,29 +908,77 @@ export default function SiteKeysPage() {
 
         .keyInfo div {
           display: flex;
+
           flex-direction: column;
+
           gap: 4px;
         }
 
         .keyInfo span {
           font-size: 12px;
+
           color: #888;
         }
 
         .keyInfo strong {
           font-size: 13px;
+
+          overflow-wrap: anywhere;
+        }
+
+        .orderLink {
+          display: flex;
+
+          align-items: center;
+
+          justify-content: space-between;
+
+          gap: 10px;
+
+          margin-top: 15px;
+
+          padding-top: 13px;
+
+          border-top: 1px solid
+            #f1e4e9;
+        }
+
+        .orderLink span {
+          color: #888;
+
+          font-size: 12px;
+        }
+
+        .orderLink button {
+          border: 0;
+
+          background: #fff0f7;
+
+          color: #e52e81;
+
+          padding: 7px 10px;
+
+          border-radius: 8px;
+
+          cursor: pointer;
+
+          font-weight: 800;
         }
 
         .loader {
           width: 30px;
+
           height: 30px;
 
           border: 3px solid #ffd5e7;
+
           border-top-color: #ff3d91;
 
           border-radius: 50%;
 
-          animation: spin 0.8s linear infinite;
+          animation:
+            spin 0.8s linear
+            infinite;
 
           margin-bottom: 12px;
         }
@@ -777,14 +991,20 @@ export default function SiteKeysPage() {
 
         .bottomNav {
           position: fixed;
+
           left: 50%;
+
           bottom: 14px;
-          transform: translateX(-50%);
+
+          transform:
+            translateX(-50%);
 
           z-index: 100;
 
           display: flex;
+
           align-items: center;
+
           gap: 5px;
 
           padding: 7px;
@@ -798,23 +1018,34 @@ export default function SiteKeysPage() {
 
           backdrop-filter: blur(15px);
 
-          border: 1px solid #f0dbe5;
+          border: 1px solid
+            #f0dbe5;
+
           border-radius: 18px;
 
           box-shadow:
             0 10px 35px
-              rgba(0, 0, 0, 0.1);
+              rgba(
+                0,
+                0,
+                0,
+                0.1
+              );
         }
 
         .bottomNav button {
           min-width: 75px;
 
           display: flex;
+
           flex-direction: column;
+
           align-items: center;
+
           gap: 3px;
 
           border: 0;
+
           background: transparent;
 
           padding: 8px 10px;
@@ -824,17 +1055,20 @@ export default function SiteKeysPage() {
           color: #777;
 
           cursor: pointer;
+
           font-size: 17px;
         }
 
         .bottomNav span {
           font-size: 10px;
+
           font-weight: 700;
         }
 
         .bottomNav button:hover,
         .bottomNav .bottomActive {
           color: #ff3d91;
+
           background: #fff0f7;
         }
 
@@ -849,8 +1083,11 @@ export default function SiteKeysPage() {
 
           .accountButton {
             max-width: 120px;
+
             overflow: hidden;
+
             text-overflow: ellipsis;
+
             white-space: nowrap;
           }
 
@@ -870,6 +1107,7 @@ export default function SiteKeysPage() {
 
           .title {
             align-items: flex-start;
+
             flex-direction: column;
           }
 
@@ -877,13 +1115,23 @@ export default function SiteKeysPage() {
             padding: 25px 12px;
           }
 
+          .keyInfo {
+            grid-template-columns:
+              1fr;
+          }
+
           .bottomNav {
-            width: calc(100% - 20px);
-            justify-content: space-around;
+            width: calc(
+              100% - 20px
+            );
+
+            justify-content:
+              space-around;
           }
 
           .bottomNav button {
             flex: 1;
+
             min-width: 0;
           }
         }
