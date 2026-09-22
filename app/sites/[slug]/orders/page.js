@@ -3,1570 +3,933 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
-function formatPrice(value) {
-  return (
-    new Intl.NumberFormat("vi-VN").format(
-      Number(value || 0)
-    ) + "đ"
-  );
-}
-
-function formatDate(value) {
-  if (!value) return "-";
-
-  try {
-    return new Date(value).toLocaleString(
-      "vi-VN"
-    );
-  } catch {
-    return value;
-  }
-}
-
-function getStatusLabel(status) {
-  const value = String(
-    status || ""
-  ).toLowerCase();
-
-  if (
-    value === "completed" ||
-    value === "success" ||
-    value === "paid"
-  ) {
-    return "Hoàn thành";
-  }
-
-  if (
-    value === "pending" ||
-    value === "processing"
-  ) {
-    return "Đang xử lý";
-  }
-
-  if (
-    value === "cancelled" ||
-    value === "canceled"
-  ) {
-    return "Đã hủy";
-  }
-
-  if (
-    value === "failed" ||
-    value === "error"
-  ) {
-    return "Thất bại";
-  }
-
-  return status || "Chưa xác định";
-}
-
-function getStatusClass(status) {
-  const value = String(
-    status || ""
-  ).toLowerCase();
-
-  if (
-    value === "completed" ||
-    value === "success" ||
-    value === "paid"
-  ) {
-    return "success";
-  }
-
-  if (
-    value === "cancelled" ||
-    value === "canceled" ||
-    value === "failed" ||
-    value === "error"
-  ) {
-    return "danger";
-  }
-
-  return "pending";
-}
-
-export default function WebsiteOrdersPage() {
-  const router = useRouter();
+export default function SiteOrdersPage() {
   const params = useParams();
+  const router = useRouter();
 
-  const slug =
-    typeof params?.slug === "string"
-      ? params.slug
-      : "";
+  const slug = params?.slug;
 
-  const [user, setUser] = useState(null);
   const [website, setWebsite] = useState(null);
+  const [user, setUser] = useState(null);
   const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const [loading, setLoading] =
-    useState(true);
-
-  const [error, setError] =
-    useState("");
-
-  const [refreshing, setRefreshing] =
-    useState(false);
-
-  /*
-  =========================================
-  LOAD USER
-  =========================================
-  */
-
-  async function loadUser() {
-    const response = await fetch(
-      `/api/sites/${slug}/auth/me`,
-      {
-        method: "GET",
-        cache: "no-store",
-      }
-    );
-
-    const data =
-      await response.json();
-
-    if (
-      !response.ok ||
-      !data?.success ||
-      !data?.user
-    ) {
-      return null;
-    }
-
-    return data.user;
-  }
-
-  /*
-  =========================================
-  LOAD ORDERS
-  =========================================
-  */
-
-  async function loadOrders(
-    showRefresh = false
-  ) {
+  useEffect(() => {
     if (!slug) return;
 
+    load();
+  }, [slug]);
+
+  async function load() {
+    setLoading(true);
+
     try {
-      if (showRefresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
-
-      setError("");
-
-      /*
-      -----------------------------------------
-      KIỂM TRA ĐĂNG NHẬP WEBSITE
-      -----------------------------------------
-      */
-
-      const userResponse =
-        await fetch(
-          `/api/sites/${slug}/auth/me`,
-          {
-            method: "GET",
+      const [websiteRes, userRes, ordersRes] =
+        await Promise.all([
+          fetch(`/api/sites/${slug}`, {
             cache: "no-store",
-          }
-        );
+          }),
 
-      const userData =
-        await userResponse.json();
-
-      if (
-        !userResponse.ok ||
-        !userData?.success ||
-        !userData?.user
-      ) {
-        router.replace(
-          `/sites/${slug}/login`
-        );
-
-        return;
-      }
-
-      setUser(userData.user);
-
-      /*
-      -----------------------------------------
-      LẤY ĐƠN HÀNG WEBSITE
-      -----------------------------------------
-      */
-
-      const response =
-        await fetch(
-          `/api/sites/${slug}/orders`,
-          {
-            method: "GET",
+          fetch(`/api/sites/${slug}/auth/me`, {
             cache: "no-store",
-          }
-        );
+          }),
 
-      const data =
-        await response.json();
+          fetch(`/api/sites/${slug}/orders`, {
+            cache: "no-store",
+          }),
+        ]);
 
-      if (
-        response.status === 401
-      ) {
-        router.replace(
-          `/sites/${slug}/login`
-        );
+      if (websiteRes.ok) {
+        const data = await websiteRes.json();
 
-        return;
-      }
-
-      if (
-        !response.ok ||
-        !data?.success
-      ) {
-        throw new Error(
-          data?.error ||
-            data?.message ||
-            "Không thể tải đơn hàng."
+        setWebsite(
+          data.website || data
         );
       }
 
-      setWebsite(
-        data.website || null
-      );
+      if (userRes.ok) {
+        const data = await userRes.json();
 
-      setOrders(
-        Array.isArray(data.orders)
-          ? data.orders
-          : []
-      );
-    } catch (err) {
+        setUser(data.user || null);
+      }
+
+      if (ordersRes.ok) {
+        const data = await ordersRes.json();
+
+        setOrders(data.orders || []);
+      } else if (ordersRes.status === 401) {
+        setUser(null);
+      }
+    } catch (error) {
       console.error(
-        "WEBSITE ORDERS PAGE ERROR:",
-        err
-      );
-
-      setError(
-        err?.message ||
-          "Không thể tải đơn hàng."
+        "LOAD ORDERS ERROR:",
+        error
       );
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }
 
-  useEffect(() => {
-    loadOrders();
-  }, [slug]);
-
-  /*
-  =========================================
-  NAVIGATION
-  =========================================
-  */
-
-  function goHome() {
+  function go(path = "") {
     router.push(
-      `/sites/${slug}`
+      `/sites/${slug}${path}`
     );
   }
 
-  function goShop() {
+  async function logout() {
+    await fetch(
+      `/api/sites/${slug}/auth/logout`,
+      {
+        method: "POST",
+      }
+    );
+
     router.push(
-      `/sites/${slug}/shop`
+      `/sites/${slug}/login`
     );
   }
 
-  function goKeys() {
-    router.push(
-      `/sites/${slug}/keys`
+  function formatMoney(value) {
+    const number = Number(value || 0);
+
+    return number.toLocaleString("vi-VN") + "đ";
+  }
+
+  function formatDate(value) {
+    if (!value) return "—";
+
+    return new Date(value).toLocaleString(
+      "vi-VN"
     );
   }
 
-  function goAccount() {
-    router.push(
-      `/sites/${slug}/account`
-    );
+  function statusText(status) {
+    const map = {
+      pending: "Chờ xử lý",
+      paid: "Đã thanh toán",
+      completed: "Hoàn thành",
+      success: "Thành công",
+      cancelled: "Đã hủy",
+      canceled: "Đã hủy",
+      failed: "Thất bại",
+    };
+
+    return map[status] || status || "Không rõ";
   }
 
-  /*
-  =========================================
-  LOADING
-  =========================================
-  */
+  function statusClass(status) {
+    if (
+      status === "completed" ||
+      status === "success" ||
+      status === "paid"
+    ) {
+      return "status success";
+    }
 
-  if (loading) {
-    return (
-      <>
-        <main className="loading-page">
-          <div className="spinner" />
+    if (
+      status === "cancelled" ||
+      status === "canceled" ||
+      status === "failed"
+    ) {
+      return "status danger";
+    }
 
-          <p>
-            Đang tải đơn hàng...
-          </p>
-        </main>
-
-        <style jsx>{styles}</style>
-      </>
-    );
+    return "status pending";
   }
+
+  const shopName =
+    website?.name || "Shop";
 
   return (
     <main className="page">
+      <header className="header">
+        <button
+          className="brand"
+          onClick={() => go("")}
+        >
+          {website?.logo_url ? (
+            <img
+              src={website.logo_url}
+              alt={shopName}
+              className="logo"
+            />
+          ) : (
+            <div className="logoFallback">
+              {shopName.charAt(0).toUpperCase()}
+            </div>
+          )}
 
-      {/* TOPBAR */}
+          <span>{shopName}</span>
+        </button>
 
-      <header className="topbar">
-        <div className="topbar-inner">
-
-          <button
-            className="logo"
-            onClick={goHome}
-          >
-            <span className="logo-icon">
-              {website?.name
-                ? String(
-                    website.name
-                  )
-                    .trim()
-                    .charAt(0)
-                    .toUpperCase()
-                : "S"}
-            </span>
-
-            <span className="logo-name">
-              {website?.name ||
-                "Shop"}
-            </span>
+        <nav className="nav">
+          <button onClick={() => go("")}>
+            Trang chủ
           </button>
 
-          <nav className="nav">
-
-            <button
-              onClick={goHome}
-            >
-              Trang chủ
-            </button>
-
-            <button
-              onClick={goShop}
-            >
-              Cửa hàng
-            </button>
-
-            <button
-              onClick={goKeys}
-            >
-              Kho KEY
-            </button>
-
-            <button className="active">
-              Đơn hàng
-            </button>
-
-          </nav>
-
-          <button
-            className="account"
-            onClick={goAccount}
-          >
-            👤
+          <button onClick={() => go("/shop")}>
+            Cửa hàng
           </button>
 
+          <button onClick={() => go("/keys")}>
+            Kho KEY
+          </button>
+
+          <button className="active">
+            Đơn hàng
+          </button>
+
+          <button onClick={() => go("/deposit")}>
+            Nạp tiền
+          </button>
+        </nav>
+
+        <div className="account">
+          {user ? (
+            <>
+              <button
+                className="accountButton"
+                onClick={() =>
+                  go("/account")
+                }
+              >
+                👤{" "}
+                {user.username ||
+                  user.email}
+              </button>
+
+              <button
+                className="logout"
+                onClick={logout}
+              >
+                Đăng xuất
+              </button>
+            </>
+          ) : (
+            <button
+              className="login"
+              onClick={() =>
+                go("/login")
+              }
+            >
+              Đăng nhập
+            </button>
+          )}
         </div>
       </header>
 
-      {/* CONTENT */}
-
-      <section className="container">
-
-        <div className="heading">
-
+      <section className="content">
+        <div className="title">
           <div>
-            <button
-              className="back"
-              onClick={goHome}
-            >
-              ← QUAY LẠI SHOP
-            </button>
-
-            <h1>
-              Đơn hàng của tôi
-            </h1>
+            <h1>Đơn hàng</h1>
 
             <p>
-              {user?.username ||
-                user?.email ||
-                "Tài khoản"}
+              Lịch sử đơn hàng tại{" "}
+              {shopName}
             </p>
           </div>
 
           <button
-            className="refresh"
-            onClick={() =>
-              loadOrders(true)
-            }
-            disabled={refreshing}
+            className="back"
+            onClick={() => go("/shop")}
           >
-            {refreshing
-              ? "ĐANG TẢI..."
-              : "↻ LÀM MỚI"}
+            ← Cửa hàng
           </button>
-
         </div>
 
-        {error && (
-          <div className="error">
-            {error}
-          </div>
-        )}
-
-        {/* EMPTY */}
-
-        {!error &&
-          orders.length === 0 && (
-            <div className="empty">
-
-              <div className="empty-icon">
-                🛒
-              </div>
-
-              <h2>
-                Chưa có đơn hàng
-              </h2>
-
-              <p>
-                Bạn chưa mua sản phẩm
-                nào tại shop này.
-              </p>
-
-              <button
-                className="shop-button"
-                onClick={goShop}
-              >
-                ĐI TỚI CỬA HÀNG
-              </button>
-
+        {!user && !loading ? (
+          <div className="empty">
+            <div className="emptyIcon">
+              🔐
             </div>
-          )}
 
-        {/* ORDERS */}
+            <h2>Bạn chưa đăng nhập</h2>
 
-        {orders.length > 0 && (
+            <p>
+              Đăng nhập để xem đơn hàng.
+            </p>
+
+            <button
+              className="primary"
+              onClick={() =>
+                go("/login")
+              }
+            >
+              Đăng nhập
+            </button>
+          </div>
+        ) : loading ? (
+          <div className="empty">
+            <div className="loader" />
+            <p>
+              Đang tải đơn hàng...
+            </p>
+          </div>
+        ) : orders.length === 0 ? (
+          <div className="empty">
+            <div className="emptyIcon">
+              📦
+            </div>
+
+            <h2>Chưa có đơn hàng</h2>
+
+            <p>
+              Bạn chưa mua sản phẩm nào
+              tại shop này.
+            </p>
+
+            <button
+              className="primary"
+              onClick={() =>
+                go("/shop")
+              }
+            >
+              Đi đến cửa hàng
+            </button>
+          </div>
+        ) : (
           <div className="orders">
-
-            {orders.map(
-              (order) => (
-                <article
-                  key={order.id}
-                  className="order-card"
-                >
-
-                  <div className="order-top">
-
-                    <div>
-
-                      <span className="order-label">
-                        MÃ ĐƠN
-                      </span>
-
-                      <strong>
-                        #{order.id}
-                      </strong>
-
+            {orders.map((order) => (
+              <div
+                className="order"
+                key={order.id}
+              >
+                <div className="orderHead">
+                  <div>
+                    <div className="orderId">
+                      Đơn #{order.id}
                     </div>
 
-                    <span
-                      className={`status ${getStatusClass(
-                        order.status
-                      )}`}
-                    >
-                      {getStatusLabel(
-                        order.status
+                    <div className="date">
+                      {formatDate(
+                        order.created_at
                       )}
+                    </div>
+                  </div>
+
+                  <span
+                    className={statusClass(
+                      order.status
+                    )}
+                  >
+                    {statusText(
+                      order.status
+                    )}
+                  </span>
+                </div>
+
+                <div className="product">
+                  <div className="productIcon">
+                    🔑
+                  </div>
+
+                  <div className="productInfo">
+                    <strong>
+                      {order.product_name ||
+                        "Sản phẩm"}
+                    </strong>
+
+                    <span>
+                      Số lượng:{" "}
+                      {order.quantity || 1}
                     </span>
-
                   </div>
 
-                  <div className="order-main">
-
-                    <div className="product-info">
-
-                      {order.product
-                        ?.image_url ? (
-                        <img
-                          src={
-                            order
-                              .product
-                              .image_url
-                          }
-                          alt={
-                            order.product_name ||
-                            "Sản phẩm"
-                          }
-                        />
-                      ) : (
-                        <div className="product-placeholder">
-                          🛒
-                        </div>
-                      )}
-
-                      <div>
-
-                        <h3>
-                          {order.product_name ||
-                            order.product
-                              ?.name ||
-                            "Sản phẩm"}
-                        </h3>
-
-                        <p>
-                          Số lượng:{" "}
-                          {Number(
-                            order.quantity ||
-                              1
-                          )}
-                        </p>
-
-                      </div>
-
-                    </div>
-
-                    <div className="price-box">
-
-                      <span>
-                        Tổng tiền
-                      </span>
-
-                      <strong>
-                        {formatPrice(
-                          order.total_amount
-                        )}
-                      </strong>
-
-                    </div>
-
-                  </div>
-
-                  <div className="order-info">
-
-                    <div>
-                      <span>
-                        Ngày đặt
-                      </span>
-
-                      <strong>
-                        {formatDate(
-                          order.created_at
-                        )}
-                      </strong>
-                    </div>
-
-                    <div>
-                      <span>
-                        Đơn giá
-                      </span>
-
-                      <strong>
-                        {formatPrice(
-                          order.unit_price
-                        )}
-                      </strong>
-                    </div>
-
-                    {order.key_value && (
-                      <div>
-                        <span>
-                          KEY
-                        </span>
-
-                        <strong className="key">
-                          {order.key_value}
-                        </strong>
-                      </div>
+                  <div className="price">
+                    {formatMoney(
+                      order.total_amount
                     )}
-
                   </div>
+                </div>
 
-                  <div className="order-actions">
-
-                    <button
-                      className="secondary"
-                      onClick={() =>
-                        router.push(
-                          `/sites/${slug}/checkout/${order.id}`
-                        )
-                      }
-                    >
-                      XEM CHI TIẾT
-                    </button>
-
-                    {order.key_value && (
-                      <button
-                        className="primary"
-                        onClick={() =>
-                          navigator.clipboard.writeText(
-                            order.key_value
-                          )
-                        }
-                      >
-                        📋 SAO CHÉP KEY
-                      </button>
+                <div className="orderBottom">
+                  <span>
+                    Đơn giá:{" "}
+                    {formatMoney(
+                      order.unit_price
                     )}
+                  </span>
 
-                  </div>
+                  {order.key_value && (
+                    <span className="hasKey">
+                      ✓ Đã có KEY
+                    </span>
+                  )}
 
-                </article>
-              )
-            )}
-
+                  <button
+                    onClick={() =>
+                      go(
+                        `/checkout/${order.id}`
+                      )
+                    }
+                  >
+                    Xem chi tiết
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
-
       </section>
 
-      <style jsx>{styles}</style>
+      <div className="bottomNav">
+        <button onClick={() => go("")}>
+          🏠
+          <span>Trang chủ</span>
+        </button>
+
+        <button onClick={() => go("/keys")}>
+          🔑
+          <span>Kho KEY</span>
+        </button>
+
+        <button
+          className="bottomActive"
+          onClick={() =>
+            go("/orders")
+          }
+        >
+          📦
+          <span>Đơn hàng</span>
+        </button>
+
+        <button
+          onClick={() =>
+            go("/account")
+          }
+        >
+          👤
+          <span>Tài khoản</span>
+        </button>
+      </div>
+
+      <style jsx>{`
+        * {
+          box-sizing: border-box;
+        }
+
+        .page {
+          min-height: 100vh;
+          background:
+            radial-gradient(
+              circle at top left,
+              #fff0f7,
+              transparent 35%
+            ),
+            #fff;
+
+          color: #242424;
+          padding-bottom: 100px;
+        }
+
+        .header {
+          position: sticky;
+          top: 0;
+          z-index: 50;
+
+          display: flex;
+          align-items: center;
+          gap: 20px;
+
+          min-height: 70px;
+          padding: 10px 22px;
+
+          background: rgba(
+            255,
+            255,
+            255,
+            0.94
+          );
+
+          backdrop-filter: blur(15px);
+
+          border-bottom: 1px solid
+            #f1dbe5;
+        }
+
+        .brand {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+
+          border: 0;
+          background: transparent;
+
+          cursor: pointer;
+
+          font-size: 17px;
+          font-weight: 800;
+
+          white-space: nowrap;
+        }
+
+        .logo {
+          width: 42px;
+          height: 42px;
+          object-fit: contain;
+          border-radius: 12px;
+        }
+
+        .logoFallback {
+          width: 42px;
+          height: 42px;
+
+          display: flex;
+          align-items: center;
+          justify-content: center;
+
+          border-radius: 12px;
+
+          background: linear-gradient(
+            135deg,
+            #ff4f9a,
+            #ff77b5
+          );
+
+          color: white;
+          font-size: 20px;
+          font-weight: 900;
+        }
+
+        .nav {
+          display: flex;
+          gap: 5px;
+          flex: 1;
+        }
+
+        .nav button {
+          border: 0;
+          background: transparent;
+
+          padding: 10px 13px;
+          border-radius: 10px;
+
+          color: #555;
+          font-weight: 600;
+
+          cursor: pointer;
+        }
+
+        .nav button:hover,
+        .nav button.active {
+          color: #ff3d91;
+          background: #fff0f7;
+        }
+
+        .account {
+          display: flex;
+          gap: 7px;
+          align-items: center;
+        }
+
+        .account button {
+          border: 0;
+          border-radius: 10px;
+          padding: 9px 12px;
+          cursor: pointer;
+          font-weight: 600;
+        }
+
+        .accountButton {
+          background: #fff0f7;
+          color: #e62e82;
+        }
+
+        .logout {
+          background: #f3f3f3;
+          color: #555;
+        }
+
+        .login {
+          background: #ff3d91;
+          color: white;
+        }
+
+        .content {
+          max-width: 1050px;
+          margin: auto;
+          padding: 35px 18px;
+        }
+
+        .title {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+
+          gap: 15px;
+          margin-bottom: 25px;
+        }
+
+        h1 {
+          margin: 0 0 5px;
+          font-size: 30px;
+        }
+
+        .title p {
+          margin: 0;
+          color: #777;
+        }
+
+        .back {
+          border: 1px solid #ffd0e4;
+          background: white;
+          color: #e52e81;
+
+          padding: 10px 15px;
+          border-radius: 10px;
+
+          cursor: pointer;
+          font-weight: 700;
+        }
+
+        .empty {
+          min-height: 330px;
+
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-direction: column;
+
+          text-align: center;
+
+          border: 1px solid #f2dce6;
+          border-radius: 20px;
+
+          background: white;
+
+          box-shadow:
+            0 10px 35px
+              rgba(
+                255,
+                61,
+                145,
+                0.06
+              );
+        }
+
+        .emptyIcon {
+          font-size: 45px;
+          margin-bottom: 10px;
+        }
+
+        .empty h2 {
+          margin: 5px 0;
+        }
+
+        .empty p {
+          color: #777;
+          margin: 5px 0 18px;
+        }
+
+        .primary {
+          border: 0;
+          border-radius: 11px;
+
+          background: #ff3d91;
+          color: white;
+
+          padding: 12px 20px;
+
+          font-weight: 800;
+          cursor: pointer;
+        }
+
+        .orders {
+          display: flex;
+          flex-direction: column;
+          gap: 15px;
+        }
+
+        .order {
+          background: white;
+
+          border: 1px solid
+            #f0dbe5;
+
+          border-radius: 18px;
+
+          padding: 18px;
+
+          box-shadow:
+            0 10px 30px
+              rgba(
+                255,
+                61,
+                145,
+                0.05
+              );
+        }
+
+        .orderHead {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+
+          gap: 15px;
+        }
+
+        .orderId {
+          font-weight: 800;
+          font-size: 16px;
+        }
+
+        .date {
+          margin-top: 4px;
+          color: #888;
+          font-size: 13px;
+        }
+
+        .status {
+          padding: 6px 10px;
+          border-radius: 999px;
+
+          font-size: 12px;
+          font-weight: 800;
+        }
+
+        .status.pending {
+          background: #fff6dc;
+          color: #b87800;
+        }
+
+        .status.success {
+          background: #e8fff1;
+          color: #159651;
+        }
+
+        .status.danger {
+          background: #fff0f0;
+          color: #dc3a3a;
+        }
+
+        .product {
+          display: flex;
+          align-items: center;
+
+          gap: 13px;
+
+          margin-top: 18px;
+          padding: 15px;
+
+          border-radius: 13px;
+
+          background: #faf7f9;
+        }
+
+        .productIcon {
+          width: 45px;
+          height: 45px;
+
+          display: flex;
+          align-items: center;
+          justify-content: center;
+
+          border-radius: 12px;
+
+          background: #fff0f7;
+
+          font-size: 22px;
+        }
+
+        .productInfo {
+          flex: 1;
+
+          display: flex;
+          flex-direction: column;
+
+          gap: 4px;
+        }
+
+        .productInfo span {
+          color: #888;
+          font-size: 13px;
+        }
+
+        .price {
+          font-weight: 900;
+          color: #e72e83;
+        }
+
+        .orderBottom {
+          display: flex;
+          align-items: center;
+          gap: 15px;
+
+          margin-top: 15px;
+
+          color: #777;
+          font-size: 13px;
+        }
+
+        .orderBottom button {
+          margin-left: auto;
+
+          border: 0;
+          border-radius: 9px;
+
+          padding: 9px 12px;
+
+          background: #fff0f7;
+          color: #e52e81;
+
+          font-weight: 800;
+          cursor: pointer;
+        }
+
+        .hasKey {
+          color: #159651;
+          font-weight: 700;
+        }
+
+        .loader {
+          width: 30px;
+          height: 30px;
+
+          border: 3px solid #ffd5e7;
+          border-top-color: #ff3d91;
+
+          border-radius: 50%;
+
+          animation: spin 0.8s linear infinite;
+
+          margin-bottom: 12px;
+        }
+
+        @keyframes spin {
+          to {
+            transform: rotate(360deg);
+          }
+        }
+
+        .bottomNav {
+          position: fixed;
+
+          left: 50%;
+          bottom: 14px;
+
+          transform: translateX(-50%);
+
+          z-index: 100;
+
+          display: flex;
+          gap: 5px;
+
+          padding: 7px;
+
+          background: rgba(
+            255,
+            255,
+            255,
+            0.95
+          );
+
+          backdrop-filter: blur(15px);
+
+          border: 1px solid
+            #f0dbe5;
+
+          border-radius: 18px;
+
+          box-shadow:
+            0 10px 35px
+              rgba(0, 0, 0, 0.1);
+        }
+
+        .bottomNav button {
+          min-width: 75px;
+
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+
+          gap: 3px;
+
+          border: 0;
+          background: transparent;
+
+          padding: 8px 10px;
+
+          border-radius: 12px;
+
+          color: #777;
+
+          cursor: pointer;
+          font-size: 17px;
+        }
+
+        .bottomNav span {
+          font-size: 10px;
+          font-weight: 700;
+        }
+
+        .bottomNav button:hover,
+        .bottomNav .bottomActive {
+          color: #ff3d91;
+          background: #fff0f7;
+        }
+
+        @media (max-width: 850px) {
+          .nav {
+            display: none;
+          }
+
+          .header {
+            padding: 9px 12px;
+          }
+
+          .accountButton {
+            max-width: 120px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+        }
+
+        @media (max-width: 600px) {
+          .brand span {
+            display: none;
+          }
+
+          .accountButton {
+            display: none;
+          }
+
+          .title {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+
+          .content {
+            padding: 25px 12px;
+          }
+
+          .product {
+            align-items: flex-start;
+          }
+
+          .price {
+            font-size: 14px;
+          }
+
+          .orderBottom {
+            flex-wrap: wrap;
+          }
+
+          .orderBottom button {
+            margin-left: 0;
+          }
+
+          .bottomNav {
+            width: calc(100% - 20px);
+            justify-content: space-around;
+          }
+
+          .bottomNav button {
+            flex: 1;
+            min-width: 0;
+          }
+        }
+      `}</style>
     </main>
   );
 }
-
-const styles = `
-
-* {
-  box-sizing: border-box;
-}
-
-.page {
-  min-height: 100vh;
-  background:
-    radial-gradient(
-      circle at 10% 5%,
-      rgba(255,80,170,.12),
-      transparent 28%
-    ),
-    radial-gradient(
-      circle at 90% 10%,
-      rgba(130,80,255,.10),
-      transparent 28%
-    ),
-    #f7f8fc;
-
-  color: #222;
-
-  font-family:
-    Arial,
-    Helvetica,
-    sans-serif;
-
-  padding-bottom: 70px;
-}
-
-/* =========================
-   TOPBAR
-========================= */
-
-.topbar {
-  height: 64px;
-
-  background:
-    rgba(255,255,255,.96);
-
-  border-bottom:
-    1px solid #eee;
-
-  position: sticky;
-  top: 0;
-
-  z-index: 100;
-
-  backdrop-filter:
-    blur(15px);
-}
-
-.topbar-inner {
-  max-width: 1220px;
-  height: 100%;
-
-  margin: auto;
-
-  padding:
-    0 18px;
-
-  display: flex;
-
-  align-items: center;
-
-  justify-content:
-    space-between;
-
-  gap: 15px;
-}
-
-.logo {
-  border: 0;
-  background: transparent;
-
-  display: flex;
-
-  align-items: center;
-
-  gap: 9px;
-
-  cursor: pointer;
-
-  color: #151515;
-
-  font-size: 17px;
-
-  font-weight: 900;
-}
-
-.logo-icon {
-  width: 37px;
-  height: 37px;
-
-  border-radius: 11px;
-
-  display: grid;
-
-  place-items: center;
-
-  background:
-    linear-gradient(
-      135deg,
-      #ff4ba6,
-      #8d54ff
-    );
-
-  color: white;
-
-  box-shadow:
-    0 8px 20px
-    rgba(232,61,148,.25);
-}
-
-.logo-name {
-  max-width: 180px;
-
-  overflow: hidden;
-
-  white-space: nowrap;
-
-  text-overflow: ellipsis;
-}
-
-.nav {
-  display: flex;
-
-  gap: 4px;
-}
-
-.nav button {
-  border: 0;
-
-  background:
-    transparent;
-
-  padding:
-    10px 13px;
-
-  border-radius: 9px;
-
-  cursor: pointer;
-
-  color: #666;
-
-  font-weight: 700;
-}
-
-.nav button:hover,
-.nav button.active {
-  color: #e83d94;
-
-  background:
-    #fff0f7;
-}
-
-.account {
-  width: 40px;
-  height: 40px;
-
-  border: 0;
-
-  border-radius: 50%;
-
-  background:
-    #222;
-
-  color: white;
-
-  cursor: pointer;
-
-  font-size: 17px;
-}
-
-/* =========================
-   CONTAINER
-========================= */
-
-.container {
-  max-width: 1100px;
-
-  margin: auto;
-
-  padding:
-    30px 18px;
-}
-
-/* =========================
-   HEADING
-========================= */
-
-.heading {
-  display: flex;
-
-  align-items:
-    flex-end;
-
-  justify-content:
-    space-between;
-
-  gap: 20px;
-
-  margin-bottom:
-    22px;
-}
-
-.back {
-  border: 0;
-
-  background:
-    transparent;
-
-  padding: 0;
-
-  color:
-    #e83d94;
-
-  cursor: pointer;
-
-  font-size: 11px;
-
-  font-weight: 900;
-}
-
-.heading h1 {
-  margin:
-    8px 0 4px;
-
-  font-size: 27px;
-}
-
-.heading p {
-  margin: 0;
-
-  color: #999;
-
-  font-size: 12px;
-}
-
-.refresh {
-  border: 1px solid #eee;
-
-  background: white;
-
-  color: #e83d94;
-
-  border-radius: 9px;
-
-  padding:
-    10px 13px;
-
-  cursor: pointer;
-
-  font-size: 10px;
-
-  font-weight: 900;
-}
-
-.refresh:disabled {
-  opacity: .5;
-
-  cursor:
-    not-allowed;
-}
-
-/* =========================
-   ERROR
-========================= */
-
-.error {
-  margin-bottom:
-    15px;
-
-  padding:
-    13px 15px;
-
-  border-radius:
-    10px;
-
-  background:
-    #fff0f0;
-
-  color:
-    #c33;
-
-  font-size:
-    12px;
-}
-
-/* =========================
-   EMPTY
-========================= */
-
-.empty {
-  min-height:
-    390px;
-
-  border:
-    1px solid #eee;
-
-  border-radius:
-    18px;
-
-  background:
-    white;
-
-  display: flex;
-
-  flex-direction:
-    column;
-
-  align-items:
-    center;
-
-  justify-content:
-    center;
-
-  text-align:
-    center;
-}
-
-.empty-icon {
-  width: 70px;
-  height: 70px;
-
-  border-radius:
-    20px;
-
-  display: grid;
-
-  place-items:
-    center;
-
-  background:
-    #fff0f7;
-
-  font-size:
-    32px;
-}
-
-.empty h2 {
-  margin:
-    15px 0 5px;
-
-  font-size:
-    20px;
-}
-
-.empty p {
-  margin:
-    0 0 18px;
-
-  color:
-    #999;
-
-  font-size:
-    12px;
-}
-
-.shop-button {
-  border:
-    0;
-
-  border-radius:
-    9px;
-
-  padding:
-    11px 16px;
-
-  background:
-    #e83d94;
-
-  color:
-    white;
-
-  cursor:
-    pointer;
-
-  font-weight:
-    900;
-
-  font-size:
-    10px;
-}
-
-/* =========================
-   ORDERS
-========================= */
-
-.orders {
-  display:
-    grid;
-
-  gap:
-    14px;
-}
-
-.order-card {
-  background:
-    white;
-
-  border:
-    1px solid #eee;
-
-  border-radius:
-    17px;
-
-  padding:
-    18px;
-
-  box-shadow:
-    0 8px 30px
-    rgba(30,20,50,.04);
-}
-
-/* =========================
-   ORDER TOP
-========================= */
-
-.order-top {
-  display:
-    flex;
-
-  align-items:
-    center;
-
-  justify-content:
-    space-between;
-
-  padding-bottom:
-    13px;
-
-  border-bottom:
-    1px solid #eee;
-}
-
-.order-top > div {
-  display:
-    flex;
-
-  flex-direction:
-    column;
-
-  gap: 3px;
-}
-
-.order-label {
-  color:
-    #aaa;
-
-  font-size:
-    8px;
-
-  font-weight:
-    900;
-}
-
-.order-top strong {
-  font-size:
-    14px;
-}
-
-.status {
-  padding:
-    6px 9px;
-
-  border-radius:
-    999px;
-
-  font-size:
-    9px;
-
-  font-weight:
-    900;
-}
-
-.status.success {
-  color:
-    #159957;
-
-  background:
-    #e9fff1;
-}
-
-.status.pending {
-  color:
-    #a36a00;
-
-  background:
-    #fff5d9;
-}
-
-.status.danger {
-  color:
-    #c33;
-
-  background:
-    #fff0f0;
-}
-
-/* =========================
-   ORDER MAIN
-========================= */
-
-.order-main {
-  display:
-    flex;
-
-  align-items:
-    center;
-
-  justify-content:
-    space-between;
-
-  gap:
-    20px;
-
-  padding:
-    17px 0;
-}
-
-.product-info {
-  display:
-    flex;
-
-  align-items:
-    center;
-
-  gap:
-    12px;
-
-  min-width:
-    0;
-}
-
-.product-info img,
-.product-placeholder {
-  width:
-    62px;
-
-  height:
-    62px;
-
-  flex:
-    0 0 62px;
-
-  border-radius:
-    12px;
-
-  object-fit:
-    cover;
-}
-
-.product-placeholder {
-  display:
-    grid;
-
-  place-items:
-    center;
-
-  background:
-    linear-gradient(
-      135deg,
-      #f7edf4,
-      #eeeafd
-    );
-
-  font-size:
-    25px;
-}
-
-.product-info h3 {
-  margin:
-    0 0 5px;
-
-  font-size:
-    14px;
-
-  white-space:
-    nowrap;
-
-  overflow:
-    hidden;
-
-  text-overflow:
-    ellipsis;
-}
-
-.product-info p {
-  margin:
-    0;
-
-  color:
-    #999;
-
-  font-size:
-    10px;
-}
-
-.price-box {
-  text-align:
-    right;
-
-  flex:
-    0 0 auto;
-}
-
-.price-box span {
-  display:
-    block;
-
-  color:
-    #aaa;
-
-  font-size:
-    9px;
-
-  margin-bottom:
-    4px;
-}
-
-.price-box strong {
-  color:
-    #e52f8d;
-
-  font-size:
-    17px;
-}
-
-/* =========================
-   ORDER INFO
-========================= */
-
-.order-info {
-  display:
-    grid;
-
-  grid-template-columns:
-    repeat(3,1fr);
-
-  gap:
-    10px;
-
-  padding:
-    13px 0;
-
-  border-top:
-    1px solid #eee;
-
-  border-bottom:
-    1px solid #eee;
-}
-
-.order-info > div {
-  min-width:
-    0;
-}
-
-.order-info span {
-  display:
-    block;
-
-  color:
-    #aaa;
-
-  font-size:
-    9px;
-
-  margin-bottom:
-    5px;
-}
-
-.order-info strong {
-  display:
-    block;
-
-  font-size:
-    11px;
-
-  overflow:
-    hidden;
-
-  text-overflow:
-    ellipsis;
-
-  white-space:
-    nowrap;
-}
-
-.order-info .key {
-  color:
-    #e83d94;
-}
-
-/* =========================
-   ACTIONS
-========================= */
-
-.order-actions {
-  display:
-    flex;
-
-  justify-content:
-    flex-end;
-
-  gap:
-    8px;
-
-  padding-top:
-    14px;
-}
-
-.order-actions button {
-  border:
-    0;
-
-  border-radius:
-    8px;
-
-  padding:
-    9px 12px;
-
-  cursor:
-    pointer;
-
-  font-size:
-    9px;
-
-  font-weight:
-    900;
-}
-
-.secondary {
-  background:
-    #f3f3f6;
-
-  color:
-    #555;
-}
-
-.primary {
-  background:
-    #e83d94;
-
-  color:
-    white;
-}
-
-/* =========================
-   LOADING
-========================= */
-
-.loading-page {
-  min-height:
-    100vh;
-
-  display:
-    grid;
-
-  place-items:
-    center;
-
-  align-content:
-    center;
-
-  gap:
-    12px;
-
-  background:
-    #f7f8fc;
-
-  color:
-    #888;
-
-  font-family:
-    Arial,
-    Helvetica,
-    sans-serif;
-}
-
-.spinner {
-  width:
-    40px;
-
-  height:
-    40px;
-
-  border:
-    4px solid #eee;
-
-  border-top-color:
-    #e83d94;
-
-  border-radius:
-    50%;
-
-  animation:
-    spin .8s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform:
-      rotate(360deg);
-  }
-}
-
-/* =========================
-   MOBILE
-========================= */
-
-@media (max-width: 760px) {
-
-  .topbar {
-    height:
-      58px;
-  }
-
-  .topbar-inner {
-    padding:
-      0 11px;
-  }
-
-  .nav {
-    display:
-      none;
-  }
-
-  .logo-name {
-    max-width:
-      145px;
-  }
-
-  .container {
-    padding:
-      20px 12px;
-  }
-
-  .heading {
-    align-items:
-      flex-start;
-  }
-
-  .heading h1 {
-    font-size:
-      22px;
-  }
-
-  .order-main {
-    align-items:
-      flex-start;
-  }
-
-  .product-info {
-    min-width:
-      0;
-  }
-
-  .product-info img,
-  .product-placeholder {
-    width:
-      52px;
-
-    height:
-      52px;
-
-    flex-basis:
-      52px;
-  }
-
-  .product-info h3 {
-    max-width:
-      145px;
-  }
-
-  .price-box strong {
-    font-size:
-      14px;
-  }
-
-  .order-info {
-    grid-template-columns:
-      1fr 1fr;
-  }
-
-  .order-info > div:last-child {
-    grid-column:
-      1 / -1;
-  }
-
-  .order-actions {
-    display:
-      grid;
-
-    grid-template-columns:
-      1fr 1fr;
-  }
-
-  .order-actions button {
-    width:
-      100%;
-  }
-}
-
-@media (max-width: 390px) {
-
-  .order-card {
-    padding:
-      13px;
-  }
-
-  .order-main {
-    gap:
-      8px;
-  }
-
-  .product-info img,
-  .product-placeholder {
-    width:
-      45px;
-
-    height:
-      45px;
-
-    flex-basis:
-      45px;
-  }
-
-  .product-info h3 {
-    max-width:
-      120px;
-
-    font-size:
-      12px;
-  }
-
-  .price-box strong {
-    font-size:
-      12px;
-  }
-}
-`;
