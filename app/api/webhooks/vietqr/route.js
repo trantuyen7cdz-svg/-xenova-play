@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +28,9 @@ function parseXenovaOrder(description) {
    *
    * Không chấp nhận nội dung linh tinh.
    */
-  const match = text.match(/^XENOVA\s+(\d+)$/i);
+  const match = text.match(
+    /^XENOVA\s+(\d+)$/i
+  );
 
   if (!match) {
     return null;
@@ -36,7 +38,10 @@ function parseXenovaOrder(description) {
 
   const id = Number(match[1]);
 
-  if (!Number.isSafeInteger(id) || id <= 0) {
+  if (
+    !Number.isSafeInteger(id) ||
+    id <= 0
+  ) {
     return null;
   }
 
@@ -44,9 +49,12 @@ function parseXenovaOrder(description) {
 }
 
 async function processPayment(payment) {
-  const description = normalizeText(payment?.description);
+  const description = normalizeText(
+    payment?.description
+  );
 
-  const depositId = parseXenovaOrder(description);
+  const depositId =
+    parseXenovaOrder(description);
 
   /*
    * Không phải giao dịch của XENOVA.
@@ -61,7 +69,10 @@ async function processPayment(payment) {
 
   const amount = Number(payment?.amount);
 
-  if (!Number.isSafeInteger(amount) || amount <= 0) {
+  if (
+    !Number.isSafeInteger(amount) ||
+    amount <= 0
+  ) {
     return {
       ok: true,
       status: "ignored",
@@ -86,23 +97,26 @@ async function processPayment(payment) {
   }
 
   const reference =
-    normalizeText(payment?.reference) || null;
+    normalizeText(payment?.reference) ||
+    null;
 
   /*
    * Gọi PostgreSQL transaction.
    *
-   * Đây là nơi chống cộng tiền 2 lần.
+   * Database function sẽ chống cộng tiền 2 lần.
    */
-  const { data, error } =
-    await supabaseAdmin.rpc(
-      "process_vietqr_deposit",
-      {
-        p_deposit_id: depositId,
-        p_amount: amount,
-        p_reference: reference,
-        p_description: description,
-      }
-    );
+  const {
+    data,
+    error,
+  } = await supabaseAdmin.rpc(
+    "process_vietqr_deposit",
+    {
+      p_deposit_id: depositId,
+      p_amount: amount,
+      p_reference: reference,
+      p_description: description,
+    }
+  );
 
   if (error) {
     console.error(
@@ -157,7 +171,6 @@ export async function POST(request) {
       );
     }
 
-
     /*
      * ==========================================
      * 2. ĐỌC BODY
@@ -178,12 +191,11 @@ export async function POST(request) {
 
     /*
      * VietQR trả data dạng array.
-     * Nhưng vẫn hỗ trợ object để tránh lỗi.
+     * Nhưng vẫn hỗ trợ object.
      */
     if (!Array.isArray(payments)) {
       payments = [payments];
     }
-
 
     /*
      * ==========================================
@@ -206,15 +218,15 @@ export async function POST(request) {
         );
 
         /*
-         * Throw ra ngoài để VietQR có thể gửi lại webhook.
+         * Throw ra ngoài để VietQR có thể
+         * gửi lại webhook.
          *
-         * Vì transaction trong PostgreSQL đã chống
-         * cộng tiền trùng nên webhook retry vẫn an toàn.
+         * PostgreSQL transaction đã chống
+         * cộng tiền trùng.
          */
         throw error;
       }
     }
-
 
     /*
      * ==========================================
@@ -226,7 +238,6 @@ export async function POST(request) {
       ok: true,
       results,
     });
-
   } catch (error) {
     console.error(
       "[VIETQR WEBHOOK] FATAL ERROR:",
