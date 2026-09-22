@@ -36,10 +36,7 @@ export async function GET(request, { params }) {
         .maybeSingle();
 
     if (websiteError) {
-      console.error(
-        "WEBSITE ERROR:",
-        websiteError
-      );
+      console.error("WEBSITE ERROR:", websiteError);
 
       return NextResponse.json(
         {
@@ -77,10 +74,7 @@ export async function GET(request, { params }) {
       });
 
     if (categoryError) {
-      console.error(
-        "CATEGORY ERROR:",
-        categoryError
-      );
+      console.error("CATEGORY ERROR:", categoryError);
 
       return NextResponse.json(
         {
@@ -108,10 +102,7 @@ export async function GET(request, { params }) {
       });
 
     if (productError) {
-      console.error(
-        "PRODUCT ERROR:",
-        productError
-      );
+      console.error("PRODUCT ERROR:", productError);
 
       return NextResponse.json(
         {
@@ -121,6 +112,88 @@ export async function GET(request, { params }) {
         { status: 500 }
       );
     }
+
+    // ==========================================
+    // LẤY STOCK KEY
+    //
+    // KEY CÒN HÀNG:
+    // - user_id IS NULL
+    // - sold_at IS NULL
+    // - status = available
+    //
+    // Nếu status trong database của mày đang dùng
+    // giá trị khác, phần này sẽ cần đổi theo DB.
+    // ==========================================
+
+    const {
+      data: websiteKeys,
+      error: keysError,
+    } = await supabaseAdmin
+      .from("website_keys")
+      .select(
+        "id, website_id, product_id, user_id, order_id, key_code, status, sold_at"
+      )
+      .eq("website_id", website.id)
+      .is("user_id", null)
+      .is("sold_at", null)
+      .eq("status", "available");
+
+    if (keysError) {
+      console.error("WEBSITE STOCK ERROR:", keysError);
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: keysError.message,
+        },
+        { status: 500 }
+      );
+    }
+
+    // ==========================================
+    // TẠO STOCK MAP
+    // ==========================================
+
+    const stockMap = new Map();
+
+    for (const key of websiteKeys || []) {
+      const productId = Number(key.product_id);
+
+      if (!Number.isFinite(productId)) {
+        continue;
+      }
+
+      stockMap.set(
+        productId,
+        (stockMap.get(productId) || 0) + 1
+      );
+    }
+
+    // ==========================================
+    // GẮN STOCK VÀO PRODUCT
+    // ==========================================
+
+    const productsWithStock = (products || []).map(
+      (product) => {
+        const productId = Number(product.id);
+
+        const stock = Number(
+          stockMap.get(productId) || 0
+        );
+
+        return {
+          ...product,
+
+          stock: stock,
+          stock_count: stock,
+          available_stock: stock,
+
+          in_stock: stock > 0,
+
+          out_of_stock: stock <= 0,
+        };
+      }
+    );
 
     // ==========================================
     // CATEGORY MAP
@@ -189,7 +262,7 @@ export async function GET(request, { params }) {
     // ==========================================
 
     const productsWithCategory =
-      (products || []).map((product) => {
+      productsWithStock.map((product) => {
         const categoryPath =
           getCategoryPath(
             product.category_id
@@ -260,6 +333,26 @@ export async function GET(request, { params }) {
               )
           );
 
+        const directStock =
+          directProducts.reduce(
+            (total, product) =>
+              total +
+              Number(
+                product.stock_count || 0
+              ),
+            0
+          );
+
+        const childStock =
+          childProducts.reduce(
+            (total, product) =>
+              total +
+              Number(
+                product.stock_count || 0
+              ),
+            0
+          );
+
         return {
           ...category,
 
@@ -272,6 +365,12 @@ export async function GET(request, { params }) {
           product_count:
             directProducts.length +
             childProducts.length,
+
+          stock_count:
+            directStock + childStock,
+
+          available_stock:
+            directStock + childStock,
         };
       });
 
@@ -291,16 +390,22 @@ export async function GET(request, { params }) {
           logo_url: website.logo_url,
           banner_url: website.banner_url,
           theme: website.theme,
+
           bank_name:
             website.bank_name,
+
           bank_account_number:
             website.bank_account_number,
+
           bank_account_name:
             website.bank_account_name,
+
           payment_qr_url:
             website.payment_qr_url,
+
           description:
             website.description,
+
           settings:
             website.settings || {},
         },
@@ -334,12 +439,23 @@ export async function GET(request, { params }) {
           product_count:
             productsWithCategory.length,
 
+          total_stock:
+            productsWithCategory.reduce(
+              (total, product) =>
+                total +
+                Number(
+                  product.stock_count || 0
+                ),
+              0
+            ),
+
           generated_at:
             new Date().toISOString(),
         },
       },
       {
         status: 200,
+
         headers: {
           "Cache-Control":
             "no-store, no-cache, must-revalidate",
