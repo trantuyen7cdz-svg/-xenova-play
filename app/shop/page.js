@@ -307,13 +307,6 @@ export default function ShopPage({ website = null }) {
         catalog.products || []
       );
 
-      /*
-        WEBSITE MỚI:
-        Không dùng kho KEY XENOVA cũ.
-
-        SHOP CŨ:
-        Vẫn lấy stock cũ.
-      */
       if (isWebsiteShop) {
         setStockMap({});
       } else {
@@ -385,13 +378,11 @@ export default function ShopPage({ website = null }) {
           WEBSITE SHOP MỚI
           =========================================
 
-          Ví phải lấy theo:
+          Ví riêng của website:
 
           website_id
           +
           user_id
-
-          Không được lấy ví XENOVA cũ.
         */
 
         if (isWebsiteShop) {
@@ -457,37 +448,62 @@ export default function ShopPage({ website = null }) {
           SHOP XENOVA CŨ
           =========================================
 
-          Chỉ lấy wallet có:
+          QUAN TRỌNG:
 
+          Không đọc trực tiếp bảng wallets
+          bằng client nữa.
+
+          Dùng /api/wallet/current để
+          server lấy đúng ví:
+
+          user_id = tài khoản hiện tại
           website_id = NULL
 
-          để không đụng vào ví của
-          các website mới.
+          Đây là ví XENOVA cũ.
         */
 
         const {
-          data,
-          error,
+          data: {
+            session,
+          },
         } =
-          await supabase
-            .from("wallets")
-            .select("balance")
-            .eq(
-              "user_id",
-              user.id
-            )
-            .is(
-              "website_id",
-              null
-            )
-            .maybeSingle();
+          await supabase.auth.getSession();
+
+        if (!session?.access_token) {
+          if (mounted) {
+            setWallet(0);
+          }
+
+          return;
+        }
+
+        const response =
+          await fetch(
+            "/api/wallet/current",
+            {
+              method: "GET",
+
+              headers: {
+                Authorization:
+                  `Bearer ${session.access_token}`,
+              },
+
+              cache: "no-store",
+            }
+          );
+
+        const data =
+          await response.json();
 
         if (!mounted) return;
 
-        if (error) {
+        if (
+          !response.ok ||
+          !data?.success
+        ) {
           console.error(
-            "WALLET ERROR:",
-            error
+            "CURRENT WALLET ERROR:",
+            data?.message
           );
 
           setWallet(0);
@@ -496,7 +512,7 @@ export default function ShopPage({ website = null }) {
 
         setWallet(
           Number(
-            data?.balance || 0
+            data?.wallet?.balance || 0
           )
         );
       } catch (error) {
@@ -628,15 +644,6 @@ export default function ShopPage({ website = null }) {
   ========================= */
 
   function getStock(productId) {
-    /*
-      SHOP CŨ:
-      dùng stockMap cũ.
-
-      WEBSITE MỚI:
-      sản phẩm website không dùng
-      kho KEY cũ XENOVA.
-    */
-
     if (isWebsiteShop) {
       return 1;
     }
@@ -861,12 +868,6 @@ export default function ShopPage({ website = null }) {
       WEBSITE SHOP MỚI
       =========================================
 
-      Không dùng:
-
-      - /api/buy-key
-      - wallet XENOVA
-      - kho KEY cũ
-
       Chỉ tạo website_order.
     */
 
@@ -961,8 +962,6 @@ export default function ShopPage({ website = null }) {
       =========================================
       SHOP XENOVA CŨ
       =========================================
-
-      GIỮ LUỒNG CŨ.
     */
 
     const stock =
@@ -1058,30 +1057,54 @@ export default function ShopPage({ website = null }) {
 
       /*
         Sau khi mua XENOVA:
-        chỉ đọc ví cũ website_id = NULL.
+
+        Đọc lại ví cũ thông qua API
+        /api/wallet/current
+
+        để chắc chắn lấy đúng:
+        website_id = NULL
       */
 
       const {
-        data: walletData,
+        data: {
+          session: currentSession,
+        },
       } =
-        await supabase
-          .from("wallets")
-          .select("balance")
-          .eq(
-            "user_id",
-            user.id
-          )
-          .is(
-            "website_id",
-            null
-          )
-          .maybeSingle();
+        await supabase.auth.getSession();
 
-      setWallet(
-        Number(
-          walletData?.balance || 0
-        )
-      );
+      if (
+        currentSession?.access_token
+      ) {
+        const walletResponse =
+          await fetch(
+            "/api/wallet/current",
+            {
+              method: "GET",
+
+              headers: {
+                Authorization:
+                  `Bearer ${currentSession.access_token}`,
+              },
+
+              cache: "no-store",
+            }
+          );
+
+        const walletResult =
+          await walletResponse.json();
+
+        if (
+          walletResponse.ok &&
+          walletResult?.success
+        ) {
+          setWallet(
+            Number(
+              walletResult?.wallet
+                ?.balance || 0
+            )
+          );
+        }
+      }
     } catch (err) {
       console.error(
         "BUY ERROR:",
