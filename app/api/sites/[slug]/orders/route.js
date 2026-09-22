@@ -1,53 +1,17 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 
-function getSupabaseAdmin() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-  );
-}
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-async function getCurrentUser(supabase, request) {
-  const authHeader = request.headers.get("authorization");
+import {
+  getWebsiteBySlug,
+  getWebsiteSession,
+} from "@/lib/websiteAuth";
 
-  if (!authHeader?.startsWith("Bearer ")) {
-    return null;
-  }
+export const dynamic = "force-dynamic";
 
-  const token = authHeader.replace("Bearer ", "").trim();
-
-  if (!token) {
-    return null;
-  }
-
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser(token);
-
-  if (error || !user) {
-    return null;
-  }
-
-  return user;
-}
-
-async function getWebsite(supabase, slug) {
-  const { data, error } = await supabase
-    .from("websites")
-    .select("*")
-    .eq("slug", slug)
-    .eq("status", "active")
-    .maybeSingle();
-
-  if (error) {
-    console.error("WEBSITE QUERY ERROR:", error);
-    return null;
-  }
-
-  return data;
-}
+// ==========================================
+// POST - TẠO ĐƠN HÀNG
+// ==========================================
 
 export async function POST(request, { params }) {
   try {
@@ -63,29 +27,32 @@ export async function POST(request, { params }) {
       );
     }
 
-    const supabase = getSupabaseAdmin();
+    // ==========================================
+    // WEBSITE
+    // ==========================================
 
-    const website = await getWebsite(
-      supabase,
-      slug
-    );
+    const website =
+      await getWebsiteBySlug(slug);
 
     if (!website) {
       return NextResponse.json(
         {
           success: false,
-          error: "Website không tồn tại hoặc đang tắt",
+          error:
+            "Website không tồn tại hoặc đang tắt",
         },
         { status: 404 }
       );
     }
 
-    const user = await getCurrentUser(
-      supabase,
-      request
-    );
+    // ==========================================
+    // WEBSITE SESSION
+    // ==========================================
 
-    if (!user) {
+    const session =
+      await getWebsiteSession(website);
+
+    if (!session) {
       return NextResponse.json(
         {
           success: false,
@@ -95,9 +62,32 @@ export async function POST(request, { params }) {
       );
     }
 
-    const body = await request.json();
+    // Bảo vệ thêm:
+    // user phải thuộc đúng website
+    if (
+      session.websiteId !== website.id ||
+      session.userId !== session.user.id
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Phiên đăng nhập không hợp lệ",
+        },
+        { status: 401 }
+      );
+    }
 
-    const productId = Number(body?.product_id);
+    // ==========================================
+    // BODY
+    // ==========================================
+
+    const body =
+      await request.json();
+
+    const productId =
+      Number(body?.product_id);
+
     const quantity = Math.max(
       1,
       Number(body?.quantity || 1)
@@ -130,10 +120,15 @@ export async function POST(request, { params }) {
       );
     }
 
+    // ==========================================
+    // PRODUCT
+    // Chỉ lấy product của website hiện tại
+    // ==========================================
+
     const {
       data: product,
       error: productError,
-    } = await supabase
+    } = await supabaseAdmin
       .from("website_products")
       .select(
         `
@@ -162,7 +157,8 @@ export async function POST(request, { params }) {
       return NextResponse.json(
         {
           success: false,
-          error: "Không thể kiểm tra sản phẩm",
+          error:
+            "Không thể kiểm tra sản phẩm",
         },
         { status: 500 }
       );
@@ -172,13 +168,19 @@ export async function POST(request, { params }) {
       return NextResponse.json(
         {
           success: false,
-          error: "Sản phẩm không tồn tại",
+          error:
+            "Sản phẩm không tồn tại",
         },
         { status: 404 }
       );
     }
 
-    const unitPrice = Number(product.price || 0);
+    // ==========================================
+    // GIÁ
+    // ==========================================
+
+    const unitPrice =
+      Number(product.price || 0);
 
     if (
       !Number.isFinite(unitPrice) ||
@@ -187,7 +189,8 @@ export async function POST(request, { params }) {
       return NextResponse.json(
         {
           success: false,
-          error: "Giá sản phẩm không hợp lệ",
+          error:
+            "Giá sản phẩm không hợp lệ",
         },
         { status: 400 }
       );
@@ -196,18 +199,25 @@ export async function POST(request, { params }) {
     const totalAmount =
       unitPrice * quantity;
 
+    // ==========================================
+    // CUSTOMER INFO
+    // ==========================================
+
     const customerName =
-      typeof body?.customer_name === "string"
+      typeof body?.customer_name ===
+      "string"
         ? body.customer_name.trim()
         : null;
 
     const customerEmail =
-      typeof body?.customer_email === "string"
+      typeof body?.customer_email ===
+      "string"
         ? body.customer_email.trim()
-        : user.email || null;
+        : session.user.email || null;
 
     const customerPhone =
-      typeof body?.customer_phone === "string"
+      typeof body?.customer_phone ===
+      "string"
         ? body.customer_phone.trim()
         : null;
 
@@ -216,25 +226,53 @@ export async function POST(request, { params }) {
         ? body.note.trim()
         : null;
 
-    const { data: order, error: orderError } =
-      await supabase
-        .from("website_orders")
-        .insert({
-          website_id: website.id,
-          user_id: user.id,
-          product_id: product.id,
-          product_name: product.name,
-          quantity,
-          unit_price: unitPrice,
-          total_amount: totalAmount,
-          status: "pending",
-          customer_name: customerName,
-          customer_email: customerEmail,
-          customer_phone: customerPhone,
-          note,
-        })
-        .select("*")
-        .single();
+    // ==========================================
+    // TẠO ĐƠN
+    // user_id = website_users.id
+    // website_id = website hiện tại
+    // ==========================================
+
+    const {
+      data: order,
+      error: orderError,
+    } = await supabaseAdmin
+      .from("website_orders")
+      .insert({
+        website_id: website.id,
+
+        user_id:
+          session.userId,
+
+        product_id:
+          product.id,
+
+        product_name:
+          product.name,
+
+        quantity,
+
+        unit_price:
+          unitPrice,
+
+        total_amount:
+          totalAmount,
+
+        status:
+          "pending",
+
+        customer_name:
+          customerName,
+
+        customer_email:
+          customerEmail,
+
+        customer_phone:
+          customerPhone,
+
+        note,
+      })
+      .select("*")
+      .single();
 
     if (orderError) {
       console.error(
@@ -245,35 +283,75 @@ export async function POST(request, { params }) {
       return NextResponse.json(
         {
           success: false,
-          error: "Không thể tạo đơn hàng",
-          detail: orderError.message,
+          error:
+            "Không thể tạo đơn hàng",
+          detail:
+            orderError.message,
         },
         { status: 500 }
       );
     }
 
+    // ==========================================
+    // RESPONSE
+    // ==========================================
+
     return NextResponse.json({
       success: true,
+
       order,
+
+      user: {
+        id:
+          session.user.id,
+
+        username:
+          session.user.username,
+
+        email:
+          session.user.email,
+      },
+
       website: {
-        id: website.id,
-        name: website.name,
-        slug: website.slug,
+        id:
+          website.id,
+
+        name:
+          website.name,
+
+        slug:
+          website.slug,
       },
+
       product: {
-        id: product.id,
-        name: product.name,
-        price: unitPrice,
+        id:
+          product.id,
+
+        name:
+          product.name,
+
+        price:
+          unitPrice,
       },
+
       payment: {
-        amount: totalAmount,
-        bank_name: website.bank_name || "",
+        amount:
+          totalAmount,
+
+        bank_name:
+          website.bank_name || "",
+
         bank_account_number:
-          website.bank_account_number || "",
+          website.bank_account_number ||
+          "",
+
         bank_account_name:
-          website.bank_account_name || "",
+          website.bank_account_name ||
+          "",
+
         payment_qr_url:
-          website.payment_qr_url || "",
+          website.payment_qr_url ||
+          "",
       },
     });
   } catch (error) {
@@ -292,6 +370,9 @@ export async function POST(request, { params }) {
   }
 }
 
+// ==========================================
+// GET - LẤY ĐƠN HÀNG CỦA USER
+// ==========================================
 
 export async function GET(request, { params }) {
   try {
@@ -307,29 +388,32 @@ export async function GET(request, { params }) {
       );
     }
 
-    const supabase = getSupabaseAdmin();
+    // ==========================================
+    // WEBSITE
+    // ==========================================
 
-    const website = await getWebsite(
-      supabase,
-      slug
-    );
+    const website =
+      await getWebsiteBySlug(slug);
 
     if (!website) {
       return NextResponse.json(
         {
           success: false,
-          error: "Website không tồn tại hoặc đang tắt",
+          error:
+            "Website không tồn tại hoặc đang tắt",
         },
         { status: 404 }
       );
     }
 
-    const user = await getCurrentUser(
-      supabase,
-      request
-    );
+    // ==========================================
+    // SESSION
+    // ==========================================
 
-    if (!user) {
+    const session =
+      await getWebsiteSession(website);
+
+    if (!session) {
       return NextResponse.json(
         {
           success: false,
@@ -339,15 +423,44 @@ export async function GET(request, { params }) {
       );
     }
 
-    const { data: orders, error } =
-      await supabase
-        .from("website_orders")
-        .select("*")
-        .eq("website_id", website.id)
-        .eq("user_id", user.id)
-        .order("created_at", {
+    if (
+      session.websiteId !== website.id ||
+      session.userId !== session.user.id
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Phiên đăng nhập không hợp lệ",
+        },
+        { status: 401 }
+      );
+    }
+
+    // ==========================================
+    // ORDERS
+    // ==========================================
+
+    const {
+      data: orders,
+      error,
+    } = await supabaseAdmin
+      .from("website_orders")
+      .select("*")
+      .eq(
+        "website_id",
+        website.id
+      )
+      .eq(
+        "user_id",
+        session.userId
+      )
+      .order(
+        "created_at",
+        {
           ascending: false,
-        });
+        }
+      );
 
     if (error) {
       console.error(
@@ -358,7 +471,8 @@ export async function GET(request, { params }) {
       return NextResponse.json(
         {
           success: false,
-          error: "Không thể lấy đơn hàng",
+          error:
+            "Không thể lấy đơn hàng",
         },
         { status: 500 }
       );
@@ -366,7 +480,9 @@ export async function GET(request, { params }) {
 
     return NextResponse.json({
       success: true,
-      orders: orders || [],
+
+      orders:
+        orders || [],
     });
   } catch (error) {
     console.error(
