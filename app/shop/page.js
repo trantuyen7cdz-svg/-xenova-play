@@ -276,29 +276,17 @@ export default function ShopPage({ website = null }) {
       setLoading(true);
       setError("");
 
-      const [
-        catalogResponse,
-        stockResponse,
-      ] = await Promise.all([
-        fetch(
-          isWebsiteShop
-            ? `/api/sites/${websiteSlug}/catalog`
-            : "/api/shop/catalog",
-          {
-            cache: "no-store",
-          }
-        ),
-
-        fetch("/api/shop/stock", {
+      const catalogResponse = await fetch(
+        isWebsiteShop
+          ? `/api/sites/${websiteSlug}/catalog`
+          : "/api/shop/catalog",
+        {
           cache: "no-store",
-        }),
-      ]);
+        }
+      );
 
       const catalog =
         await catalogResponse.json();
-
-      const stock =
-        await stockResponse.json();
 
       if (
         !catalogResponse.ok ||
@@ -306,6 +294,7 @@ export default function ShopPage({ website = null }) {
       ) {
         throw new Error(
           catalog.error ||
+            catalog.message ||
             "Không tải được cửa hàng."
         );
       }
@@ -318,14 +307,45 @@ export default function ShopPage({ website = null }) {
         catalog.products || []
       );
 
-      if (stock?.success) {
-        setStockMap(
-          stock.stock ||
-            stock.stockMap ||
-            {}
-        );
-      } else {
+      /*
+        WEBSITE MỚI:
+        Không dùng kho KEY XENOVA cũ.
+
+        SHOP CŨ:
+        Vẫn lấy stock cũ.
+      */
+      if (isWebsiteShop) {
         setStockMap({});
+      } else {
+        try {
+          const stockResponse =
+            await fetch(
+              "/api/shop/stock",
+              {
+                cache: "no-store",
+              }
+            );
+
+          const stock =
+            await stockResponse.json();
+
+          if (stock?.success) {
+            setStockMap(
+              stock.stock ||
+                stock.stockMap ||
+                {}
+            );
+          } else {
+            setStockMap({});
+          }
+        } catch (stockError) {
+          console.error(
+            "LOAD STOCK ERROR:",
+            stockError
+          );
+
+          setStockMap({});
+        }
       }
     } catch (err) {
       console.error(
@@ -365,19 +385,22 @@ export default function ShopPage({ website = null }) {
           WEBSITE SHOP MỚI
           =========================================
 
-          Ví được lấy qua API riêng của website.
+          Ví phải lấy theo:
 
-          Ví dụ:
-          /sites/tets
-          → /api/sites/tets/wallet
+          website_id
+          +
+          user_id
 
-          Không lấy ví XENOVA cũ.
+          Không được lấy ví XENOVA cũ.
         */
 
         if (isWebsiteShop) {
           const {
-            data: { session },
-          } = await supabase.auth.getSession();
+            data: {
+              session,
+            },
+          } =
+            await supabase.auth.getSession();
 
           if (!session?.access_token) {
             if (mounted) {
@@ -387,17 +410,20 @@ export default function ShopPage({ website = null }) {
             return;
           }
 
-          const response = await fetch(
-            `/api/sites/${websiteSlug}/wallet`,
-            {
-              method: "GET",
-              headers: {
-                Authorization:
-                  `Bearer ${session.access_token}`,
-              },
-              cache: "no-store",
-            }
-          );
+          const response =
+            await fetch(
+              `/api/sites/${websiteSlug}/wallet`,
+              {
+                method: "GET",
+
+                headers: {
+                  Authorization:
+                    `Bearer ${session.access_token}`,
+                },
+
+                cache: "no-store",
+              }
+            );
 
           const data =
             await response.json();
@@ -435,19 +461,26 @@ export default function ShopPage({ website = null }) {
 
           website_id = NULL
 
-          để không lấy nhầm ví của
-          website mới.
+          để không đụng vào ví của
+          các website mới.
         */
 
         const {
           data,
           error,
-        } = await supabase
-          .from("wallets")
-          .select("balance")
-          .eq("user_id", user.id)
-          .is("website_id", null)
-          .maybeSingle();
+        } =
+          await supabase
+            .from("wallets")
+            .select("balance")
+            .eq(
+              "user_id",
+              user.id
+            )
+            .is(
+              "website_id",
+              null
+            )
+            .maybeSingle();
 
         if (!mounted) return;
 
@@ -462,7 +495,9 @@ export default function ShopPage({ website = null }) {
         }
 
         setWallet(
-          Number(data?.balance || 0)
+          Number(
+            data?.balance || 0
+          )
         );
       } catch (error) {
         console.error(
@@ -481,7 +516,11 @@ export default function ShopPage({ website = null }) {
     return () => {
       mounted = false;
     };
-  }, [user, isWebsiteShop, websiteSlug]);
+  }, [
+    user,
+    isWebsiteShop,
+    websiteSlug,
+  ]);
 
   /* =========================
      CATEGORY
@@ -591,13 +630,11 @@ export default function ShopPage({ website = null }) {
   function getStock(productId) {
     /*
       SHOP CŨ:
-      vẫn dùng stockMap cũ.
+      dùng stockMap cũ.
 
       WEBSITE MỚI:
       sản phẩm website không dùng
-      kho KEY cũ của XENOVA nên
-      không lấy stockMap cũ để khóa
-      nút MUA.
+      kho KEY cũ XENOVA.
     */
 
     if (isWebsiteShop) {
@@ -825,6 +862,7 @@ export default function ShopPage({ website = null }) {
       =========================================
 
       Không dùng:
+
       - /api/buy-key
       - wallet XENOVA
       - kho KEY cũ
@@ -924,7 +962,7 @@ export default function ShopPage({ website = null }) {
       SHOP XENOVA CŨ
       =========================================
 
-      GIỮ NGUYÊN LUỒNG CŨ
+      GIỮ LUỒNG CŨ.
     */
 
     const stock =
@@ -1019,9 +1057,8 @@ export default function ShopPage({ website = null }) {
       await loadShop();
 
       /*
-        SHOP CŨ:
-        chỉ lấy ví XENOVA có
-        website_id = NULL.
+        Sau khi mua XENOVA:
+        chỉ đọc ví cũ website_id = NULL.
       */
 
       const {
@@ -1034,7 +1071,10 @@ export default function ShopPage({ website = null }) {
             "user_id",
             user.id
           )
-          .is("website_id", null)
+          .is(
+            "website_id",
+            null
+          )
           .maybeSingle();
 
       setWallet(
