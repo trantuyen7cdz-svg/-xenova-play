@@ -94,23 +94,99 @@ export default function ShopPage({ website = null }) {
     let mounted = true;
 
     async function loadUser() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      try {
+        /*
+          =========================================
+          WEBSITE SHOP MỚI
+          =========================================
 
-      if (mounted) {
-        setUser(user || null);
+          Website shop KHÔNG dùng Supabase Auth.
+
+          Dùng:
+            website_users
+            website_sessions
+            HttpOnly cookie
+
+          Cookie được browser tự gửi theo request.
+        */
+
+        if (isWebsiteShop) {
+          const response = await fetch(
+            `/api/sites/${websiteSlug}/auth/me`,
+            {
+              method: "GET",
+              cache: "no-store",
+            }
+          );
+
+          const data = await response.json();
+
+          if (!mounted) return;
+
+          if (
+            !response.ok ||
+            !data?.success ||
+            !data?.user
+          ) {
+            setUser(null);
+            return;
+          }
+
+          setUser(data.user);
+          return;
+        }
+
+        /*
+          =========================================
+          SHOP XENOVA CŨ
+          =========================================
+
+          Giữ nguyên Supabase Auth.
+        */
+
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        if (mounted) {
+          setUser(user || null);
+        }
+      } catch (error) {
+        console.error(
+          "LOAD SHOP USER ERROR:",
+          error
+        );
+
+        if (mounted) {
+          setUser(null);
+        }
       }
     }
 
     loadUser();
+
+    /*
+      Website shop dùng custom session,
+      không cần lắng nghe Supabase Auth.
+
+      XENOVA cũ vẫn giữ onAuthStateChange.
+    */
+    if (isWebsiteShop) {
+      return () => {
+        mounted = false;
+      };
+    }
 
     const {
       data: { subscription },
     } =
       supabase.auth.onAuthStateChange(
         (_event, session) => {
-          setUser(session?.user || null);
+          if (mounted) {
+            setUser(
+              session?.user || null
+            );
+          }
         }
       );
 
@@ -118,7 +194,10 @@ export default function ShopPage({ website = null }) {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [
+    isWebsiteShop,
+    websiteSlug,
+  ]);
 
   /* =========================
      SHOP SETTINGS
@@ -378,40 +457,21 @@ export default function ShopPage({ website = null }) {
           WEBSITE SHOP MỚI
           =========================================
 
-          Ví riêng của website:
+          Không dùng:
+            supabase.auth.getSession()
 
-          website_id
-          +
-          user_id
+          Không gửi:
+            Authorization: Bearer ...
+
+          Website session dùng HttpOnly cookie.
         */
 
         if (isWebsiteShop) {
-          const {
-            data: {
-              session,
-            },
-          } =
-            await supabase.auth.getSession();
-
-          if (!session?.access_token) {
-            if (mounted) {
-              setWallet(0);
-            }
-
-            return;
-          }
-
           const response =
             await fetch(
               `/api/sites/${websiteSlug}/wallet`,
               {
                 method: "GET",
-
-                headers: {
-                  Authorization:
-                    `Bearer ${session.access_token}`,
-                },
-
                 cache: "no-store",
               }
             );
@@ -448,18 +508,13 @@ export default function ShopPage({ website = null }) {
           SHOP XENOVA CŨ
           =========================================
 
-          QUAN TRỌNG:
+          Giữ nguyên Supabase Auth.
 
-          Không đọc trực tiếp bảng wallets
-          bằng client nữa.
+          Dùng /api/wallet/current để server
+          lấy đúng ví XENOVA:
 
-          Dùng /api/wallet/current để
-          server lấy đúng ví:
-
-          user_id = tài khoản hiện tại
-          website_id = NULL
-
-          Đây là ví XENOVA cũ.
+            user_id = tài khoản hiện tại
+            website_id = NULL
         */
 
         const {
@@ -858,8 +913,19 @@ export default function ShopPage({ website = null }) {
   async function handleBuy() {
     if (!buyModal) return;
 
+    /*
+      =========================================
+      KIỂM TRA ĐĂNG NHẬP
+      =========================================
+    */
+
     if (!user) {
-      router.push("/login");
+      router.push(
+        isWebsiteShop
+          ? `/sites/${websiteSlug}/login`
+          : "/login"
+      );
+
       return;
     }
 
@@ -868,25 +934,21 @@ export default function ShopPage({ website = null }) {
       WEBSITE SHOP MỚI
       =========================================
 
-      Chỉ tạo website_order.
+      Dùng website_sessions.
+
+      KHÔNG dùng:
+        supabase.auth.getSession()
+
+      KHÔNG gửi:
+        Authorization Bearer
+
+      Cookie HttpOnly sẽ tự gửi.
     */
 
     if (isWebsiteShop) {
       try {
         setBuying(true);
         setMessage("");
-
-        const {
-          data: {
-            session,
-          },
-        } =
-          await supabase.auth.getSession();
-
-        if (!session?.access_token) {
-          router.push("/login");
-          return;
-        }
 
         const response =
           await fetch(
@@ -897,9 +959,6 @@ export default function ShopPage({ website = null }) {
               headers: {
                 "Content-Type":
                   "application/json",
-
-                Authorization:
-                  `Bearer ${session.access_token}`,
               },
 
               body: JSON.stringify({
@@ -918,6 +977,16 @@ export default function ShopPage({ website = null }) {
           !response.ok ||
           !data?.success
         ) {
+          if (
+            response.status === 401
+          ) {
+            router.push(
+              `/sites/${websiteSlug}/login`
+            );
+
+            return;
+          }
+
           throw new Error(
             data?.error ||
               data?.message ||
@@ -1060,9 +1129,6 @@ export default function ShopPage({ website = null }) {
 
         Đọc lại ví cũ thông qua API
         /api/wallet/current
-
-        để chắc chắn lấy đúng:
-        website_id = NULL
       */
 
       const {
@@ -1174,7 +1240,11 @@ export default function ShopPage({ website = null }) {
           <button
             className="logo"
             onClick={() =>
-              router.push("/")
+              router.push(
+                isWebsiteShop
+                  ? `/sites/${websiteSlug}`
+                  : "/"
+              )
             }
           >
             {settings.logo_url ? (
@@ -1202,7 +1272,11 @@ export default function ShopPage({ website = null }) {
           <nav className="nav">
             <button
               onClick={() =>
-                router.push("/")
+                router.push(
+                  isWebsiteShop
+                    ? `/sites/${websiteSlug}`
+                    : "/"
+                )
               }
             >
               Trang chủ
@@ -1214,7 +1288,11 @@ export default function ShopPage({ website = null }) {
 
             <button
               onClick={() =>
-                router.push("/keys")
+                router.push(
+                  isWebsiteShop
+                    ? `/sites/${websiteSlug}/keys`
+                    : "/keys"
+                )
               }
             >
               Kho KEY
@@ -1222,7 +1300,11 @@ export default function ShopPage({ website = null }) {
 
             <button
               onClick={() =>
-                router.push("/orders")
+                router.push(
+                  isWebsiteShop
+                    ? `/sites/${websiteSlug}/orders`
+                    : "/orders"
+                )
               }
             >
               Đơn hàng
@@ -1235,7 +1317,9 @@ export default function ShopPage({ website = null }) {
                 className="account-button"
                 onClick={() =>
                   router.push(
-                    "/account"
+                    isWebsiteShop
+                      ? `/sites/${websiteSlug}/account`
+                      : "/account"
                   )
                 }
               >
@@ -1246,7 +1330,9 @@ export default function ShopPage({ website = null }) {
                 className="account-button"
                 onClick={() =>
                   router.push(
-                    "/login"
+                    isWebsiteShop
+                      ? `/sites/${websiteSlug}/login`
+                      : "/login"
                   )
                 }
               >
