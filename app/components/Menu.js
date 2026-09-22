@@ -41,26 +41,57 @@ export default function Menu() {
       return;
     }
 
-    const { data, error } = await supabase
-      .from("wallets")
-      .select("balance")
-      .eq("user_id", currentUser.id)
-      .is("website_id", null)
-      .maybeSingle();
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-    if (error) {
+      if (!session?.access_token) {
+        setBalance(0);
+        return;
+      }
+
+      const response = await fetch(
+        "/api/wallet/current",
+        {
+          method: "GET",
+          headers: {
+            Authorization:
+              `Bearer ${session.access_token}`,
+          },
+          cache: "no-store",
+        }
+      );
+
+      const data = await response.json();
+
+      if (
+        !response.ok ||
+        !data?.success
+      ) {
+        console.error(
+          "MENU WALLET API ERROR:",
+          data?.message,
+          data?.error
+        );
+
+        setBalance(0);
+        return;
+      }
+
+      setBalance(
+        Number(
+          data?.wallet?.balance || 0
+        )
+      );
+    } catch (error) {
       console.error(
         "MENU WALLET ERROR:",
         error
       );
 
       setBalance(0);
-      return;
     }
-
-    setBalance(
-      Number(data?.balance || 0)
-    );
   }
 
   async function loadUser() {
@@ -123,10 +154,9 @@ export default function Menu() {
         }
       );
 
-    const handleWalletUpdated =
-      () => {
-        loadUser();
-      };
+    const handleWalletUpdated = () => {
+      loadUser();
+    };
 
     const handleOpenMenu = () => {
       setOpen(true);
