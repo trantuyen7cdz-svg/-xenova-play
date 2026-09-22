@@ -24,107 +24,86 @@ export default function SiteOrdersPage() {
     setLoading(true);
 
     try {
-      const [
-        websiteRes,
-        userRes,
-        ordersRes,
-      ] = await Promise.all([
-        fetch(`/api/sites/${slug}`, {
+      const [userRes, ordersRes] = await Promise.all([
+        fetch(`/api/sites/${slug}/auth/me`, {
           cache: "no-store",
         }),
 
-        fetch(
-          `/api/sites/${slug}/auth/me`,
-          {
-            cache: "no-store",
-          }
-        ),
-
-        fetch(
-          `/api/sites/${slug}/orders`,
-          {
-            cache: "no-store",
-          }
-        ),
+        fetch(`/api/sites/${slug}/orders`, {
+          cache: "no-store",
+        }),
       ]);
 
-      if (websiteRes.ok) {
-        const data =
-          await websiteRes.json();
-
-        setWebsite(
-          data.website || data
-        );
-      }
+      let userData = null;
 
       if (userRes.ok) {
-        const data =
-          await userRes.json();
+        userData = await userRes.json();
 
-        setUser(
-          data.user || null
-        );
+        setUser(userData.user || null);
+        setWebsite(userData.website || null);
+      } else {
+        setUser(null);
+        setWebsite(null);
       }
 
       if (ordersRes.ok) {
-        const data =
-          await ordersRes.json();
+        const data = await ordersRes.json();
 
-        setOrders(
-          data.orders || []
-        );
-      } else if (
-        ordersRes.status === 401
-      ) {
+        setOrders(data.orders || []);
+
+        if (!userData?.website && data.website) {
+          setWebsite(data.website);
+        }
+      } else if (ordersRes.status === 401) {
         setUser(null);
+        setOrders([]);
       }
     } catch (error) {
-      console.error(
-        "LOAD ORDERS ERROR:",
-        error
-      );
+      console.error("LOAD ORDERS ERROR:", error);
     } finally {
       setLoading(false);
     }
   }
 
   function go(path = "") {
-    router.push(
-      `/sites/${slug}${path}`
-    );
+    if (!slug) return;
+
+    if (!path) {
+      router.push(`/sites/${slug}`);
+      return;
+    }
+
+    router.push(`/sites/${slug}${path}`);
   }
 
   async function logout() {
-    await fetch(
-      `/api/sites/${slug}/auth/logout`,
-      {
+    try {
+      await fetch(`/api/sites/${slug}/auth/logout`, {
         method: "POST",
-      }
-    );
+      });
+    } catch (error) {
+      console.error("LOGOUT ERROR:", error);
+    }
 
-    router.push(
-      `/sites/${slug}/login`
-    );
+    router.push(`/sites/${slug}/login`);
   }
 
   function formatMoney(value) {
-    const number = Number(
-      value || 0
-    );
+    const number = Number(value || 0);
 
-    return (
-      number.toLocaleString(
-        "vi-VN"
-      ) + "đ"
-    );
+    return number.toLocaleString("vi-VN") + "đ";
   }
 
   function formatDate(value) {
     if (!value) return "—";
 
-    return new Date(
-      value
-    ).toLocaleString("vi-VN");
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return "—";
+    }
+
+    return date.toLocaleString("vi-VN");
   }
 
   function statusText(status) {
@@ -138,11 +117,7 @@ export default function SiteOrdersPage() {
       failed: "Thất bại",
     };
 
-    return (
-      map[status] ||
-      status ||
-      "Không rõ"
-    );
+    return map[status] || status || "Không rõ";
   }
 
   function statusClass(status) {
@@ -165,8 +140,7 @@ export default function SiteOrdersPage() {
     return "status pending";
   }
 
-  const shopName =
-    website?.name || "Shop";
+  const shopName = website?.name || "Shop";
 
   return (
     <main className="page">
@@ -183,9 +157,7 @@ export default function SiteOrdersPage() {
             />
           ) : (
             <div className="logoFallback">
-              {shopName
-                .charAt(0)
-                .toUpperCase()}
+              {shopName.charAt(0).toUpperCase()}
             </div>
           )}
 
@@ -193,23 +165,15 @@ export default function SiteOrdersPage() {
         </button>
 
         <nav className="nav">
-          <button
-            onClick={() => go("")}
-          >
+          <button onClick={() => go("")}>
             Trang chủ
           </button>
 
-          <button
-            onClick={() => go("")}
-          >
+          <button onClick={() => go("")}>
             Cửa hàng
           </button>
 
-          <button
-            onClick={() =>
-              go("/keys")
-            }
-          >
+          <button onClick={() => go("/keys")}>
             Kho KEY
           </button>
 
@@ -217,11 +181,7 @@ export default function SiteOrdersPage() {
             Đơn hàng
           </button>
 
-          <button
-            onClick={() =>
-              go("/deposit")
-            }
-          >
+          <button onClick={() => go("/deposit")}>
             Nạp tiền
           </button>
         </nav>
@@ -231,13 +191,10 @@ export default function SiteOrdersPage() {
             <>
               <button
                 className="accountButton"
-                onClick={() =>
-                  go("/account")
-                }
+                onClick={() => go("/account")}
               >
                 👤{" "}
-                {user.username ||
-                  user.email}
+                {user.username || user.email}
               </button>
 
               <button
@@ -250,9 +207,7 @@ export default function SiteOrdersPage() {
           ) : (
             <button
               className="login"
-              onClick={() =>
-                go("/login")
-              }
+              onClick={() => go("/login")}
             >
               Đăng nhập
             </button>
@@ -266,8 +221,7 @@ export default function SiteOrdersPage() {
             <h1>Đơn hàng</h1>
 
             <p>
-              Lịch sử đơn hàng tại{" "}
-              {shopName}
+              Lịch sử đơn hàng tại {shopName}
             </p>
           </div>
 
@@ -290,15 +244,12 @@ export default function SiteOrdersPage() {
             </h2>
 
             <p>
-              Đăng nhập để xem đơn
-              hàng.
+              Đăng nhập để xem đơn hàng.
             </p>
 
             <button
               className="primary"
-              onClick={() =>
-                go("/login")
-              }
+              onClick={() => go("/login")}
             >
               Đăng nhập
             </button>
@@ -322,8 +273,7 @@ export default function SiteOrdersPage() {
             </h2>
 
             <p>
-              Bạn chưa mua sản phẩm
-              nào tại shop này.
+              Bạn chưa mua sản phẩm nào tại shop này.
             </p>
 
             <button
@@ -347,9 +297,7 @@ export default function SiteOrdersPage() {
                     </div>
 
                     <div className="date">
-                      {formatDate(
-                        order.created_at
-                      )}
+                      {formatDate(order.created_at)}
                     </div>
                   </div>
 
@@ -358,9 +306,7 @@ export default function SiteOrdersPage() {
                       order.status
                     )}
                   >
-                    {statusText(
-                      order.status
-                    )}
+                    {statusText(order.status)}
                   </span>
                 </div>
 
@@ -377,8 +323,7 @@ export default function SiteOrdersPage() {
 
                     <span>
                       Số lượng:{" "}
-                      {order.quantity ||
-                        1}
+                      {order.quantity || 1}
                     </span>
                   </div>
 
@@ -420,37 +365,25 @@ export default function SiteOrdersPage() {
       </section>
 
       <div className="bottomNav">
-        <button
-          onClick={() => go("")}
-        >
+        <button onClick={() => go("")}>
           🏠
           <span>Trang chủ</span>
         </button>
 
-        <button
-          onClick={() =>
-            go("/keys")
-          }
-        >
+        <button onClick={() => go("/keys")}>
           🔑
           <span>Kho KEY</span>
         </button>
 
         <button
           className="bottomActive"
-          onClick={() =>
-            go("/orders")
-          }
+          onClick={() => go("/orders")}
         >
           📦
           <span>Đơn hàng</span>
         </button>
 
-        <button
-          onClick={() =>
-            go("/account")
-          }
-        >
+        <button onClick={() => go("/account")}>
           👤
           <span>Tài khoản</span>
         </button>
