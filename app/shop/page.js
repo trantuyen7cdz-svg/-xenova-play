@@ -86,6 +86,43 @@ export default function ShopPage({ website = null }) {
   const websiteSlug = website?.slug || null;
   const isWebsiteShop = Boolean(websiteSlug);
 
+  /*
+  =====================================================
+  SITE URL
+  =====================================================
+
+  SHOP CŨ:
+    /deposit
+    /keys
+    /orders
+    /account
+
+  SHOP MỚI:
+    /sites/shop-nobita/deposit
+    /sites/shop-nobita/keys
+    /sites/shop-nobita/orders
+    /sites/shop-nobita/account
+
+  Không bao giờ để shop mới rơi về route XENOVA.
+  */
+
+  function siteUrl(path = "") {
+    if (!isWebsiteShop) {
+      return path || "/";
+    }
+
+    const cleanPath =
+      String(path || "").startsWith("/")
+        ? String(path || "")
+        : `/${String(path || "")}`;
+
+    return `/sites/${websiteSlug}${cleanPath}`;
+  }
+
+  function goTo(path) {
+    router.push(siteUrl(path));
+  }
+
   /* =========================
      USER
   ========================= */
@@ -96,18 +133,7 @@ export default function ShopPage({ website = null }) {
     async function loadUser() {
       try {
         /*
-          =========================================
           WEBSITE SHOP MỚI
-          =========================================
-
-          Website shop KHÔNG dùng Supabase Auth.
-
-          Dùng:
-            website_users
-            website_sessions
-            HttpOnly cookie
-
-          Cookie được browser tự gửi theo request.
         */
 
         if (isWebsiteShop) {
@@ -137,11 +163,7 @@ export default function ShopPage({ website = null }) {
         }
 
         /*
-          =========================================
-          SHOP XENOVA CŨ
-          =========================================
-
-          Giữ nguyên Supabase Auth.
+          XENOVA CŨ
         */
 
         const {
@@ -165,12 +187,6 @@ export default function ShopPage({ website = null }) {
 
     loadUser();
 
-    /*
-      Website shop dùng custom session,
-      không cần lắng nghe Supabase Auth.
-
-      XENOVA cũ vẫn giữ onAuthStateChange.
-    */
     if (isWebsiteShop) {
       return () => {
         mounted = false;
@@ -277,7 +293,10 @@ export default function ShopPage({ website = null }) {
 
   useEffect(() => {
     loadSettings();
-  }, [isWebsiteShop, website]);
+  }, [
+    isWebsiteShop,
+    website,
+  ]);
 
   /* =========================
      BANNER
@@ -452,20 +471,6 @@ export default function ShopPage({ website = null }) {
 
     async function loadWallet() {
       try {
-        /*
-          =========================================
-          WEBSITE SHOP MỚI
-          =========================================
-
-          Không dùng:
-            supabase.auth.getSession()
-
-          Không gửi:
-            Authorization: Bearer ...
-
-          Website session dùng HttpOnly cookie.
-        */
-
         if (isWebsiteShop) {
           const response =
             await fetch(
@@ -502,20 +507,6 @@ export default function ShopPage({ website = null }) {
 
           return;
         }
-
-        /*
-          =========================================
-          SHOP XENOVA CŨ
-          =========================================
-
-          Giữ nguyên Supabase Auth.
-
-          Dùng /api/wallet/current để server
-          lấy đúng ví XENOVA:
-
-            user_id = tài khoản hiện tại
-            website_id = NULL
-        */
 
         const {
           data: {
@@ -556,11 +547,6 @@ export default function ShopPage({ website = null }) {
           !response.ok ||
           !data?.success
         ) {
-          console.error(
-            "CURRENT WALLET ERROR:",
-            data?.message
-          );
-
           setWallet(0);
           return;
         }
@@ -913,36 +899,13 @@ export default function ShopPage({ website = null }) {
   async function handleBuy() {
     if (!buyModal) return;
 
-    /*
-      =========================================
-      KIỂM TRA ĐĂNG NHẬP
-      =========================================
-    */
-
     if (!user) {
-      router.push(
-        isWebsiteShop
-          ? `/sites/${websiteSlug}/login`
-          : "/login"
-      );
-
+      goTo("/login");
       return;
     }
 
     /*
-      =========================================
-      WEBSITE SHOP MỚI
-      =========================================
-
-      Dùng website_sessions.
-
-      KHÔNG dùng:
-        supabase.auth.getSession()
-
-      KHÔNG gửi:
-        Authorization Bearer
-
-      Cookie HttpOnly sẽ tự gửi.
+      WEBSITE SHOP
     */
 
     if (isWebsiteShop) {
@@ -980,10 +943,7 @@ export default function ShopPage({ website = null }) {
           if (
             response.status === 401
           ) {
-            router.push(
-              `/sites/${websiteSlug}/login`
-            );
-
+            goTo("/login");
             return;
           }
 
@@ -1005,8 +965,8 @@ export default function ShopPage({ website = null }) {
 
         setBuyModal(null);
 
-        router.push(
-          `/sites/${websiteSlug}/checkout/${orderId}`
+        goTo(
+          `/checkout/${orderId}`
         );
 
         return;
@@ -1028,9 +988,7 @@ export default function ShopPage({ website = null }) {
     }
 
     /*
-      =========================================
-      SHOP XENOVA CŨ
-      =========================================
+      XENOVA CŨ
     */
 
     const stock =
@@ -1124,13 +1082,6 @@ export default function ShopPage({ website = null }) {
 
       await loadShop();
 
-      /*
-        Sau khi mua XENOVA:
-
-        Đọc lại ví cũ thông qua API
-        /api/wallet/current
-      */
-
       const {
         data: {
           session: currentSession,
@@ -1209,7 +1160,7 @@ export default function ShopPage({ website = null }) {
   return (
     <main className="page">
 
-      {/* HOA HỒNG RƠI */}
+      {/* HOA RƠI */}
       <div className="petals">
         {Array.from({
           length: 30,
@@ -1240,11 +1191,7 @@ export default function ShopPage({ website = null }) {
           <button
             className="logo"
             onClick={() =>
-              router.push(
-                isWebsiteShop
-                  ? `/sites/${websiteSlug}`
-                  : "/"
-              )
+              goTo("/")
             }
           >
             {settings.logo_url ? (
@@ -1252,31 +1199,44 @@ export default function ShopPage({ website = null }) {
                 src={
                   settings.logo_url
                 }
-                alt="XENOVA PLAY"
+                alt={
+                  website?.name ||
+                  "XENOVA PLAY"
+                }
                 className="logo-image"
               />
             ) : (
               <span className="logo-icon">
-                X
+                {isWebsiteShop
+                  ? String(
+                      website?.name ||
+                        "SHOP"
+                    )
+                      .charAt(0)
+                      .toUpperCase()
+                  : "X"}
               </span>
             )}
 
-            <span className="logo-text">
-              XENOVA
-              <small>
-                PLAY
-              </small>
-            </span>
+            {/* 
+              SHOP MỚI KHÔNG HIỆN
+              "XENOVA PLAY" CẠNH LOGO
+            */}
+            {!isWebsiteShop && (
+              <span className="logo-text">
+                XENOVA
+                <small>
+                  PLAY
+                </small>
+              </span>
+            )}
           </button>
 
           <nav className="nav">
+
             <button
               onClick={() =>
-                router.push(
-                  isWebsiteShop
-                    ? `/sites/${websiteSlug}`
-                    : "/"
-                )
+                goTo("/")
               }
             >
               Trang chủ
@@ -1288,11 +1248,7 @@ export default function ShopPage({ website = null }) {
 
             <button
               onClick={() =>
-                router.push(
-                  isWebsiteShop
-                    ? `/sites/${websiteSlug}/keys`
-                    : "/keys"
-                )
+                goTo("/keys")
               }
             >
               Kho KEY
@@ -1300,15 +1256,20 @@ export default function ShopPage({ website = null }) {
 
             <button
               onClick={() =>
-                router.push(
-                  isWebsiteShop
-                    ? `/sites/${websiteSlug}/orders`
-                    : "/orders"
-                )
+                goTo("/orders")
               }
             >
               Đơn hàng
             </button>
+
+            <button
+              onClick={() =>
+                goTo("/deposit")
+              }
+            >
+              Nạp tiền
+            </button>
+
           </nav>
 
           <div className="account">
@@ -1316,11 +1277,7 @@ export default function ShopPage({ website = null }) {
               <button
                 className="account-button"
                 onClick={() =>
-                  router.push(
-                    isWebsiteShop
-                      ? `/sites/${websiteSlug}/account`
-                      : "/account"
-                  )
+                  goTo("/account")
                 }
               >
                 👤 Tài khoản
@@ -1329,11 +1286,7 @@ export default function ShopPage({ website = null }) {
               <button
                 className="account-button"
                 onClick={() =>
-                  router.push(
-                    isWebsiteShop
-                      ? `/sites/${websiteSlug}/login`
-                      : "/login"
-                  )
+                  goTo("/login")
                 }
               >
                 Đăng nhập
@@ -1360,7 +1313,10 @@ export default function ShopPage({ website = null }) {
                   bannerIndex
                 ]?.image_url
               }
-              alt="XENOVA PLAY"
+              alt={
+                website?.name ||
+                "Shop Banner"
+              }
               className="banner-image"
             />
 
@@ -1735,6 +1691,7 @@ export default function ShopPage({ website = null }) {
                         className="product-card"
                       >
                         <div className="cover">
+
                           <ProductMedia
                             product={
                               product
@@ -1752,9 +1709,11 @@ export default function ShopPage({ website = null }) {
                               ? `Còn ${stock}`
                               : "HẾT HÀNG"}
                           </span>
+
                         </div>
 
                         <div className="product-body">
+
                           <span className="product-category">
                             {
                               selectedChild?.name ||
@@ -1777,8 +1736,7 @@ export default function ShopPage({ website = null }) {
 
                           {product.duration_days && (
                             <div className="duration">
-                              ⏱{" "}
-                              Thời hạn:{" "}
+                              ⏱ Thời hạn:{" "}
                               {
                                 product.duration_days
                               }{" "}
@@ -1787,6 +1745,7 @@ export default function ShopPage({ website = null }) {
                           )}
 
                           <div className="product-bottom">
+
                             <strong className="price">
                               {formatPrice(
                                 product.price
@@ -1812,7 +1771,9 @@ export default function ShopPage({ website = null }) {
                                 ? "MUA NGAY"
                                 : "HẾT HÀNG"}
                             </button>
+
                           </div>
+
                         </div>
                       </div>
                     );
@@ -1840,6 +1801,56 @@ export default function ShopPage({ website = null }) {
           Liên hệ Admin
         </span>
       </a>
+
+      {/* THANH ĐIỀU HƯỚNG DƯỚI */}
+      <div className="bottom-toolbar">
+
+        <button
+          className="bottom-balance"
+          onClick={() =>
+            goTo("/deposit")
+          }
+        >
+          <span className="bottom-icon">
+            💰
+          </span>
+
+          <span className="bottom-balance-text">
+            <small>
+              SỐ DƯ
+            </small>
+
+            <strong>
+              {formatPrice(wallet)}
+            </strong>
+          </span>
+        </button>
+
+        <button
+          className="bottom-account"
+          onClick={() =>
+            goTo(
+              user
+                ? "/account"
+                : "/login"
+            )
+          }
+          aria-label="Tài khoản"
+        >
+          🐰
+        </button>
+
+        <button
+          className="bottom-key"
+          onClick={() =>
+            goTo("/keys")
+          }
+          aria-label="Kho KEY"
+        >
+          🔑
+        </button>
+
+      </div>
 
       {/* MODAL MUA */}
       {buyModal && (
@@ -1909,6 +1920,7 @@ export default function ShopPage({ website = null }) {
             )}
 
             <div className="modal-actions">
+
               <button
                 className="cancel"
                 disabled={buying}
@@ -1930,6 +1942,7 @@ export default function ShopPage({ website = null }) {
                   ? "ĐANG XỬ LÝ..."
                   : "XÁC NHẬN MUA"}
               </button>
+
             </div>
           </div>
         </div>
@@ -1957,6 +1970,7 @@ export default function ShopPage({ website = null }) {
 
             {successModal.key && (
               <div className="key-box">
+
                 <span>
                   KEY CỦA BẠN
                 </span>
@@ -1976,6 +1990,7 @@ export default function ShopPage({ website = null }) {
                 >
                   📋 Sao chép
                 </button>
+
               </div>
             )}
 
@@ -1989,6 +2004,7 @@ export default function ShopPage({ website = null }) {
             >
               ĐÓNG
             </button>
+
           </div>
         </div>
       )}
@@ -2053,7 +2069,7 @@ const styles = `
     Arial,
     Helvetica,
     sans-serif;
-  padding-bottom: 90px;
+  padding-bottom: 105px;
 }
 
 .petals {
@@ -2269,16 +2285,6 @@ const styles = `
   box-shadow:
     0 5px 18px
     rgba(0,0,0,.12);
-  transition:
-    transform .15s,
-    background .15s;
-}
-
-.banner-arrow:hover {
-  background: white;
-  transform:
-    translateY(-50%)
-    scale(1.06);
 }
 
 .banner-arrow.left {
@@ -2312,9 +2318,6 @@ const styles = `
   background:
     rgba(255,255,255,.55);
   cursor: pointer;
-  transition:
-    width .2s,
-    background .2s;
 }
 
 .dot.active {
@@ -2562,17 +2565,6 @@ const styles = `
   border:
     1px solid #eee;
   border-radius: 13px;
-  transition:
-    transform .18s,
-    box-shadow .18s;
-}
-
-.product-card:hover {
-  transform:
-    translateY(-3px);
-  box-shadow:
-    0 15px 35px
-    rgba(40,20,60,.10);
 }
 
 .cover {
@@ -2741,6 +2733,91 @@ const styles = `
   box-shadow:
     0 8px 25px
     rgba(232,61,148,.3);
+}
+
+.bottom-toolbar {
+  position: fixed;
+  left: 14px;
+  right: 14px;
+  bottom: 12px;
+  height: 70px;
+  z-index: 120;
+  display: grid;
+  grid-template-columns:
+    1fr 70px 70px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border:
+    1px solid rgba(232,61,148,.12);
+  border-radius: 22px;
+  background:
+    rgba(255,255,255,.94);
+  box-shadow:
+    0 10px 35px
+    rgba(50,20,70,.12);
+  backdrop-filter:
+    blur(18px);
+}
+
+.bottom-balance,
+.bottom-account,
+.bottom-key {
+  border: 0;
+  cursor: pointer;
+}
+
+.bottom-balance {
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 8px;
+  background: transparent;
+  text-align: left;
+}
+
+.bottom-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: #fff1f7;
+  font-size: 22px;
+}
+
+.bottom-balance-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bottom-balance-text small {
+  color: #999;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.bottom-balance-text strong {
+  color: #222;
+  font-size: 13px;
+}
+
+.bottom-account,
+.bottom-key {
+  width: 48px;
+  height: 48px;
+  justify-self: center;
+  border-radius: 15px;
+  background: #fff1f7;
+  font-size: 23px;
+}
+
+.bottom-account:hover,
+.bottom-key:hover,
+.bottom-balance:hover .bottom-icon {
+  transform: scale(1.04);
 }
 
 .overlay {
@@ -3029,11 +3106,38 @@ const styles = `
 
   .zalo {
     right: 12px;
-    bottom: 78px;
+    bottom: 92px;
   }
 
   .zalo span {
     display: none;
+  }
+
+  .bottom-toolbar {
+    left: 10px;
+    right: 10px;
+    bottom: 8px;
+    height: 66px;
+    grid-template-columns:
+      1fr 58px 58px;
+    border-radius: 20px;
+  }
+
+  .bottom-account,
+  .bottom-key {
+    width: 44px;
+    height: 44px;
+    font-size: 21px;
+  }
+
+  .bottom-icon {
+    width: 39px;
+    height: 39px;
+    font-size: 19px;
+  }
+
+  .bottom-balance-text strong {
+    font-size: 12px;
   }
 }
 
@@ -3054,6 +3158,19 @@ const styles = `
 
   .price {
     font-size: 12px;
+  }
+
+  .bottom-toolbar {
+    grid-template-columns:
+      1fr 52px 52px;
+  }
+
+  .bottom-balance-text small {
+    font-size: 8px;
+  }
+
+  .bottom-balance-text strong {
+    font-size: 11px;
   }
 }
 
