@@ -24,58 +24,81 @@ export default function SiteKeysPage() {
     setLoading(true);
 
     try {
-      const [websiteRes, userRes, keysRes] = await Promise.all([
-        fetch(`/api/sites/${slug}`, {
-          cache: "no-store",
-        }),
+      const [websiteRes, userRes, keysRes] =
+        await Promise.all([
+          fetch(`/api/sites/${slug}`, {
+            cache: "no-store",
+          }),
 
-        fetch(`/api/sites/${slug}/auth/me`, {
-          cache: "no-store",
-        }),
+          fetch(`/api/sites/${slug}/auth/me`, {
+            cache: "no-store",
+          }),
 
-        fetch(`/api/sites/${slug}/keys`, {
-          cache: "no-store",
-        }),
-      ]);
+          fetch(`/api/sites/${slug}/keys`, {
+            cache: "no-store",
+          }),
+        ]);
 
       if (websiteRes.ok) {
-        const websiteData = await websiteRes.json();
-        setWebsite(websiteData.website || websiteData);
+        const websiteData =
+          await websiteRes.json();
+
+        setWebsite(
+          websiteData.website ||
+            websiteData
+        );
       }
 
       if (userRes.ok) {
-        const userData = await userRes.json();
-        setUser(userData.user || null);
+        const userData =
+          await userRes.json();
+
+        setUser(
+          userData.user || null
+        );
       }
 
       if (keysRes.ok) {
-        const keysData = await keysRes.json();
-        setKeys(keysData.keys || []);
+        const keysData =
+          await keysRes.json();
+
+        setKeys(
+          keysData.keys || []
+        );
       }
     } catch (error) {
-      console.error("LOAD SITE KEYS ERROR:", error);
+      console.error(
+        "LOAD SITE KEYS ERROR:",
+        error
+      );
     } finally {
       setLoading(false);
     }
   }
 
-  function go(path) {
-    router.push(`/sites/${slug}${path}`);
+  function go(path = "") {
+    router.push(
+      `/sites/${slug}${path}`
+    );
   }
 
   async function logout() {
     try {
-      await fetch(`/api/sites/${slug}/auth/logout`, {
-        method: "POST",
-      });
+      await fetch(
+        `/api/sites/${slug}/auth/logout`,
+        {
+          method: "POST",
+        }
+      );
     } catch {}
 
-    router.push(`/sites/${slug}/login`);
+    router.push(
+      `/sites/${slug}/login`
+    );
   }
 
   const shopName =
-    website?.name ||
-    "Shop";
+    website?.name || "Shop";
 
   return (
     <main className="page">
@@ -92,7 +115,9 @@ export default function SiteKeysPage() {
             />
           ) : (
             <div className="logoFallback">
-              {shopName.charAt(0).toUpperCase()}
+              {shopName
+                .charAt(0)
+                .toUpperCase()}
             </div>
           )}
 
@@ -100,11 +125,15 @@ export default function SiteKeysPage() {
         </button>
 
         <nav className="nav">
-          <button onClick={() => go("")}>
+          <button
+            onClick={() => go("")}
+          >
             Trang chủ
           </button>
 
-          <button onClick={() => go("/shop")}>
+          <button
+            onClick={() => go("")}
+          >
             Cửa hàng
           </button>
 
@@ -112,11 +141,19 @@ export default function SiteKeysPage() {
             Kho KEY
           </button>
 
-          <button onClick={() => go("/orders")}>
+          <button
+            onClick={() =>
+              go("/orders")
+            }
+          >
             Đơn hàng
           </button>
 
-          <button onClick={() => go("/deposit")}>
+          <button
+            onClick={() =>
+              go("/deposit")
+            }
+          >
             Nạp tiền
           </button>
         </nav>
@@ -126,9 +163,13 @@ export default function SiteKeysPage() {
             <>
               <button
                 className="accountButton"
-                onClick={() => go("/account")}
+                onClick={() =>
+                  go("/account")
+                }
               >
-                👤 {user.username || user.email}
+                👤{" "}
+                {user.username ||
+                  user.email}
               </button>
 
               <button
@@ -141,7 +182,9 @@ export default function SiteKeysPage() {
           ) : (
             <button
               className="login"
-              onClick={() => go("/login")}
+              onClick={() =>
+                go("/login")
+              }
             >
               Đăng nhập
             </button>
@@ -153,14 +196,16 @@ export default function SiteKeysPage() {
         <div className="title">
           <div>
             <h1>Kho KEY</h1>
+
             <p>
-              Các key bạn đã mua tại {shopName}
+              Các key bạn đã mua tại{" "}
+              {shopName}
             </p>
           </div>
 
           <button
             className="back"
-            onClick={() => go("/shop")}
+            onClick={() => go("")}
           >
             ← Cửa hàng
           </button>
@@ -172,15 +217,20 @@ export default function SiteKeysPage() {
               🔐
             </div>
 
-            <h2>Bạn chưa đăng nhập</h2>
+            <h2>
+              Bạn chưa đăng nhập
+            </h2>
 
             <p>
-              Đăng nhập để xem kho key của bạn.
+              Đăng nhập để xem kho
+              key của bạn.
             </p>
 
             <button
               className="primary"
-              onClick={() => go("/login")}
+              onClick={() =>
+                go("/login")
+              }
             >
               Đăng nhập
             </button>
@@ -188,7 +238,10 @@ export default function SiteKeysPage() {
         ) : loading ? (
           <div className="empty">
             <div className="loader" />
-            <p>Đang tải kho key...</p>
+
+            <p>
+              Đang tải kho key...
+            </p>
           </div>
         ) : keys.length === 0 ? (
           <div className="empty">
@@ -196,15 +249,18 @@ export default function SiteKeysPage() {
               🔑
             </div>
 
-            <h2>Chưa có KEY</h2>
+            <h2>
+              Chưa có KEY
+            </h2>
 
             <p>
-              Bạn chưa có key nào trong kho.
+              Bạn chưa có key nào
+              trong kho.
             </p>
 
             <button
               className="primary"
-              onClick={() => go("/shop")}
+              onClick={() => go("")}
             >
               Mua KEY
             </button>
@@ -229,35 +285,49 @@ export default function SiteKeysPage() {
                       {item.created_at
                         ? new Date(
                             item.created_at
-                          ).toLocaleString("vi-VN")
+                          ).toLocaleString(
+                            "vi-VN"
+                          )
                         : "—"}
                     </div>
                   </div>
 
                   <span
                     className={
-                      item.status === "active" ||
-                      item.status === "sold"
+                      item.status ===
+                        "active" ||
+                      item.status ===
+                        "sold"
                         ? "status activeStatus"
                         : "status"
                     }
                   >
-                    {item.status || "available"}
+                    {item.status ||
+                      "available"}
                   </span>
                 </div>
 
                 <div className="keyBox">
                   <span>
-                    {item.key_code || "—"}
+                    {item.key_code ||
+                      "—"}
                   </span>
 
                   <button
                     onClick={() => {
-                      if (!item.key_code) return;
+                      if (
+                        !item.key_code
+                      ) {
+                        return;
+                      }
 
                       navigator.clipboard
-                        ?.writeText(item.key_code)
-                        .catch(() => {});
+                        ?.writeText(
+                          item.key_code
+                        )
+                        .catch(
+                          () => {}
+                        );
                     }}
                   >
                     Sao chép
@@ -266,23 +336,33 @@ export default function SiteKeysPage() {
 
                 <div className="keyInfo">
                   <div>
-                    <span>Hạn sử dụng</span>
+                    <span>
+                      Hạn sử dụng
+                    </span>
+
                     <strong>
                       {item.expires_at
                         ? new Date(
                             item.expires_at
-                          ).toLocaleString("vi-VN")
+                          ).toLocaleString(
+                            "vi-VN"
+                          )
                         : "Không giới hạn"}
                     </strong>
                   </div>
 
                   <div>
-                    <span>Ngày bán</span>
+                    <span>
+                      Ngày bán
+                    </span>
+
                     <strong>
                       {item.sold_at
                         ? new Date(
                             item.sold_at
-                          ).toLocaleString("vi-VN")
+                          ).toLocaleString(
+                            "vi-VN"
+                          )
                         : "—"}
                     </strong>
                   </div>
@@ -294,25 +374,37 @@ export default function SiteKeysPage() {
       </section>
 
       <div className="bottomNav">
-        <button onClick={() => go("")}>
+        <button
+          onClick={() => go("")}
+        >
           🏠
           <span>Trang chủ</span>
         </button>
 
         <button
           className="bottomActive"
-          onClick={() => go("/keys")}
+          onClick={() =>
+            go("/keys")
+          }
         >
           🔑
           <span>Kho KEY</span>
         </button>
 
-        <button onClick={() => go("/orders")}>
+        <button
+          onClick={() =>
+            go("/orders")
+          }
+        >
           📦
           <span>Đơn hàng</span>
         </button>
 
-        <button onClick={() => go("/account")}>
+        <button
+          onClick={() =>
+            go("/account")
+          }
+        >
           👤
           <span>Tài khoản</span>
         </button>
@@ -348,10 +440,17 @@ export default function SiteKeysPage() {
           min-height: 70px;
           padding: 10px 22px;
 
-          background: rgba(255, 255, 255, 0.94);
+          background: rgba(
+            255,
+            255,
+            255,
+            0.94
+          );
+
           backdrop-filter: blur(15px);
 
-          border-bottom: 1px solid #f1dbe5;
+          border-bottom: 1px solid
+            #f1dbe5;
         }
 
         .brand {
@@ -502,7 +601,14 @@ export default function SiteKeysPage() {
           border-radius: 20px;
 
           background: white;
-          box-shadow: 0 10px 35px rgba(255, 61, 145, 0.06);
+          box-shadow:
+            0 10px 35px
+              rgba(
+                255,
+                61,
+                145,
+                0.06
+              );
         }
 
         .emptyIcon {
@@ -534,7 +640,10 @@ export default function SiteKeysPage() {
 
         .keys {
           display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
+          grid-template-columns: repeat(
+            2,
+            minmax(0, 1fr)
+          );
           gap: 16px;
         }
 
@@ -546,7 +655,12 @@ export default function SiteKeysPage() {
 
           box-shadow:
             0 10px 30px
-              rgba(255, 61, 145, 0.06);
+              rgba(
+                255,
+                61,
+                145,
+                0.06
+              );
         }
 
         .keyTop {
@@ -675,7 +789,13 @@ export default function SiteKeysPage() {
 
           padding: 7px;
 
-          background: rgba(255, 255, 255, 0.95);
+          background: rgba(
+            255,
+            255,
+            255,
+            0.95
+          );
+
           backdrop-filter: blur(15px);
 
           border: 1px solid #f0dbe5;
