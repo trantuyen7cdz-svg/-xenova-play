@@ -49,12 +49,18 @@ export default function Menu() {
       .maybeSingle();
 
     if (error) {
-      console.error("MENU WALLET ERROR:", error);
+      console.error(
+        "MENU WALLET ERROR:",
+        error
+      );
+
       setBalance(0);
       return;
     }
 
-    setBalance(Number(data?.balance || 0));
+    setBalance(
+      Number(data?.balance || 0)
+    );
   }
 
   async function loadUser() {
@@ -73,7 +79,9 @@ export default function Menu() {
 
   useEffect(() => {
     const savedTheme =
-      localStorage.getItem("xenova-theme");
+      localStorage.getItem(
+        "xenova-theme"
+      );
 
     if (savedTheme === "dark") {
       setDark(true);
@@ -95,21 +103,30 @@ export default function Menu() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(
-      async (_event, currentUser) => {
-        setUser(currentUser || null);
+    } =
+      supabase.auth.onAuthStateChange(
+        async (
+          _event,
+          currentUser
+        ) => {
+          setUser(
+            currentUser || null
+          );
 
-        if (currentUser) {
-          await loadWallet(currentUser);
-        } else {
-          setBalance(0);
+          if (currentUser) {
+            await loadWallet(
+              currentUser
+            );
+          } else {
+            setBalance(0);
+          }
         }
-      }
-    );
+      );
 
-    const handleWalletUpdated = () => {
-      loadUser();
-    };
+    const handleWalletUpdated =
+      () => {
+        loadUser();
+      };
 
     const handleOpenMenu = () => {
       setOpen(true);
@@ -205,10 +222,6 @@ export default function Menu() {
 
   return (
     <>
-      {/* =========================
-          GÓC PHẢI TRÊN
-      ========================= */}
-
       <div className="global-menu-buttons">
         <button
           type="button"
@@ -222,16 +235,14 @@ export default function Menu() {
         <button
           type="button"
           className="global-menu-button"
-          onClick={() => setOpen(true)}
+          onClick={() =>
+            setOpen(true)
+          }
           aria-label="Mở menu"
         >
           ☰
         </button>
       </div>
-
-      {/* =========================
-          MENU DRAWER
-      ========================= */}
 
       {open && (
         <div
@@ -337,12 +348,16 @@ export default function Menu() {
                 onClick={toggleTheme}
               >
                 <span>
-                  {dark ? "☀️" : "🌙"}{" "}
+                  {dark
+                    ? "☀️"
+                    : "🌙"}{" "}
                   Giao diện
                 </span>
 
                 <span>
-                  {dark ? "Tối" : "Sáng"}
+                  {dark
+                    ? "Tối"
+                    : "Sáng"}
                 </span>
               </button>
 
@@ -368,15 +383,7 @@ export default function Menu() {
         </div>
       )}
 
-      {/* =========================
-          THANH CÔNG CỤ DƯỚI
-          
-          SỐ DƯ | AVATAR | KEY
-      ========================= */}
-
       <div className="xenova-bottom-toolbar">
-
-        {/* SỐ DƯ */}
         <Link
           href="/deposit"
           className="xenova-bottom-item"
@@ -395,7 +402,6 @@ export default function Menu() {
           </span>
         </Link>
 
-        {/* TÀI KHOẢN */}
         <Link
           href={
             user
@@ -410,7 +416,6 @@ export default function Menu() {
           </span>
         </Link>
 
-        {/* KEY */}
         <Link
           href="/keys"
           className="xenova-bottom-item xenova-key-bottom"
@@ -420,7 +425,6 @@ export default function Menu() {
             🔑
           </span>
         </Link>
-
       </div>
     </>
   );
