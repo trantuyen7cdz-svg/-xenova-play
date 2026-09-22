@@ -359,30 +359,121 @@ export default function ShopPage({ website = null }) {
     let mounted = true;
 
     async function loadWallet() {
-      const {
-        data,
-        error,
-      } = await supabase
-        .from("wallets")
-        .select("balance")
-        .eq("user_id", user.id)
-        .maybeSingle();
+      try {
+        /*
+          =========================================
+          WEBSITE SHOP MỚI
+          =========================================
 
-      if (!mounted) return;
+          Ví được lấy qua API riêng của website.
 
-      if (error) {
+          Ví dụ:
+          /sites/tets
+          → /api/sites/tets/wallet
+
+          Không lấy ví XENOVA cũ.
+        */
+
+        if (isWebsiteShop) {
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+
+          if (!session?.access_token) {
+            if (mounted) {
+              setWallet(0);
+            }
+
+            return;
+          }
+
+          const response = await fetch(
+            `/api/sites/${websiteSlug}/wallet`,
+            {
+              method: "GET",
+              headers: {
+                Authorization:
+                  `Bearer ${session.access_token}`,
+              },
+              cache: "no-store",
+            }
+          );
+
+          const data =
+            await response.json();
+
+          if (!mounted) return;
+
+          if (
+            !response.ok ||
+            !data?.success
+          ) {
+            console.error(
+              "WEBSITE WALLET ERROR:",
+              data?.message
+            );
+
+            setWallet(0);
+            return;
+          }
+
+          setWallet(
+            Number(
+              data?.wallet?.balance || 0
+            )
+          );
+
+          return;
+        }
+
+        /*
+          =========================================
+          SHOP XENOVA CŨ
+          =========================================
+
+          Chỉ lấy wallet có:
+
+          website_id = NULL
+
+          để không lấy nhầm ví của
+          website mới.
+        */
+
+        const {
+          data,
+          error,
+        } = await supabase
+          .from("wallets")
+          .select("balance")
+          .eq("user_id", user.id)
+          .is("website_id", null)
+          .maybeSingle();
+
+        if (!mounted) return;
+
+        if (error) {
+          console.error(
+            "WALLET ERROR:",
+            error
+          );
+
+          setWallet(0);
+          return;
+        }
+
+        setWallet(
+          Number(data?.balance || 0)
+        );
+      } catch (error) {
         console.error(
-          "WALLET ERROR:",
+          "LOAD WALLET ERROR:",
           error
         );
 
-        setWallet(0);
-        return;
+        if (mounted) {
+          setWallet(0);
+        }
       }
-
-      setWallet(
-        Number(data?.balance || 0)
-      );
     }
 
     loadWallet();
@@ -390,7 +481,7 @@ export default function ShopPage({ website = null }) {
     return () => {
       mounted = false;
     };
-  }, [user]);
+  }, [user, isWebsiteShop, websiteSlug]);
 
   /* =========================
      CATEGORY
@@ -927,6 +1018,12 @@ export default function ShopPage({ website = null }) {
 
       await loadShop();
 
+      /*
+        SHOP CŨ:
+        chỉ lấy ví XENOVA có
+        website_id = NULL.
+      */
+
       const {
         data: walletData,
       } =
@@ -937,6 +1034,7 @@ export default function ShopPage({ website = null }) {
             "user_id",
             user.id
           )
+          .is("website_id", null)
           .maybeSingle();
 
       setWallet(
