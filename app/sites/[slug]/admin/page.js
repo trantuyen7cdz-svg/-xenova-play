@@ -18,6 +18,7 @@ export default function WebsiteAdminPage() {
   const [stats, setStats] = useState({
     categories: 0,
     products: 0,
+    orders: 0,
   });
 
   useEffect(() => {
@@ -35,57 +36,94 @@ export default function WebsiteAdminPage() {
       } = await supabase.auth.getSession();
 
       if (!session?.user) {
-        router.replace(
-          `/sites/${slug}/admin/login`
-        );
+        router.replace(`/sites/${slug}/admin/login`);
         return;
       }
 
-      const { data: site } =
-        await supabase
-          .from("websites")
-          .select("*")
-          .eq("slug", slug)
-          .eq("status", "active")
-          .maybeSingle();
+      /*
+       * Lấy website hiện tại.
+       */
+      const { data: site, error: siteError } = await supabase
+        .from("websites")
+        .select("*")
+        .eq("slug", slug)
+        .eq("status", "active")
+        .maybeSingle();
+
+      if (siteError) {
+        console.error("WEBSITE LOAD ERROR:", siteError);
+        router.replace(`/sites/${slug}/admin/login`);
+        return;
+      }
 
       if (!site) {
-        router.replace(
-          `/sites/${slug}`
-        );
+        router.replace(`/sites/${slug}`);
         return;
       }
 
-      const { data: adminData } =
+      /*
+       * Kiểm tra quyền Admin của ĐÚNG website.
+       *
+       * Không chỉ kiểm tra user là admin chung.
+       * Phải có:
+       *
+       * website_admins.website_id = site.id
+       * website_admins.user_id    = session.user.id
+       * website_admins.active     = true
+       */
+      const { data: adminData, error: adminError } =
         await supabase
           .from("website_admins")
           .select(
-            "id,website_id,user_id,role,active"
+            "id, website_id, user_id, email, role, active"
           )
           .eq("website_id", site.id)
-          .eq(
-            "user_id",
-            session.user.id
-          )
+          .eq("user_id", session.user.id)
           .eq("active", true)
           .maybeSingle();
 
+      if (adminError) {
+        console.error(
+          "WEBSITE ADMIN CHECK ERROR:",
+          adminError
+        );
+
+        await supabase.auth.signOut();
+
+        router.replace(`/sites/${slug}/admin/login`);
+        return;
+      }
+
+      /*
+       * User không thuộc website này.
+       */
       if (!adminData) {
         await supabase.auth.signOut();
 
-        router.replace(
-          `/sites/${slug}/admin/login`
-        );
+        router.replace(`/sites/${slug}/admin/login`);
+        return;
+      }
 
+      /*
+       * Kiểm tra thêm website_id.
+       */
+      if (adminData.website_id !== site.id) {
+        await supabase.auth.signOut();
+
+        router.replace(`/sites/${slug}/admin/login`);
         return;
       }
 
       setWebsite(site);
       setAdmin(adminData);
 
+      /*
+       * Thống kê riêng website hiện tại.
+       */
       const [
         categoriesResult,
         productsResult,
+        ordersResult,
       ] = await Promise.all([
         supabase
           .from("website_categories")
@@ -93,10 +131,7 @@ export default function WebsiteAdminPage() {
             count: "exact",
             head: true,
           })
-          .eq(
-            "website_id",
-            site.id
-          ),
+          .eq("website_id", site.id),
 
         supabase
           .from("website_products")
@@ -104,18 +139,21 @@ export default function WebsiteAdminPage() {
             count: "exact",
             head: true,
           })
-          .eq(
-            "website_id",
-            site.id
-          ),
+          .eq("website_id", site.id),
+
+        supabase
+          .from("website_orders")
+          .select("id", {
+            count: "exact",
+            head: true,
+          })
+          .eq("website_id", site.id),
       ]);
 
       setStats({
-        categories:
-          categoriesResult.count || 0,
-
-        products:
-          productsResult.count || 0,
+        categories: categoriesResult.count || 0,
+        products: productsResult.count || 0,
+        orders: ordersResult.count || 0,
       });
     } catch (error) {
       console.error(
@@ -123,20 +161,20 @@ export default function WebsiteAdminPage() {
         error
       );
 
-      router.replace(
-        `/sites/${slug}/admin/login`
-      );
+      await supabase.auth.signOut();
+
+      router.replace(`/sites/${slug}/admin/login`);
     } finally {
       setLoading(false);
     }
   }
 
   async function logout() {
-    await supabase.auth.signOut();
-
-    router.replace(
-      `/sites/${slug}/admin/login`
-    );
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      router.replace(`/sites/${slug}/admin/login`);
+    }
   }
 
   if (loading) {
@@ -144,6 +182,20 @@ export default function WebsiteAdminPage() {
       <main style={styles.page}>
         <div style={styles.loading}>
           Đang tải Admin...
+        </div>
+      </main>
+    );
+  }
+
+  /*
+   * Không có website hoặc admin thì không render
+   * nội dung quản trị.
+   */
+  if (!website || !admin) {
+    return (
+      <main style={styles.page}>
+        <div style={styles.loading}>
+          Đang kiểm tra quyền...
         </div>
       </main>
     );
@@ -162,7 +214,8 @@ export default function WebsiteAdminPage() {
               />
             ) : (
               <div style={styles.logoFallback}>
-                {website?.name?.charAt(0)}
+                {website?.name?.charAt(0)?.toUpperCase() ||
+                  "A"}
               </div>
             )}
 
@@ -174,6 +227,10 @@ export default function WebsiteAdminPage() {
               <h1 style={styles.title}>
                 {website?.name}
               </h1>
+
+              <div style={styles.slug}>
+                /{website?.slug}
+              </div>
             </div>
           </div>
 
@@ -196,6 +253,12 @@ export default function WebsiteAdminPage() {
             icon="🏷️"
             label="Danh mục"
             value={stats.categories}
+          />
+
+          <Stat
+            icon="📋"
+            label="Đơn hàng"
+            value={stats.orders}
           />
         </div>
 
@@ -234,6 +297,21 @@ export default function WebsiteAdminPage() {
             />
           </div>
         </section>
+
+        <div style={styles.adminInfo}>
+          <div style={styles.adminInfoLabel}>
+            TÀI KHOẢN QUẢN TRỊ
+          </div>
+
+          <div style={styles.adminInfoValue}>
+            {admin.email ||
+              "Tài khoản Admin"}
+          </div>
+
+          <div style={styles.adminRole}>
+            Quyền: {admin.role || "admin"}
+          </div>
+        </div>
 
         <Link
           href={`/sites/${slug}`}
@@ -365,6 +443,12 @@ const styles = {
     fontWeight: "950",
   },
 
+  slug: {
+    color: "#696371",
+    fontSize: "10px",
+    marginTop: "3px",
+  },
+
   logout: {
     border: "1px solid #352d3b",
     background: "#141119",
@@ -379,7 +463,7 @@ const styles = {
   grid: {
     display: "grid",
     gridTemplateColumns:
-      "repeat(2,minmax(0,1fr))",
+      "repeat(3,minmax(0,1fr))",
     gap: "12px",
     marginBottom: "20px",
   },
@@ -469,6 +553,34 @@ const styles = {
     marginLeft: "auto",
     color: "#ff5eb7",
     fontWeight: "900",
+  },
+
+  adminInfo: {
+    marginTop: "15px",
+    padding: "15px 17px",
+    borderRadius: "12px",
+    border: "1px solid #29232f",
+    background: "#0d0c11",
+  },
+
+  adminInfoLabel: {
+    color: "#625c69",
+    fontSize: "9px",
+    fontWeight: "900",
+    letterSpacing: "1.5px",
+  },
+
+  adminInfoValue: {
+    marginTop: "6px",
+    fontSize: "12px",
+    fontWeight: "800",
+    color: "#ddd",
+  },
+
+  adminRole: {
+    marginTop: "3px",
+    color: "#77717f",
+    fontSize: "10px",
   },
 
   shopButton: {
