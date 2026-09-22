@@ -7,10 +7,19 @@ import { supabase } from "@/lib/supabase";
 
 function formatPrice(value) {
   const number = Number(value || 0);
-  return number.toLocaleString("vi-VN") + "đ";
+
+  return (
+    number.toLocaleString("vi-VN") +
+    "đ"
+  );
 }
 
-function MenuLink({ href, icon, children, onClick }) {
+function MenuLink({
+  href,
+  icon,
+  children,
+  onClick,
+}) {
   return (
     <Link
       href={href}
@@ -34,41 +43,18 @@ export default function Menu() {
   const [user, setUser] = useState(null);
   const [balance, setBalance] = useState(0);
   const [dark, setDark] = useState(false);
-  const [themeReady, setThemeReady] = useState(false);
-
-  /*
-   * ==========================================
-   * PHÁT HIỆN WEBSITE RIÊNG
-   *
-   * Ví dụ:
-   * /sites/nobita
-   * /sites/nobita/deposit
-   * /sites/nobita/keys
-   * /sites/nobita/orders
-   * ==========================================
-   */
+  const [themeReady, setThemeReady] =
+    useState(false);
 
   const siteMatch = pathname?.match(
     /^\/sites\/([^/]+)/
   );
 
-  const siteSlug = siteMatch?.[1] || null;
-  const isSiteMenu = Boolean(siteSlug);
+  const siteSlug =
+    siteMatch?.[1] || null;
 
-  /*
-   * ==========================================
-   * TẠO LINK ĐÚNG THEO WEBSITE
-   *
-   * Website:
-   * /sites/nobita
-   *
-   * Trang chủ / shop:
-   * /sites/nobita
-   *
-   * Nạp tiền:
-   * /sites/nobita/deposit
-   * ==========================================
-   */
+  const isSiteMenu =
+    Boolean(siteSlug);
 
   function sitePath(path = "") {
     if (!siteSlug) {
@@ -86,28 +72,23 @@ export default function Menu() {
     return `/sites/${siteSlug}/${path}`;
   }
 
-  /*
-   * ==========================================
-   * LẤY USER
-   * ==========================================
-   */
-
   async function loadUser() {
-    /*
-     * WEBSITE RIÊNG
-     */
-
-    if (isSiteMenu && siteSlug) {
+    if (
+      isSiteMenu &&
+      siteSlug
+    ) {
       try {
-        const response = await fetch(
-          `/api/sites/${siteSlug}/auth/me`,
-          {
-            method: "GET",
-            cache: "no-store",
-          }
-        );
+        const response =
+          await fetch(
+            `/api/sites/${siteSlug}/auth/me`,
+            {
+              method: "GET",
+              cache: "no-store",
+            }
+          );
 
-        const data = await response.json();
+        const data =
+          await response.json();
 
         if (
           !response.ok ||
@@ -119,11 +100,14 @@ export default function Menu() {
           return;
         }
 
-        const currentUser = data.user;
+        const currentUser =
+          data.user;
 
         setUser(currentUser);
 
-        await loadWallet(currentUser);
+        await loadWallet(
+          currentUser
+        );
       } catch (error) {
         console.error(
           "SITE MENU USER ERROR:",
@@ -137,19 +121,22 @@ export default function Menu() {
       return;
     }
 
-    /*
-     * SHOP CŨ
-     */
-
     try {
       const {
-        data: { user: currentUser },
-      } = await supabase.auth.getUser();
+        data: {
+          user: currentUser,
+        },
+      } =
+        await supabase.auth.getUser();
 
-      setUser(currentUser || null);
+      setUser(
+        currentUser || null
+      );
 
       if (currentUser) {
-        await loadWallet(currentUser);
+        await loadWallet(
+          currentUser
+        );
       } else {
         setBalance(0);
       }
@@ -164,51 +151,43 @@ export default function Menu() {
     }
   }
 
-  /*
-   * ==========================================
-   * LẤY SỐ DƯ
-   * ==========================================
-   */
-
-  async function loadWallet(currentUser) {
+  async function loadWallet(
+    currentUser
+  ) {
     if (!currentUser) {
       setBalance(0);
       return;
     }
 
-    /*
-     * WEBSITE RIÊNG
-     */
-
-    if (isSiteMenu && siteSlug) {
+    if (
+      isSiteMenu &&
+      siteSlug
+    ) {
       try {
-        const response = await fetch(
-          `/api/sites/${siteSlug}/wallet`,
-          {
-            method: "GET",
-            cache: "no-store",
-          }
-        );
+        const response =
+          await fetch(
+            `/api/sites/${siteSlug}/wallet`,
+            {
+              method: "GET",
+              cache: "no-store",
+            }
+          );
 
-        const data = await response.json();
+        const data =
+          await response.json();
 
         if (
           !response.ok ||
           !data?.success
         ) {
-          console.error(
-            "SITE MENU WALLET API ERROR:",
-            data?.message,
-            data?.error
-          );
-
           setBalance(0);
           return;
         }
 
         setBalance(
           Number(
-            data?.wallet?.balance || 0
+            data?.wallet?.balance ||
+              0
           )
         );
       } catch (error) {
@@ -223,51 +202,47 @@ export default function Menu() {
       return;
     }
 
-    /*
-     * SHOP CŨ
-     */
-
     try {
       const {
         data: { session },
-      } = await supabase.auth.getSession();
+      } =
+        await supabase.auth.getSession();
 
-      if (!session?.access_token) {
+      if (
+        !session?.access_token
+      ) {
         setBalance(0);
         return;
       }
 
-      const response = await fetch(
-        "/api/wallet/current",
-        {
-          method: "GET",
-          headers: {
-            Authorization:
-              `Bearer ${session.access_token}`,
-          },
-          cache: "no-store",
-        }
-      );
+      const response =
+        await fetch(
+          "/api/wallet/current",
+          {
+            method: "GET",
+            headers: {
+              Authorization:
+                `Bearer ${session.access_token}`,
+            },
+            cache: "no-store",
+          }
+        );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
       if (
         !response.ok ||
         !data?.success
       ) {
-        console.error(
-          "MENU WALLET API ERROR:",
-          data?.message,
-          data?.error
-        );
-
         setBalance(0);
         return;
       }
 
       setBalance(
         Number(
-          data?.wallet?.balance || 0
+          data?.wallet?.balance ||
+            0
         )
       );
     } catch (error) {
@@ -280,19 +255,16 @@ export default function Menu() {
     }
   }
 
-  /*
-   * ==========================================
-   * KHỞI TẠO
-   * ==========================================
-   */
-
   useEffect(() => {
     const savedTheme =
       localStorage.getItem(
         "xenova-theme"
       );
 
-    if (savedTheme === "dark") {
+    if (
+      savedTheme ===
+      "dark"
+    ) {
       setDark(true);
 
       document.documentElement.classList.add(
@@ -310,18 +282,14 @@ export default function Menu() {
 
     loadUser();
 
-    /*
-     * SHOP CŨ DÙNG SUPABASE AUTH
-     *
-     * WEBSITE RIÊNG KHÔNG DÙNG
-     * SUPABASE AUTH NÀY.
-     */
-
     let subscription = null;
 
     if (!isSiteMenu) {
       const {
-        data: { subscription: authSubscription },
+        data: {
+          subscription:
+            authSubscription,
+        },
       } =
         supabase.auth.onAuthStateChange(
           async (
@@ -346,22 +314,25 @@ export default function Menu() {
         authSubscription;
     }
 
-    const handleWalletUpdated = () => {
-      loadUser();
-    };
-
-    const handleOpenMenu = () => {
-      setOpen(true);
-    };
-
-    const handleVisibility = () => {
-      if (
-        document.visibilityState ===
-        "visible"
-      ) {
+    const handleWalletUpdated =
+      () => {
         loadUser();
-      }
-    };
+      };
+
+    const handleOpenMenu =
+      () => {
+        setOpen(true);
+      };
+
+    const handleVisibility =
+      () => {
+        if (
+          document.visibilityState ===
+          "visible"
+        ) {
+          loadUser();
+        }
+      };
 
     window.addEventListener(
       "xenova-wallet-updated",
@@ -402,12 +373,6 @@ export default function Menu() {
     isSiteMenu,
   ]);
 
-  /*
-   * ==========================================
-   * ĐỔI THEME
-   * ==========================================
-   */
-
   function toggleTheme() {
     const nextDark = !dark;
 
@@ -434,18 +399,11 @@ export default function Menu() {
     }
   }
 
-  /*
-   * ==========================================
-   * ĐĂNG XUẤT
-   * ==========================================
-   */
-
   async function logout() {
-    /*
-     * WEBSITE RIÊNG
-     */
-
-    if (isSiteMenu && siteSlug) {
+    if (
+      isSiteMenu &&
+      siteSlug
+    ) {
       try {
         await fetch(
           `/api/sites/${siteSlug}/auth/logout`,
@@ -473,10 +431,6 @@ export default function Menu() {
       return;
     }
 
-    /*
-     * SHOP CŨ
-     */
-
     await supabase.auth.signOut();
 
     setOpen(false);
@@ -494,55 +448,42 @@ export default function Menu() {
     return null;
   }
 
-  /*
-   * ==========================================
-   * LINK MENU
-   * ==========================================
-   */
+  const homeHref =
+    isSiteMenu
+      ? sitePath("")
+      : "/";
 
-  const homeHref = isSiteMenu
-    ? sitePath("")
-    : "/";
+  const shopHref =
+    isSiteMenu
+      ? sitePath("")
+      : "/shop";
 
-  /*
-   * QUAN TRỌNG:
-   *
-   * WEBSITE RIÊNG KHÔNG CÓ:
-   * /sites/slug/shop
-   *
-   * Shop chính là:
-   * /sites/slug
-   */
+  const depositHref =
+    isSiteMenu
+      ? sitePath("/deposit")
+      : "/deposit";
 
-  const shopHref = isSiteMenu
-    ? sitePath("")
-    : "/shop";
+  const keysHref =
+    isSiteMenu
+      ? sitePath("/keys")
+      : "/keys";
 
-  const depositHref = isSiteMenu
-    ? sitePath("/deposit")
-    : "/deposit";
+  const ordersHref =
+    isSiteMenu
+      ? sitePath("/orders")
+      : "/orders";
 
-  const keysHref = isSiteMenu
-    ? sitePath("/keys")
-    : "/keys";
+  const accountHref =
+    isSiteMenu
+      ? user
+        ? sitePath("/account")
+        : sitePath("/login")
+      : user
+        ? "/dashboard"
+        : "/login";
 
-  const ordersHref = isSiteMenu
-    ? sitePath("/orders")
-    : "/orders";
-
-  const accountHref = isSiteMenu
-    ? sitePath(
-        user
-          ? "/account"
-          : "/login"
-      )
-    : user
-      ? "/dashboard"
-      : "/login";
-
-  const settingsHref = isSiteMenu
-    ? sitePath("/settings")
-    : "/settings";
+  const settingsHref =
+    "/settings";
 
   return (
     <>
@@ -550,10 +491,14 @@ export default function Menu() {
         <button
           type="button"
           className="global-theme-button"
-          onClick={toggleTheme}
+          onClick={
+            toggleTheme
+          }
           aria-label="Đổi giao diện"
         >
-          {dark ? "☀️" : "🌙"}
+          {dark
+            ? "☀️"
+            : "🌙"}
         </button>
 
         <button
@@ -571,7 +516,9 @@ export default function Menu() {
       {open && (
         <div
           className="xenova-menu-overlay"
-          onClick={closeMenu}
+          onClick={
+            closeMenu
+          }
         >
           <aside
             className="xenova-menu-drawer"
@@ -583,7 +530,9 @@ export default function Menu() {
               <div>
                 <div className="xenova-menu-brand">
                   XENOVA{" "}
-                  <span>PLAY</span>
+                  <span>
+                    PLAY
+                  </span>
                 </div>
 
                 <div className="xenova-menu-user">
@@ -598,7 +547,9 @@ export default function Menu() {
               <button
                 type="button"
                 className="xenova-menu-close"
-                onClick={closeMenu}
+                onClick={
+                  closeMenu
+                }
               >
                 ✕
               </button>
@@ -608,7 +559,9 @@ export default function Menu() {
               <MenuLink
                 href={homeHref}
                 icon="🏠"
-                onClick={closeMenu}
+                onClick={
+                  closeMenu
+                }
               >
                 Trang chủ
               </MenuLink>
@@ -616,7 +569,9 @@ export default function Menu() {
               <MenuLink
                 href={shopHref}
                 icon="🛍️"
-                onClick={closeMenu}
+                onClick={
+                  closeMenu
+                }
               >
                 Cửa hàng
               </MenuLink>
@@ -624,7 +579,9 @@ export default function Menu() {
               <MenuLink
                 href={depositHref}
                 icon="💰"
-                onClick={closeMenu}
+                onClick={
+                  closeMenu
+                }
               >
                 Nạp tiền
               </MenuLink>
@@ -632,7 +589,9 @@ export default function Menu() {
               <MenuLink
                 href={keysHref}
                 icon="🔑"
-                onClick={closeMenu}
+                onClick={
+                  closeMenu
+                }
               >
                 KEY của tôi
               </MenuLink>
@@ -640,7 +599,9 @@ export default function Menu() {
               <MenuLink
                 href={ordersHref}
                 icon="📦"
-                onClick={closeMenu}
+                onClick={
+                  closeMenu
+                }
               >
                 Đơn hàng
               </MenuLink>
@@ -648,25 +609,35 @@ export default function Menu() {
               <MenuLink
                 href={accountHref}
                 icon="👤"
-                onClick={closeMenu}
+                onClick={
+                  closeMenu
+                }
               >
                 Tài khoản
               </MenuLink>
 
-              <MenuLink
-                href={settingsHref}
-                icon="⚙️"
-                onClick={closeMenu}
-              >
-                Cài đặt
-              </MenuLink>
+              {!isSiteMenu && (
+                <MenuLink
+                  href={
+                    settingsHref
+                  }
+                  icon="⚙️"
+                  onClick={
+                    closeMenu
+                  }
+                >
+                  Cài đặt
+                </MenuLink>
+              )}
             </div>
 
             <div className="xenova-menu-bottom">
               <button
                 type="button"
                 className="xenova-menu-theme-row"
-                onClick={toggleTheme}
+                onClick={
+                  toggleTheme
+                }
               >
                 <span>
                   {dark
@@ -686,7 +657,9 @@ export default function Menu() {
                 <button
                   type="button"
                   className="xenova-menu-logout"
-                  onClick={logout}
+                  onClick={
+                    logout
+                  }
                 >
                   🚪 Đăng xuất
                 </button>
@@ -700,7 +673,9 @@ export default function Menu() {
                       : "/login"
                   }
                   className="xenova-menu-login"
-                  onClick={closeMenu}
+                  onClick={
+                    closeMenu
+                  }
                 >
                   🔐 Đăng nhập
                 </Link>
@@ -721,10 +696,14 @@ export default function Menu() {
           </span>
 
           <span className="xenova-bottom-text">
-            <small>SỐ DƯ</small>
+            <small>
+              SỐ DƯ
+            </small>
 
             <strong>
-              {formatPrice(balance)}
+              {formatPrice(
+                balance
+              )}
             </strong>
           </span>
         </Link>
