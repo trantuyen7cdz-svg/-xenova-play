@@ -17,6 +17,17 @@ const emptyForm = {
   description: "",
 };
 
+const emptyCloneForm = {
+  name: "",
+  slug: "",
+  domain: "",
+  bank_name: "",
+  bank_account_number: "",
+  bank_account_name: "",
+  copy_categories: true,
+  copy_products: true,
+};
+
 export default function WebsitesAdminPage() {
   const [websites, setWebsites] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -31,6 +42,10 @@ export default function WebsitesAdminPage() {
   const [adminEmail, setAdminEmail] = useState("");
   const [adminRole, setAdminRole] = useState("admin");
   const [adminSaving, setAdminSaving] = useState(false);
+
+  const [cloneSource, setCloneSource] = useState(null);
+  const [cloneForm, setCloneForm] = useState(emptyCloneForm);
+  const [cloneSaving, setCloneSaving] = useState(false);
 
   async function getToken() {
     const {
@@ -361,6 +376,105 @@ export default function WebsitesAdminPage() {
         error.message ||
           "Có lỗi xảy ra."
       );
+    }
+  }
+
+  function openCloneModal(website) {
+    setCloneSource(website);
+    setMessage("");
+
+    setCloneForm({
+      ...emptyCloneForm,
+      name: `${website.name} (Bản sao)`,
+      slug: `${website.slug}-2`,
+    });
+  }
+
+  function closeCloneModal() {
+    setCloneSource(null);
+    setCloneForm(emptyCloneForm);
+  }
+
+  function updateCloneForm(field, value) {
+    setCloneForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  }
+
+  async function submitClone(event) {
+    event.preventDefault();
+
+    if (!cloneSource) return;
+
+    if (!cloneForm.name.trim()) {
+      setMessage("Vui lòng nhập tên cho shop mới.");
+      return;
+    }
+
+    if (!cloneForm.slug.trim()) {
+      setMessage("Vui lòng nhập slug cho shop mới.");
+      return;
+    }
+
+    try {
+      setCloneSaving(true);
+      setMessage("");
+
+      const token = await getToken();
+
+      if (!token) {
+        setMessage("Bạn chưa đăng nhập.");
+        return;
+      }
+
+      const res = await fetch("/api/admin/websites/clone", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          source_id: cloneSource.id,
+          name: cloneForm.name.trim(),
+          slug: cloneForm.slug.trim().toLowerCase(),
+          domain: cloneForm.domain.trim(),
+          bank_name: cloneForm.bank_name.trim(),
+          bank_account_number:
+            cloneForm.bank_account_number.trim(),
+          bank_account_name:
+            cloneForm.bank_account_name.trim(),
+          copy_categories: cloneForm.copy_categories,
+          copy_products: cloneForm.copy_products,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          data?.error || "Không thể nhân bản website."
+        );
+      }
+
+      const copied = data?.copied || {};
+
+      setMessage(
+        `Đã tạo shop riêng "${cloneForm.name.trim()}" (sao chép ${
+          copied.categories || 0
+        } danh mục, ${
+          copied.products || 0
+        } sản phẩm). Vào "Quản lý Admin" để cấp quyền và tự nhập kho hàng cho shop mới.`
+      );
+
+      closeCloneModal();
+
+      await loadWebsites();
+    } catch (error) {
+      console.error(error);
+      setMessage(error.message || "Có lỗi xảy ra.");
+    } finally {
+      setCloneSaving(false);
     }
   }
 
@@ -909,6 +1023,18 @@ export default function WebsitesAdminPage() {
                         type="button"
                         className="normalButton"
                         onClick={() =>
+                          openCloneModal(
+                            website
+                          )
+                        }
+                      >
+                        🌀 Nhân bản thành shop mới
+                      </button>
+
+                      <button
+                        type="button"
+                        className="normalButton"
+                        onClick={() =>
                           toggleWebsite(
                             website
                           )
@@ -1166,6 +1292,166 @@ export default function WebsitesAdminPage() {
                 Đóng
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {cloneSource && (
+        <div
+          className="modalOverlay"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              closeCloneModal();
+            }
+          }}
+        >
+          <div className="adminModal">
+            <div className="modalHeader">
+              <div>
+                <h2>Nhân bản thành shop riêng biệt</h2>
+
+                <p>
+                  Tạo một website MỚI, độc lập hoàn toàn với
+                  &quot;{cloneSource.name}&quot; — giữ nguyên
+                  giao diện, theme và bố cục, nhưng dùng tên,
+                  slug, thông tin thanh toán riêng. Đơn hàng,
+                  ví, kho key của shop mới sẽ tách biệt, không
+                  dùng chung với shop gốc.
+                </p>
+
+                <span className="slugBadge">
+                  Nguồn: {cloneSource.slug}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                className="closeButton"
+                onClick={closeCloneModal}
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={submitClone}>
+              <div className="grid">
+                <Field
+                  label="Tên shop mới *"
+                  value={cloneForm.name}
+                  onChange={(value) =>
+                    updateCloneForm("name", value)
+                  }
+                  placeholder="Ví dụ: SHOP DORAEMON"
+                />
+
+                <Field
+                  label="Slug mới *"
+                  value={cloneForm.slug}
+                  onChange={(value) =>
+                    updateCloneForm("slug", value)
+                  }
+                  placeholder="shop-doraemon"
+                />
+
+                <Field
+                  label="Domain (nếu có)"
+                  value={cloneForm.domain}
+                  onChange={(value) =>
+                    updateCloneForm("domain", value)
+                  }
+                  placeholder="shopdoraemon.com"
+                />
+
+                <Field
+                  label="Tên ngân hàng"
+                  value={cloneForm.bank_name}
+                  onChange={(value) =>
+                    updateCloneForm("bank_name", value)
+                  }
+                  placeholder="Vietcombank"
+                />
+
+                <Field
+                  label="Số tài khoản"
+                  value={cloneForm.bank_account_number}
+                  onChange={(value) =>
+                    updateCloneForm(
+                      "bank_account_number",
+                      value
+                    )
+                  }
+                  placeholder="0123456789"
+                />
+
+                <Field
+                  label="Tên chủ tài khoản"
+                  value={cloneForm.bank_account_name}
+                  onChange={(value) =>
+                    updateCloneForm(
+                      "bank_account_name",
+                      value
+                    )
+                  }
+                  placeholder="NGUYEN VAN A"
+                />
+              </div>
+
+              <div className="cloneOptions">
+                <label className="cloneCheckbox">
+                  <input
+                    type="checkbox"
+                    checked={cloneForm.copy_categories}
+                    onChange={(e) =>
+                      updateCloneForm(
+                        "copy_categories",
+                        e.target.checked
+                      )
+                    }
+                  />
+                  Sao chép danh mục sản phẩm
+                </label>
+
+                <label className="cloneCheckbox">
+                  <input
+                    type="checkbox"
+                    checked={cloneForm.copy_products}
+                    onChange={(e) =>
+                      updateCloneForm(
+                        "copy_products",
+                        e.target.checked
+                      )
+                    }
+                  />
+                  Sao chép sản phẩm (giá, mô tả, ảnh)
+                </label>
+
+                <p className="cloneHint">
+                  Kho key (hàng thật) sẽ KHÔNG được sao chép —
+                  shop mới cần tự nhập kho riêng để tránh bán
+                  trùng key với shop gốc.
+                </p>
+              </div>
+
+              <div className="modalFooter">
+                <button
+                  type="button"
+                  className="closeModalButton"
+                  onClick={closeCloneModal}
+                >
+                  Hủy
+                </button>
+
+                <button
+                  type="submit"
+                  className="addAdminButton"
+                  disabled={cloneSaving}
+                >
+                  {cloneSaving
+                    ? "Đang tạo..."
+                    : "＋ Tạo shop riêng"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -1695,9 +1981,39 @@ export default function WebsitesAdminPage() {
         .modalFooter {
           display: flex;
           justify-content: flex-end;
+          gap: 10px;
           margin-top: 18px;
           padding-top: 16px;
           border-top: 1px solid #e5e7eb;
+        }
+
+        .cloneOptions {
+          margin-top: 18px;
+          padding: 14px;
+          border-radius: 12px;
+          background: #f9fafb;
+          border: 1px solid #e5e7eb;
+          display: grid;
+          gap: 9px;
+        }
+
+        .cloneCheckbox {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 13px;
+          font-weight: 700;
+          color: #374151;
+        }
+
+        .cloneHint {
+          margin: 4px 0 0;
+          font-size: 12px;
+          color: #92400e;
+          background: #fef3c7;
+          border: 1px solid #fde68a;
+          border-radius: 8px;
+          padding: 8px 10px;
         }
 
         .closeModalButton {
