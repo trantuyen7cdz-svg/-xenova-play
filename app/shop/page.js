@@ -686,7 +686,25 @@ export default function ShopPage({ website = null }) {
 
   function getStock(productId) {
     if (isWebsiteShop) {
-      return 1;
+      const product = products.find(
+        (item) =>
+          Number(item.id) ===
+          Number(productId)
+      );
+
+      if (!product) {
+        return 0;
+      }
+
+      return Math.max(
+        0,
+        Number(
+          product.stock_count ??
+            product.stock ??
+            product.available_stock ??
+            0
+        ) || 0
+      );
     }
 
     const value =
